@@ -26,7 +26,8 @@ Serialize objects with keys sorted by Unicode code point (equivalently UTF-8
 byte order for well-formed strings), arrays in original order, no whitespace,
 minimal JSON string escaping, literal Unicode/HTML characters and normalized
 negative-zero integer 0. Reject undefined, non-JSON objects, lone surrogates,
-non-integer/non-finite/unsafe numeric values. Do not normalize Unicode strings,
+non-integer/non-finite/unsafe numeric values and duplicate object keys at any
+nesting depth. Do not normalize Unicode strings,
 decimal strings or timestamps. Absence, null and empty arrays remain distinct.
 Timestamps require the specified UTC millisecond form; reject invalid dates.
 Hash the UTF-8 canonical bytes with SHA-256. Field order and gzip encoding do
@@ -35,6 +36,26 @@ its own payloadHash field; do not hash an envelope containing its own checksum.
 Execution specHash similarly excludes its own specHash field. The receiving
 application verifies the supplied digest against this defined payload before
 replay/conflict decisions; schema-valid digests alone are not content proof.
+
+Validate source UTF-8 bytes and escaped UTF-16 pairs before any decoder can replace
+malformed text. Lone high/low surrogates and malformed/overlong UTF-8 reject in
+keys and values at any depth. Valid pairs, literal U+FFFD and canonically distinct
+Unicode strings remain unchanged. A transport BOM is not silently stripped.
+The schema's `uri` format is distinct from IRI: non-ASCII URI characters require
+percent encoding; ordinary unconstrained Unicode strings retain their exact text.
+
+Completed outbound messages must pass the wire contract after construction or
+mutation and before hashing/transmission. Validate, hash and transmit the same
+immutable logical payload, excluding only its defined self-hash field from the
+hash preimage. A valid shape does not prove a supplied digest matches the payload;
+mutations require revalidation and a fresh hash. Generated merge methods may retain
+incompatible variant fields and are not validated builders.
+
+Runnerd 01 qualifies these semantics through `unicode-wire.json` (exact raw bytes
+as hex, acceptance, canonical bytes/hash) and `outbound-wire.json` (shape and
+hash-preimage/conflict vectors). The independent Go harness and TypeScript consumer
+check the same expected artifacts. Complete public Go canonicalization/hash and
+validated outbound encoding APIs remain Runnerd 02 implementation work.
 
 ## Identity and durable coordination
 
@@ -71,8 +92,10 @@ language-neutral. Exact uint64 limits are field-specific, not JS numeric limits.
 Go and TypeScript reports must name the same protocol/schema/corpus identities.
 Alpha conformance is not evidence of Go validation or live persistence/runtime
 acceptance. A Go JSON Schema 2020-12 conformance harness under conformance/ validates the
-same schema/hash/identity vectors offline after module download. Go SDK generation
-remains separate upstream work; conformance does not implement the runtime.
+same schema/hash/identity vectors offline after module download. Generated Go
+models, original-schema validated decoding and offline generation/drift checks
+are in `protocol/` and `tools/`; see [Go binding qualification](GO-BINDINGS.md).
+Neither generated bindings nor conformance implement the agent runtime.
 
 Secret-bearing enrollment/token/start messages are transient authenticated TLS
 exchanges. Never journal plaintext bootstrap/registration/admin credentials or

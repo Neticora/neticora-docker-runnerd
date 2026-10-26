@@ -1,0 +1,20 @@
+[
+  {
+    "id": "host-command-kind-duplicate",
+    "schema": "HostCommand",
+    "raw": "{\"commandId\":\"cmd-a\",\"payloadHash\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"generation\":\"1\",\"kind\":\"start\",\"kind\":\"cancel\",\"executionId\":\"exec-a\"}",
+    "valid": false
+  },
+  {
+    "id": "host-event-observation-nested-duplicate",
+    "schema": "HostEvent",
+    "raw": "{\"eventId\":\"event-a\",\"executionId\":\"exec-a\",\"attemptId\":\"attempt-a\",\"generation\":\"1\",\"sequence\":\"1\",\"payloadHash\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"observation\":{\"runtimeRef\":{\"engine\":\"docker\",\"scope\":\"engine-a\",\"resourceKind\":\"container\",\"resourceId\":\"immutable-a\",\"executionId\":\"exec-a\",\"generation\":\"1\",\"specHash\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"state\":\"running\",\"state\":\"failed\",\"observedAt\":\"2026-10-25T00:00:00.000Z\"}}",
+    "valid": false
+  },
+  {
+    "id": "host-event-provider-valid",
+    "schema": "HostEvent",
+    "raw": "{\"eventId\":\"event-a\",\"executionId\":\"exec-a\",\"attemptId\":\"attempt-a\",\"generation\":\"1\",\"sequence\":\"1\",\"payloadHash\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"providerObservation\":{\"provider\":\"github\",\"organization\":\"org-a\",\"pool\":\"pool-a\",\"agentId\":\"123\",\"agentName\":\"runner-a\",\"registered\":true,\"observedAt\":\"2026-10-25T00:00:00.000Z\"}}",
+    "valid": true
+  }
+]

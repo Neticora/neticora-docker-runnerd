@@ -1,0 +1,436 @@
+[
+  {
+    "id": "start",
+    "schema": "HostCommand",
+    "value": {
+      "commandId": "cmd-a",
+      "payloadHash": "2bf945c7cf60ca7101c0470d8d67826407cc2af52fb33ccb6519e9c558437600",
+      "generation": "1",
+      "kind": "start",
+      "spec": {
+        "executionId": "exec-a",
+        "attemptId": "attempt-a",
+        "generation": "1",
+        "executionBackend": "customer-host",
+        "runtimeEngine": "docker",
+        "isolationProfile": "standard",
+        "profileVersion": "standard-linux-v1",
+        "templateVersion": "github-linux-v1",
+        "provider": "github",
+        "hostPlatform": {
+          "os": "linux",
+          "architecture": "amd64",
+          "build": "candidate"
+        },
+        "runnerPlatform": {
+          "os": "linux",
+          "architecture": "amd64",
+          "build": "candidate"
+        },
+        "imageDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "trustClass": "trusted",
+        "dockerBuild": false,
+        "resources": {
+          "cpuMillis": "1000",
+          "memoryBytes": "1073741824",
+          "storageBytes": "10737418240",
+          "slots": "1"
+        },
+        "policyGeneration": "1",
+        "compatibilityRecordId": "candidate-a",
+        "authorizationExpiresAt": "2026-10-25T01:00:00.000Z",
+        "specHash": "32ab0c2aa576c475ce9c3d08c2d71b0dd7d671610a0c4af42bd132336bcafdeb",
+        "poolId": "pool-a"
+      }
+    },
+    "valid": true,
+    "hashField": "payloadHash",
+    "canonicalPayload": "{\"commandId\":\"cmd-a\",\"generation\":\"1\",\"kind\":\"start\",\"spec\":{\"attemptId\":\"attempt-a\",\"authorizationExpiresAt\":\"2026-10-25T01:00:00.000Z\",\"compatibilityRecordId\":\"candidate-a\",\"dockerBuild\":false,\"executionBackend\":\"customer-host\",\"executionId\":\"exec-a\",\"generation\":\"1\",\"hostPlatform\":{\"architecture\":\"amd64\",\"build\":\"candidate\",\"os\":\"linux\"},\"imageDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"isolationProfile\":\"standard\",\"policyGeneration\":\"1\",\"poolId\":\"pool-a\",\"profileVersion\":\"standard-linux-v1\",\"provider\":\"github\",\"resources\":{\"cpuMillis\":\"1000\",\"memoryBytes\":\"1073741824\",\"slots\":\"1\",\"storageBytes\":\"10737418240\"},\"runnerPlatform\":{\"architecture\":\"amd64\",\"build\":\"candidate\",\"os\":\"linux\"},\"runtimeEngine\":\"docker\",\"specHash\":\"32ab0c2aa576c475ce9c3d08c2d71b0dd7d671610a0c4af42bd132336bcafdeb\",\"templateVersion\":\"github-linux-v1\",\"trustClass\":\"trusted\"}}",
+    "sha256": "2bf945c7cf60ca7101c0470d8d67826407cc2af52fb33ccb6519e9c558437600",
+    "hashValid": true
+  },
+  {
+    "id": "cancel",
+    "schema": "HostCommand",
+    "value": {
+      "commandId": "cmd-a",
+      "payloadHash": "7aa2d1ff35ed7877ff43773374caa74aca349558ee07faed629858254ef18777",
+      "generation": "1",
+      "kind": "cancel",
+      "executionId": "exec-a"
+    },
+    "valid": true,
+    "hashField": "payloadHash",
+    "canonicalPayload": "{\"commandId\":\"cmd-a\",\"executionId\":\"exec-a\",\"generation\":\"1\",\"kind\":\"cancel\"}",
+    "sha256": "7aa2d1ff35ed7877ff43773374caa74aca349558ee07faed629858254ef18777",
+    "hashValid": true
+  },
+  {
+    "id": "cleanup",
+    "schema": "HostCommand",
+    "value": {
+      "commandId": "cmd-a",
+      "payloadHash": "de7e94a7f0cb26e7ac3c94bd3ead23ab02a3a2a8b99c4ec82a6b0b1cf6aa8bee",
+      "generation": "1",
+      "kind": "cleanup",
+      "executionId": "exec-a"
+    },
+    "valid": true,
+    "hashField": "payloadHash",
+    "canonicalPayload": "{\"commandId\":\"cmd-a\",\"executionId\":\"exec-a\",\"generation\":\"1\",\"kind\":\"cleanup\"}",
+    "sha256": "de7e94a7f0cb26e7ac3c94bd3ead23ab02a3a2a8b99c4ec82a6b0b1cf6aa8bee",
+    "hashValid": true
+  },
+  {
+    "id": "execution-spec",
+    "schema": "ExecutionSpec",
+    "value": {
+      "executionId": "exec-a",
+      "attemptId": "attempt-a",
+      "generation": "1",
+      "executionBackend": "customer-host",
+      "runtimeEngine": "docker",
+      "isolationProfile": "standard",
+      "profileVersion": "standard-linux-v1",
+      "templateVersion": "github-linux-v1",
+      "provider": "github",
+      "hostPlatform": {
+        "os": "linux",
+        "architecture": "amd64",
+        "build": "candidate"
+      },
+      "runnerPlatform": {
+        "os": "linux",
+        "architecture": "amd64",
+        "build": "candidate"
+      },
+      "imageDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "trustClass": "trusted",
+      "dockerBuild": false,
+      "resources": {
+        "cpuMillis": "1000",
+        "memoryBytes": "1073741824",
+        "storageBytes": "10737418240",
+        "slots": "1"
+      },
+      "policyGeneration": "1",
+      "compatibilityRecordId": "candidate-a",
+      "authorizationExpiresAt": "2026-10-25T01:00:00.000Z",
+      "specHash": "32ab0c2aa576c475ce9c3d08c2d71b0dd7d671610a0c4af42bd132336bcafdeb",
+      "poolId": "pool-a"
+    },
+    "valid": true,
+    "hashField": "specHash",
+    "canonicalPayload": "{\"attemptId\":\"attempt-a\",\"authorizationExpiresAt\":\"2026-10-25T01:00:00.000Z\",\"compatibilityRecordId\":\"candidate-a\",\"dockerBuild\":false,\"executionBackend\":\"customer-host\",\"executionId\":\"exec-a\",\"generation\":\"1\",\"hostPlatform\":{\"architecture\":\"amd64\",\"build\":\"candidate\",\"os\":\"linux\"},\"imageDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"isolationProfile\":\"standard\",\"policyGeneration\":\"1\",\"poolId\":\"pool-a\",\"profileVersion\":\"standard-linux-v1\",\"provider\":\"github\",\"resources\":{\"cpuMillis\":\"1000\",\"memoryBytes\":\"1073741824\",\"slots\":\"1\",\"storageBytes\":\"10737418240\"},\"runnerPlatform\":{\"architecture\":\"amd64\",\"build\":\"candidate\",\"os\":\"linux\"},\"runtimeEngine\":\"docker\",\"templateVersion\":\"github-linux-v1\",\"trustClass\":\"trusted\"}",
+    "sha256": "32ab0c2aa576c475ce9c3d08c2d71b0dd7d671610a0c4af42bd132336bcafdeb",
+    "hashValid": true
+  },
+  {
+    "id": "runtime-event",
+    "schema": "HostEvent",
+    "value": {
+      "eventId": "event-a",
+      "executionId": "exec-a",
+      "attemptId": "attempt-a",
+      "generation": "1",
+      "sequence": "1",
+      "payloadHash": "7865e6d78f825910a0028c804ba546ea48247ef213a50aa46ac29c3b3e5e25af",
+      "observation": {
+        "runtimeRef": {
+          "engine": "docker",
+          "scope": "engine-a",
+          "resourceKind": "container",
+          "resourceId": "immutable-a",
+          "executionId": "exec-a",
+          "generation": "1",
+          "specHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "state": "running",
+        "observedAt": "2026-10-25T00:00:00.000Z"
+      }
+    },
+    "valid": true,
+    "hashField": "payloadHash",
+    "canonicalPayload": "{\"attemptId\":\"attempt-a\",\"eventId\":\"event-a\",\"executionId\":\"exec-a\",\"generation\":\"1\",\"observation\":{\"observedAt\":\"2026-10-25T00:00:00.000Z\",\"runtimeRef\":{\"engine\":\"docker\",\"executionId\":\"exec-a\",\"generation\":\"1\",\"resourceId\":\"immutable-a\",\"resourceKind\":\"container\",\"scope\":\"engine-a\",\"specHash\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"state\":\"running\"},\"sequence\":\"1\"}",
+    "sha256": "7865e6d78f825910a0028c804ba546ea48247ef213a50aa46ac29c3b3e5e25af",
+    "hashValid": true
+  },
+  {
+    "id": "provider-event",
+    "schema": "HostEvent",
+    "value": {
+      "eventId": "event-a",
+      "executionId": "exec-a",
+      "attemptId": "attempt-a",
+      "generation": "1",
+      "sequence": "1",
+      "payloadHash": "7128978993dd8474861bb865d8e185c89b5b65552ff18e2c8615dc81843278ea",
+      "providerObservation": {
+        "provider": "github",
+        "organization": "org-a",
+        "pool": "pool-a",
+        "agentId": "123",
+        "agentName": "runner-a",
+        "registered": true,
+        "observedAt": "2026-10-25T00:00:00.000Z"
+      }
+    },
+    "valid": true,
+    "hashField": "payloadHash",
+    "canonicalPayload": "{\"attemptId\":\"attempt-a\",\"eventId\":\"event-a\",\"executionId\":\"exec-a\",\"generation\":\"1\",\"providerObservation\":{\"agentId\":\"123\",\"agentName\":\"runner-a\",\"observedAt\":\"2026-10-25T00:00:00.000Z\",\"organization\":\"org-a\",\"pool\":\"pool-a\",\"provider\":\"github\",\"registered\":true},\"sequence\":\"1\"}",
+    "sha256": "7128978993dd8474861bb865d8e185c89b5b65552ff18e2c8615dc81843278ea",
+    "hashValid": true
+  },
+  {
+    "id": "event-switch-variant",
+    "schema": "HostEvent",
+    "value": {
+      "eventId": "event-a",
+      "executionId": "exec-a",
+      "attemptId": "attempt-a",
+      "generation": "1",
+      "sequence": "1",
+      "payloadHash": "7128978993dd8474861bb865d8e185c89b5b65552ff18e2c8615dc81843278ea",
+      "providerObservation": {
+        "provider": "github",
+        "organization": "org-a",
+        "pool": "pool-a",
+        "agentId": "123",
+        "agentName": "runner-a",
+        "registered": true,
+        "observedAt": "2026-10-25T00:00:00.000Z"
+      }
+    },
+    "valid": true,
+    "hashField": "payloadHash",
+    "canonicalPayload": "{\"attemptId\":\"attempt-a\",\"eventId\":\"event-a\",\"executionId\":\"exec-a\",\"generation\":\"1\",\"providerObservation\":{\"agentId\":\"123\",\"agentName\":\"runner-a\",\"observedAt\":\"2026-10-25T00:00:00.000Z\",\"organization\":\"org-a\",\"pool\":\"pool-a\",\"provider\":\"github\",\"registered\":true},\"sequence\":\"1\"}",
+    "sha256": "7128978993dd8474861bb865d8e185c89b5b65552ff18e2c8615dc81843278ea",
+    "hashValid": true
+  },
+  {
+    "id": "both-event-observations",
+    "schema": "HostEvent",
+    "value": {
+      "eventId": "event-a",
+      "executionId": "exec-a",
+      "attemptId": "attempt-a",
+      "generation": "1",
+      "sequence": "1",
+      "payloadHash": "c63ebc5ac0087757467923da102432a9399fba0adfbe23f1f8a3888056ccd8b9",
+      "observation": {
+        "runtimeRef": {
+          "engine": "docker",
+          "scope": "engine-a",
+          "resourceKind": "container",
+          "resourceId": "immutable-a",
+          "executionId": "exec-a",
+          "generation": "1",
+          "specHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "state": "running",
+        "observedAt": "2026-10-25T00:00:00.000Z"
+      },
+      "providerObservation": {
+        "provider": "github",
+        "organization": "org-a",
+        "pool": "pool-a",
+        "agentId": "123",
+        "agentName": "runner-a",
+        "registered": true,
+        "observedAt": "2026-10-25T00:00:00.000Z"
+      }
+    },
+    "valid": true,
+    "hashField": "payloadHash",
+    "canonicalPayload": "{\"attemptId\":\"attempt-a\",\"eventId\":\"event-a\",\"executionId\":\"exec-a\",\"generation\":\"1\",\"observation\":{\"observedAt\":\"2026-10-25T00:00:00.000Z\",\"runtimeRef\":{\"engine\":\"docker\",\"executionId\":\"exec-a\",\"generation\":\"1\",\"resourceId\":\"immutable-a\",\"resourceKind\":\"container\",\"scope\":\"engine-a\",\"specHash\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"state\":\"running\"},\"providerObservation\":{\"agentId\":\"123\",\"agentName\":\"runner-a\",\"observedAt\":\"2026-10-25T00:00:00.000Z\",\"organization\":\"org-a\",\"pool\":\"pool-a\",\"provider\":\"github\",\"registered\":true},\"sequence\":\"1\"}",
+    "sha256": "c63ebc5ac0087757467923da102432a9399fba0adfbe23f1f8a3888056ccd8b9",
+    "hashValid": true
+  },
+  {
+    "id": "start-merged-with-cancel",
+    "schema": "HostCommand",
+    "value": {
+      "commandId": "cmd-a",
+      "payloadHash": "7aa2d1ff35ed7877ff43773374caa74aca349558ee07faed629858254ef18777",
+      "generation": "1",
+      "kind": "cancel",
+      "spec": {
+        "executionId": "exec-a",
+        "attemptId": "attempt-a",
+        "generation": "1",
+        "executionBackend": "customer-host",
+        "runtimeEngine": "docker",
+        "isolationProfile": "standard",
+        "profileVersion": "standard-linux-v1",
+        "templateVersion": "github-linux-v1",
+        "provider": "github",
+        "hostPlatform": {
+          "os": "linux",
+          "architecture": "amd64",
+          "build": "candidate"
+        },
+        "runnerPlatform": {
+          "os": "linux",
+          "architecture": "amd64",
+          "build": "candidate"
+        },
+        "imageDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "trustClass": "trusted",
+        "dockerBuild": false,
+        "resources": {
+          "cpuMillis": "1000",
+          "memoryBytes": "1073741824",
+          "storageBytes": "10737418240",
+          "slots": "1"
+        },
+        "policyGeneration": "1",
+        "compatibilityRecordId": "candidate-a",
+        "authorizationExpiresAt": "2026-10-25T01:00:00.000Z",
+        "specHash": "32ab0c2aa576c475ce9c3d08c2d71b0dd7d671610a0c4af42bd132336bcafdeb",
+        "poolId": "pool-a"
+      },
+      "executionId": "exec-a"
+    },
+    "valid": false
+  },
+  {
+    "id": "cancel-merged-with-start",
+    "schema": "HostCommand",
+    "value": {
+      "commandId": "cmd-a",
+      "payloadHash": "2bf945c7cf60ca7101c0470d8d67826407cc2af52fb33ccb6519e9c558437600",
+      "generation": "1",
+      "kind": "start",
+      "executionId": "exec-a",
+      "spec": {
+        "executionId": "exec-a",
+        "attemptId": "attempt-a",
+        "generation": "1",
+        "executionBackend": "customer-host",
+        "runtimeEngine": "docker",
+        "isolationProfile": "standard",
+        "profileVersion": "standard-linux-v1",
+        "templateVersion": "github-linux-v1",
+        "provider": "github",
+        "hostPlatform": {
+          "os": "linux",
+          "architecture": "amd64",
+          "build": "candidate"
+        },
+        "runnerPlatform": {
+          "os": "linux",
+          "architecture": "amd64",
+          "build": "candidate"
+        },
+        "imageDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "trustClass": "trusted",
+        "dockerBuild": false,
+        "resources": {
+          "cpuMillis": "1000",
+          "memoryBytes": "1073741824",
+          "storageBytes": "10737418240",
+          "slots": "1"
+        },
+        "policyGeneration": "1",
+        "compatibilityRecordId": "candidate-a",
+        "authorizationExpiresAt": "2026-10-25T01:00:00.000Z",
+        "specHash": "32ab0c2aa576c475ce9c3d08c2d71b0dd7d671610a0c4af42bd132336bcafdeb",
+        "poolId": "pool-a"
+      }
+    },
+    "valid": false
+  },
+  {
+    "id": "event-cleared-observations",
+    "schema": "HostEvent",
+    "value": {
+      "eventId": "event-a",
+      "executionId": "exec-a",
+      "attemptId": "attempt-a",
+      "generation": "1",
+      "sequence": "1",
+      "payloadHash": "7865e6d78f825910a0028c804ba546ea48247ef213a50aa46ac29c3b3e5e25af"
+    },
+    "valid": false
+  },
+  {
+    "id": "mutated-sequence-stale-hash",
+    "schema": "HostEvent",
+    "value": {
+      "eventId": "event-a",
+      "executionId": "exec-a",
+      "attemptId": "attempt-a",
+      "generation": "1",
+      "sequence": "2",
+      "payloadHash": "7865e6d78f825910a0028c804ba546ea48247ef213a50aa46ac29c3b3e5e25af",
+      "observation": {
+        "runtimeRef": {
+          "engine": "docker",
+          "scope": "engine-a",
+          "resourceKind": "container",
+          "resourceId": "immutable-a",
+          "executionId": "exec-a",
+          "generation": "1",
+          "specHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "state": "running",
+        "observedAt": "2026-10-25T00:00:00.000Z"
+      }
+    },
+    "valid": true,
+    "hashField": "payloadHash",
+    "canonicalPayload": "{\"attemptId\":\"attempt-a\",\"eventId\":\"event-a\",\"executionId\":\"exec-a\",\"generation\":\"1\",\"observation\":{\"observedAt\":\"2026-10-25T00:00:00.000Z\",\"runtimeRef\":{\"engine\":\"docker\",\"executionId\":\"exec-a\",\"generation\":\"1\",\"resourceId\":\"immutable-a\",\"resourceKind\":\"container\",\"scope\":\"engine-a\",\"specHash\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"state\":\"running\"},\"sequence\":\"2\"}",
+    "sha256": "b18bb3fa12de9fa3a38374852dc304086ddd437262e237f0742a709912cc2f80",
+    "hashValid": false
+  },
+  {
+    "id": "mutated-start-stale-hash",
+    "schema": "HostCommand",
+    "value": {
+      "commandId": "cmd-a",
+      "payloadHash": "2bf945c7cf60ca7101c0470d8d67826407cc2af52fb33ccb6519e9c558437600",
+      "generation": "1",
+      "kind": "start",
+      "spec": {
+        "executionId": "exec-a",
+        "attemptId": "attempt-a",
+        "generation": "1",
+        "executionBackend": "customer-host",
+        "runtimeEngine": "docker",
+        "isolationProfile": "standard",
+        "profileVersion": "standard-linux-v1",
+        "templateVersion": "github-linux-v1",
+        "provider": "github",
+        "hostPlatform": {
+          "os": "linux",
+          "architecture": "amd64",
+          "build": "candidate"
+        },
+        "runnerPlatform": {
+          "os": "linux",
+          "architecture": "amd64",
+          "build": "candidate"
+        },
+        "imageDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "trustClass": "trusted",
+        "dockerBuild": false,
+        "resources": {
+          "cpuMillis": "1000",
+          "memoryBytes": "1073741824",
+          "storageBytes": "10737418240",
+          "slots": "1"
+        },
+        "policyGeneration": "1",
+        "compatibilityRecordId": "candidate-a",
+        "authorizationExpiresAt": "2026-10-25T01:00:00.000Z",
+        "specHash": "32ab0c2aa576c475ce9c3d08c2d71b0dd7d671610a0c4af42bd132336bcafdeb",
+        "poolId": "other-pool"
+      }
+    },
+    "valid": true,
+    "hashField": "payloadHash",
+    "canonicalPayload": "{\"commandId\":\"cmd-a\",\"generation\":\"1\",\"kind\":\"start\",\"spec\":{\"attemptId\":\"attempt-a\",\"authorizationExpiresAt\":\"2026-10-25T01:00:00.000Z\",\"compatibilityRecordId\":\"candidate-a\",\"dockerBuild\":false,\"executionBackend\":\"customer-host\",\"executionId\":\"exec-a\",\"generation\":\"1\",\"hostPlatform\":{\"architecture\":\"amd64\",\"build\":\"candidate\",\"os\":\"linux\"},\"imageDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"isolationProfile\":\"standard\",\"policyGeneration\":\"1\",\"poolId\":\"other-pool\",\"profileVersion\":\"standard-linux-v1\",\"provider\":\"github\",\"resources\":{\"cpuMillis\":\"1000\",\"memoryBytes\":\"1073741824\",\"slots\":\"1\",\"storageBytes\":\"10737418240\"},\"runnerPlatform\":{\"architecture\":\"amd64\",\"build\":\"candidate\",\"os\":\"linux\"},\"runtimeEngine\":\"docker\",\"specHash\":\"32ab0c2aa576c475ce9c3d08c2d71b0dd7d671610a0c4af42bd132336bcafdeb\",\"templateVersion\":\"github-linux-v1\",\"trustClass\":\"trusted\"}}",
+    "sha256": "bc3ea36387c63876a6742bfe09074dfd83fdb762a26b198f4a1538757ea72167",
+    "hashValid": false
+  }
+]

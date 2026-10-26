@@ -1,0 +1,10 @@
+package: protocol
+generate:
+  models: true
+compatibility:
+  always-prefix-enum-values: true
+output-options:
+  skip-prune: true
+  nullable-type: true
+  overlay:
+    path: ../go-codegen-overlay.yaml

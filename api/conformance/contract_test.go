@@ -6,13 +6,16 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/santhosh-tekuri/jsonschema/v6"
+	"io"
 	"math/big"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
 	"testing"
+	"unicode/utf8"
+
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 func load(t *testing.T, n string) []byte {
@@ -33,6 +36,60 @@ func decode(t *testing.T, b []byte) any {
 	}
 	return v
 }
+func decodeStrictValue(d *json.Decoder) (any, error) {
+	token, err := d.Token()
+	if err != nil {
+		return nil, fmt.Errorf("invalid JSON")
+	}
+	delim, ok := token.(json.Delim)
+	if !ok {
+		return token, nil
+	}
+	switch delim {
+	case '{':
+		object := map[string]any{}
+		for d.More() {
+			keyToken, err := d.Token()
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON")
+			}
+			key, ok := keyToken.(string)
+			if !ok {
+				return nil, fmt.Errorf("invalid JSON")
+			}
+			if _, exists := object[key]; exists {
+				return nil, fmt.Errorf("duplicate JSON key")
+			}
+			value, err := decodeStrictValue(d)
+			if err != nil {
+				return nil, err
+			}
+			object[key] = value
+		}
+		closeToken, err := d.Token()
+		if err != nil || closeToken != json.Delim('}') {
+			return nil, fmt.Errorf("invalid JSON")
+		}
+		return object, nil
+	case '[':
+		array := []any{}
+		for d.More() {
+			value, err := decodeStrictValue(d)
+			if err != nil {
+				return nil, err
+			}
+			array = append(array, value)
+		}
+		closeToken, err := d.Token()
+		if err != nil || closeToken != json.Delim(']') {
+			return nil, fmt.Errorf("invalid JSON")
+		}
+		return array, nil
+	default:
+		return nil, fmt.Errorf("invalid JSON")
+	}
+}
+
 func quote(s string) string {
 	var b bytes.Buffer
 	e := json.NewEncoder(&b)
@@ -47,6 +104,9 @@ func canonical(v any) (string, error) {
 	case bool:
 		return strconv.FormatBool(x), nil
 	case string:
+		if !utf8.ValidString(x) {
+			return "", fmt.Errorf("invalid Unicode")
+		}
 		return quote(x), nil
 	case json.Number:
 		q, ok := new(big.Rat).SetString(string(x))
@@ -71,6 +131,9 @@ func canonical(v any) (string, error) {
 	case map[string]any:
 		keys := make([]string, 0, len(x))
 		for k := range x {
+			if !utf8.ValidString(k) {
+				return "", fmt.Errorf("invalid Unicode key")
+			}
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
@@ -128,6 +191,52 @@ func TestWireFixtures(t *testing.T) {
 			valid := s.Validate(v["value"]) == nil
 			if valid != v["valid"].(bool) {
 				t.Fatalf("valid=%v want=%v", valid, v["valid"])
+			}
+		})
+	}
+}
+
+func TestDuplicateKeyFixtures(t *testing.T) {
+	doc, e := jsonschema.UnmarshalJSON(bytes.NewReader(load(t, "host-protocol.v1.yaml")))
+	if e != nil {
+		t.Fatal(e)
+	}
+	c := jsonschema.NewCompiler()
+	c.AssertFormat()
+	c.UseLoader(offlineLoader{})
+	if e = c.AddResource("urn:neticora:host-protocol", doc); e != nil {
+		t.Fatal(e)
+	}
+	var fixtures []struct {
+		ID     string `json:"id"`
+		Schema string `json:"schema"`
+		Raw    string `json:"raw"`
+		Valid  bool   `json:"valid"`
+	}
+	if err := json.Unmarshal(load(t, "fixtures/duplicate-keys.json"), &fixtures); err != nil {
+		t.Fatal(err)
+	}
+	for _, fixture := range fixtures {
+		t.Run(fixture.ID, func(t *testing.T) {
+			s, err := c.Compile("urn:neticora:host-protocol#/components/schemas/" + fixture.Schema)
+			if err != nil {
+				t.Fatal(err)
+			}
+			value, err := func() (any, error) {
+				d := json.NewDecoder(strings.NewReader(fixture.Raw))
+				d.UseNumber()
+				v, err := decodeStrictValue(d)
+				if err != nil {
+					return nil, err
+				}
+				if _, err := d.Token(); err != io.EOF {
+					return nil, fmt.Errorf("trailing JSON")
+				}
+				return v, nil
+			}()
+			valid := err == nil && s.Validate(value) == nil
+			if valid != fixture.Valid {
+				t.Fatalf("valid=%v want=%v", valid, fixture.Valid)
 			}
 		})
 	}
