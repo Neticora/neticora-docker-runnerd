@@ -39,7 +39,11 @@
           "memoryBytes": "1073741824",
           "storageBytes": "10737418240",
           "slots": "1"
-        }
+        },
+        "supportedImageFamilies": [
+          "linux"
+        ],
+        "runtimeMechanism": "process"
       }
     },
     "valid": true
@@ -84,7 +88,11 @@
           "memoryBytes": "1073741824",
           "storageBytes": "10737418240",
           "slots": "1"
-        }
+        },
+        "supportedImageFamilies": [
+          "linux"
+        ],
+        "runtimeMechanism": "process"
       },
       "futureField": true
     },
@@ -124,7 +132,11 @@
           "memoryBytes": "1073741824",
           "storageBytes": "10737418240",
           "slots": "1"
-        }
+        },
+        "supportedImageFamilies": [
+          "linux"
+        ],
+        "runtimeMechanism": "process"
       }
     },
     "valid": false
@@ -164,7 +176,11 @@
           "memoryBytes": "1073741824",
           "storageBytes": "10737418240",
           "slots": "1"
-        }
+        },
+        "supportedImageFamilies": [
+          "linux"
+        ],
+        "runtimeMechanism": "process"
       }
     },
     "valid": false
@@ -407,5 +423,53 @@
       "encryptedBootstrap": null
     },
     "valid": true
+  },
+  {
+    "id": "provider-event",
+    "schema": "HostEvent",
+    "value": {
+      "eventId": "event-a",
+      "executionId": "exec-a",
+      "attemptId": "attempt-a",
+      "generation": "1",
+      "sequence": "1",
+      "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "providerObservation": {
+        "provider": "github",
+        "organization": "org-a",
+        "pool": "pool-a",
+        "agentId": "123",
+        "agentName": "runner-a",
+        "registered": true,
+        "observedAt": "2026-10-25T00:00:00.000Z"
+      }
+    },
+    "valid": true
+  },
+  {
+    "id": "provider-event-missing-identity",
+    "schema": "ProviderObservation",
+    "value": {
+      "provider": "github",
+      "organization": "org-a",
+      "pool": "pool-a",
+      "agentName": "runner-a",
+      "registered": true,
+      "observedAt": "2026-10-25T00:00:00.000Z"
+    },
+    "valid": false
+  },
+  {
+    "id": "event-missing-observation",
+    "schema": "HostEvent",
+    "value": {
+      "eventId": "event-a",
+      "executionId": "exec-a",
+      "attemptId": "attempt-a",
+      "generation": "1",
+      "sequence": "1",
+      "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "valid": false
   }
 ]

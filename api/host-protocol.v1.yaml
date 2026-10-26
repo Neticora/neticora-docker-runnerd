@@ -621,6 +621,20 @@
           },
           "capacity": {
             "$ref": "#/components/schemas/ResourceBudget"
+          },
+          "supportedImageFamilies": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "maxItems": 64
+          },
+          "runtimeMechanism": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
           }
         },
         "required": [
@@ -634,7 +648,9 @@
           "profiles",
           "dockerBuild",
           "hardStorageLimit",
-          "capacity"
+          "capacity",
+          "supportedImageFamilies",
+          "runtimeMechanism"
         ],
         "additionalProperties": false
       },
@@ -1076,6 +1092,9 @@
           },
           "observation": {
             "$ref": "#/components/schemas/RuntimeObservation"
+          },
+          "providerObservation": {
+            "$ref": "#/components/schemas/ProviderObservation"
           }
         },
         "required": [
@@ -1084,10 +1103,21 @@
           "attemptId",
           "generation",
           "sequence",
-          "payloadHash",
-          "observation"
+          "payloadHash"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": [
+              "observation"
+            ]
+          },
+          {
+            "required": [
+              "providerObservation"
+            ]
+          }
+        ]
       },
       "EventBatch": {
         "type": "object",
@@ -1155,6 +1185,13 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/RuntimeObservation"
+            },
+            "maxItems": 1000
+          },
+          "providerObservations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderObservation"
             },
             "maxItems": 1000
           }
@@ -1334,6 +1371,84 @@
           "accepted"
         ],
         "additionalProperties": false
+      },
+      "ProviderObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "provider",
+          "organization",
+          "pool",
+          "agentId",
+          "agentName",
+          "observedAt"
+        ],
+        "properties": {
+          "provider": {
+            "enum": [
+              "github",
+              "azure-devops"
+            ]
+          },
+          "organization": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "pool": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "agentId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "agentName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "jobId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "timelineRecordId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "workerName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "conclusion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "success",
+              "failure",
+              "cancelled",
+              "skipped",
+              "unknown",
+              null
+            ]
+          },
+          "registered": {
+            "type": "boolean"
+          },
+          "deregistered": {
+            "type": "boolean"
+          },
+          "observedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        }
       }
     }
   }
