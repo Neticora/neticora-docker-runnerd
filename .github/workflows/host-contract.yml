@@ -1,0 +1,26 @@
+name: Host contract conformance
+on:
+  pull_request:
+    paths: ['api/**', '.github/workflows/host-contract.yml']
+  push:
+    paths: ['api/**', '.github/workflows/host-contract.yml']
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: api/conformance/go.mod
+          cache-dependency-path: api/conformance/go.sum
+      - name: Download pinned validation dependencies
+        working-directory: api/conformance
+        run: go mod download
+      - name: Validate canonical schema, hashes and identities offline
+        working-directory: api/conformance
+        env:
+          GOPROXY: 'off'
+          GOSUMDB: 'off'
+        run: go test -mod=readonly -v ./...

@@ -70,7 +70,9 @@ Schema validation vectors, canonical bytes/hashes and identity vectors are
 language-neutral. Exact uint64 limits are field-specific, not JS numeric limits.
 Go and TypeScript reports must name the same protocol/schema/corpus identities.
 Alpha conformance is not evidence of Go validation or live persistence/runtime
-acceptance. Go generation/conformance is still an upstream implementation task.
+acceptance. A Go JSON Schema 2020-12 conformance harness under conformance/ validates the
+same schema/hash/identity vectors offline after module download. Go SDK generation
+remains separate upstream work; conformance does not implement the runtime.
 
 Secret-bearing enrollment/token/start messages are transient authenticated TLS
 exchanges. Never journal plaintext bootstrap/registration/admin credentials or
