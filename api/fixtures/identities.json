@@ -1,0 +1,82 @@
+[
+  {
+    "id": "command-replay",
+    "previous": {
+      "id": "c",
+      "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "incoming": {
+      "id": "c",
+      "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "expected": "replay"
+  },
+  {
+    "id": "command-conflict",
+    "previous": {
+      "id": "c",
+      "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "incoming": {
+      "id": "c",
+      "hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "expected": "conflict"
+  },
+  {
+    "id": "event-replay",
+    "previous": {
+      "id": "e",
+      "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sequence": "1"
+    },
+    "incoming": {
+      "id": "e",
+      "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sequence": "1"
+    },
+    "expected": "replay"
+  },
+  {
+    "id": "event-conflict",
+    "previous": {
+      "id": "e",
+      "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sequence": "1"
+    },
+    "incoming": {
+      "id": "e",
+      "hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "sequence": "1"
+    },
+    "expected": "conflict"
+  },
+  {
+    "id": "occupied-sequence",
+    "previous": {
+      "id": "e",
+      "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sequence": "1"
+    },
+    "incoming": {
+      "id": "other",
+      "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sequence": "1"
+    },
+    "expected": "conflict"
+  },
+  {
+    "id": "id-sequence-conflict",
+    "previous": {
+      "id": "e",
+      "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sequence": "1"
+    },
+    "incoming": {
+      "id": "e",
+      "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sequence": "2"
+    },
+    "expected": "conflict"
+  }
+]

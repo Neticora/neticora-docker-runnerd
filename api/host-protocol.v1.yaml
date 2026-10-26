@@ -1,0 +1,1340 @@
+{
+  "openapi": "3.1.0",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "info": {
+    "title": "Neticora host protocol",
+    "version": "1.0.0",
+    "description": "Initial reviewed-contract candidate; no endpoint/runtime implementation or live acceptance implied."
+  },
+  "servers": [
+    {
+      "url": "/api/v1/runner-hosts"
+    }
+  ],
+  "security": [
+    {
+      "hostBearer": []
+    }
+  ],
+  "paths": {
+    "/enroll": {
+      "post": {
+        "operationId": "EnrollmentResponse_enroll",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollmentResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Protocol error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrollmentRequest"
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/token": {
+      "post": {
+        "operationId": "TokenResponse_token",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Protocol error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/me/config": {
+      "get": {
+        "operationId": "ConfigResponse_me_config",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Protocol error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/heartbeat": {
+      "post": {
+        "operationId": "ConfigResponse_me_heartbeat",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Protocol error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostHeartbeat"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/commands": {
+      "get": {
+        "operationId": "HostCommand_me_commands",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HostCommand"
+                  },
+                  "maxItems": 100
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Protocol error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/commands/ack": {
+      "post": {
+        "operationId": "Receipt_me_commands_ack",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Protocol error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommandAck"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/start": {
+      "post": {
+        "operationId": "StartResponse_me_start",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Protocol error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/events": {
+      "post": {
+        "operationId": "EventAck_me_events",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EventAck"
+                  },
+                  "maxItems": 100
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Protocol error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventBatch"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/inventory": {
+      "post": {
+        "operationId": "Receipt_me_inventory",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Protocol error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InventorySnapshot"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/keys/rotate": {
+      "post": {
+        "operationId": "EnrollmentResponse_me_keys_rotate",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollmentResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Protocol error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeyRotationRequest"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "hostBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "schemas": {
+      "DecimalString": {
+        "type": "string",
+        "pattern": "^(0|[1-9][0-9]*)$",
+        "maxLength": 20,
+        "description": "Canonical unsigned decimal, bounded by field schema. Never JSON number."
+      },
+      "UInt64String": {
+        "type": "string",
+        "pattern": "^(?:[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]{1}|1844674407370955161[0-4][0-9]{0}|0|18446744073709551615)$"
+      },
+      "Generation": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/UInt64String"
+          },
+          {
+            "not": {
+              "const": "0"
+            }
+          }
+        ]
+      },
+      "Digest": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "Timestamp": {
+        "type": "string",
+        "format": "date-time",
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+      },
+      "Platform": {
+        "type": "object",
+        "properties": {
+          "os": {
+            "enum": [
+              "linux",
+              "windows",
+              "darwin"
+            ]
+          },
+          "architecture": {
+            "enum": [
+              "amd64",
+              "arm64"
+            ]
+          },
+          "build": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "os",
+          "architecture",
+          "build"
+        ],
+        "additionalProperties": false
+      },
+      "ResourceBudget": {
+        "type": "object",
+        "properties": {
+          "cpuMillis": {
+            "$ref": "#/components/schemas/UInt64String"
+          },
+          "memoryBytes": {
+            "$ref": "#/components/schemas/UInt64String"
+          },
+          "storageBytes": {
+            "$ref": "#/components/schemas/UInt64String"
+          },
+          "slots": {
+            "$ref": "#/components/schemas/UInt64String"
+          }
+        },
+        "required": [
+          "cpuMillis",
+          "memoryBytes",
+          "storageBytes",
+          "slots"
+        ],
+        "additionalProperties": false
+      },
+      "RuntimeRef": {
+        "type": "object",
+        "properties": {
+          "engine": {
+            "enum": [
+              "docker",
+              "kubernetes"
+            ]
+          },
+          "scope": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "namespace": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "resourceKind": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "executionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "generation": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "specHash": {
+            "$ref": "#/components/schemas/Digest"
+          }
+        },
+        "required": [
+          "engine",
+          "scope",
+          "resourceKind",
+          "resourceId",
+          "executionId",
+          "generation",
+          "specHash"
+        ],
+        "additionalProperties": false
+      },
+      "ProtocolCompatibility": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "minimumRecoveryVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "minimumAdmissionVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "version",
+          "minimumRecoveryVersion",
+          "minimumAdmissionVersion"
+        ],
+        "additionalProperties": false
+      },
+      "HostIdentity": {
+        "type": "object",
+        "properties": {
+          "hostId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "keyId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "keyVersion": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "sessionEpoch": {
+            "$ref": "#/components/schemas/Generation"
+          }
+        },
+        "required": [
+          "hostId",
+          "keyId",
+          "keyVersion",
+          "sessionEpoch"
+        ],
+        "additionalProperties": false
+      },
+      "HostCapabilities": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "$ref": "#/components/schemas/Platform"
+          },
+          "engine": {
+            "$ref": "#/components/schemas/Platform"
+          },
+          "endpointIdentity": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "runtimeVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "configurationGeneration": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "probeGeneration": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "observedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "profiles": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "maxItems": 32
+          },
+          "dockerBuild": {
+            "type": "boolean"
+          },
+          "hardStorageLimit": {
+            "type": "boolean"
+          },
+          "capacity": {
+            "$ref": "#/components/schemas/ResourceBudget"
+          }
+        },
+        "required": [
+          "host",
+          "engine",
+          "endpointIdentity",
+          "runtimeVersion",
+          "configurationGeneration",
+          "probeGeneration",
+          "observedAt",
+          "profiles",
+          "dockerBuild",
+          "hardStorageLimit",
+          "capacity"
+        ],
+        "additionalProperties": false
+      },
+      "HostHeartbeat": {
+        "type": "object",
+        "properties": {
+          "identity": {
+            "$ref": "#/components/schemas/HostIdentity"
+          },
+          "agentVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "protocolVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "inventoryGeneration": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "effectivePolicyGeneration": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/HostCapabilities"
+          }
+        },
+        "required": [
+          "identity",
+          "agentVersion",
+          "protocolVersion",
+          "inventoryGeneration",
+          "effectivePolicyGeneration",
+          "capabilities"
+        ],
+        "additionalProperties": false
+      },
+      "LocalPolicy": {
+        "type": "object",
+        "properties": {
+          "generation": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "allowedTrustClasses": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "trusted",
+                "untrusted"
+              ]
+            },
+            "maxItems": 2
+          },
+          "allowedProfiles": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "maxItems": 32
+          },
+          "limits": {
+            "$ref": "#/components/schemas/ResourceBudget"
+          }
+        },
+        "required": [
+          "generation",
+          "allowedTrustClasses",
+          "allowedProfiles",
+          "limits"
+        ],
+        "additionalProperties": false
+      },
+      "ExecutionSpec": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "attemptId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "generation": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "executionBackend": {
+            "enum": [
+              "customer-host",
+              "kubernetes"
+            ]
+          },
+          "runtimeEngine": {
+            "enum": [
+              "docker",
+              "kubernetes"
+            ]
+          },
+          "isolationProfile": {
+            "enum": [
+              "standard",
+              "isolated"
+            ]
+          },
+          "profileVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "templateVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "provider": {
+            "enum": [
+              "github",
+              "azure-devops"
+            ]
+          },
+          "hostPlatform": {
+            "$ref": "#/components/schemas/Platform"
+          },
+          "runnerPlatform": {
+            "$ref": "#/components/schemas/Platform"
+          },
+          "imageDigest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "trustClass": {
+            "enum": [
+              "trusted",
+              "untrusted"
+            ]
+          },
+          "dockerBuild": {
+            "type": "boolean"
+          },
+          "resources": {
+            "$ref": "#/components/schemas/ResourceBudget"
+          },
+          "policyGeneration": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "compatibilityRecordId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "authorizationExpiresAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "specHash": {
+            "$ref": "#/components/schemas/Digest"
+          }
+        },
+        "required": [
+          "executionId",
+          "attemptId",
+          "generation",
+          "executionBackend",
+          "runtimeEngine",
+          "isolationProfile",
+          "profileVersion",
+          "templateVersion",
+          "provider",
+          "hostPlatform",
+          "runnerPlatform",
+          "imageDigest",
+          "trustClass",
+          "dockerBuild",
+          "resources",
+          "policyGeneration",
+          "compatibilityRecordId",
+          "authorizationExpiresAt",
+          "specHash"
+        ],
+        "additionalProperties": false
+      },
+      "StartCommand": {
+        "type": "object",
+        "properties": {
+          "commandId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "payloadHash": {
+            "$ref": "#/components/schemas/Digest"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "kind": {
+            "const": "start"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/ExecutionSpec"
+          }
+        },
+        "required": [
+          "commandId",
+          "payloadHash",
+          "generation",
+          "kind",
+          "spec"
+        ],
+        "additionalProperties": false
+      },
+      "ControlCommand": {
+        "type": "object",
+        "properties": {
+          "commandId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "payloadHash": {
+            "$ref": "#/components/schemas/Digest"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "kind": {
+            "enum": [
+              "cancel",
+              "cleanup"
+            ]
+          },
+          "executionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "commandId",
+          "payloadHash",
+          "generation",
+          "kind",
+          "executionId"
+        ],
+        "additionalProperties": false
+      },
+      "HostCommand": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/StartCommand"
+          },
+          {
+            "$ref": "#/components/schemas/ControlCommand"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "kind",
+          "mapping": {
+            "start": "#/components/schemas/StartCommand",
+            "cancel": "#/components/schemas/ControlCommand",
+            "cleanup": "#/components/schemas/ControlCommand"
+          }
+        }
+      },
+      "CommandAck": {
+        "type": "object",
+        "properties": {
+          "commandId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "payloadHash": {
+            "$ref": "#/components/schemas/Digest"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "acceptance": {
+            "const": "durable"
+          }
+        },
+        "required": [
+          "commandId",
+          "payloadHash",
+          "generation",
+          "acceptance"
+        ],
+        "additionalProperties": false
+      },
+      "StartRequest": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "attemptId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "generation": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "commandId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "startRequestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "specHash": {
+            "$ref": "#/components/schemas/Digest"
+          },
+          "policyGeneration": {
+            "$ref": "#/components/schemas/Generation"
+          }
+        },
+        "required": [
+          "executionId",
+          "attemptId",
+          "generation",
+          "commandId",
+          "startRequestId",
+          "specHash",
+          "policyGeneration"
+        ],
+        "additionalProperties": false
+      },
+      "StartResponse": {
+        "type": "object",
+        "properties": {
+          "issuanceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "state": {
+            "enum": [
+              "PENDING",
+              "ISSUING",
+              "ISSUED",
+              "UNCERTAIN",
+              "EXPIRED",
+              "REVOKED"
+            ]
+          },
+          "bootstrapExpiresAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "recoveryExpiresAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "encryptedBootstrap": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 65536
+          }
+        },
+        "required": [
+          "issuanceId",
+          "state"
+        ],
+        "additionalProperties": false
+      },
+      "RuntimeObservation": {
+        "type": "object",
+        "properties": {
+          "runtimeRef": {
+            "$ref": "#/components/schemas/RuntimeRef"
+          },
+          "state": {
+            "enum": [
+              "prepared",
+              "running",
+              "exited",
+              "cleanup-pending",
+              "cleaned",
+              "unknown"
+            ]
+          },
+          "exitCode": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": -2147483648,
+            "maximum": 2147483647
+          },
+          "observedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        },
+        "required": [
+          "runtimeRef",
+          "state",
+          "observedAt"
+        ],
+        "additionalProperties": false
+      },
+      "HostEvent": {
+        "type": "object",
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "executionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "attemptId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "generation": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "sequence": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "payloadHash": {
+            "$ref": "#/components/schemas/Digest"
+          },
+          "observation": {
+            "$ref": "#/components/schemas/RuntimeObservation"
+          }
+        },
+        "required": [
+          "eventId",
+          "executionId",
+          "attemptId",
+          "generation",
+          "sequence",
+          "payloadHash",
+          "observation"
+        ],
+        "additionalProperties": false
+      },
+      "EventBatch": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HostEvent"
+            },
+            "maxItems": 100
+          }
+        },
+        "required": [
+          "events"
+        ],
+        "additionalProperties": false
+      },
+      "EventAck": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "generation": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "contiguousSequence": {
+            "$ref": "#/components/schemas/UInt64String"
+          }
+        },
+        "required": [
+          "executionId",
+          "generation",
+          "contiguousSequence"
+        ],
+        "additionalProperties": false
+      },
+      "InventorySnapshot": {
+        "type": "object",
+        "properties": {
+          "inventoryGeneration": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "endpointIdentity": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "complete": {
+            "type": "boolean"
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 1024
+          },
+          "observedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "resources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RuntimeObservation"
+            },
+            "maxItems": 1000
+          }
+        },
+        "required": [
+          "inventoryGeneration",
+          "endpointIdentity",
+          "complete",
+          "observedAt",
+          "resources"
+        ],
+        "additionalProperties": false
+      },
+      "EnrollmentRequest": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "enrollmentToken": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "publicKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "proof": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          }
+        },
+        "required": [
+          "requestId",
+          "enrollmentToken",
+          "publicKey",
+          "proof"
+        ],
+        "additionalProperties": false
+      },
+      "EnrollmentResponse": {
+        "type": "object",
+        "properties": {
+          "identity": {
+            "$ref": "#/components/schemas/HostIdentity"
+          },
+          "protocol": {
+            "$ref": "#/components/schemas/ProtocolCompatibility"
+          }
+        },
+        "required": [
+          "identity",
+          "protocol"
+        ],
+        "additionalProperties": false
+      },
+      "TokenRequest": {
+        "type": "object",
+        "properties": {
+          "assertion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          }
+        },
+        "required": [
+          "assertion"
+        ],
+        "additionalProperties": false
+      },
+      "TokenResponse": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          },
+          "expiresAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        },
+        "required": [
+          "accessToken",
+          "expiresAt"
+        ],
+        "additionalProperties": false
+      },
+      "ConfigResponse": {
+        "type": "object",
+        "properties": {
+          "protocol": {
+            "$ref": "#/components/schemas/ProtocolCompatibility"
+          },
+          "admissionEnabled": {
+            "type": "boolean"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/LocalPolicy"
+          }
+        },
+        "required": [
+          "protocol",
+          "admissionEnabled",
+          "policy"
+        ],
+        "additionalProperties": false
+      },
+      "KeyRotationRequest": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "newPublicKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "currentKeyProof": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "newKeyProof": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "requestId",
+          "newPublicKey",
+          "currentKeyProof",
+          "newKeyProof"
+        ],
+        "additionalProperties": false
+      },
+      "Problem": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "retryable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "retryable"
+        ],
+        "additionalProperties": false
+      },
+      "Receipt": {
+        "type": "object",
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "accepted"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "formatVersion": 1,
+  "protocolVersion": "1.0.0",
+  "files": [
+    {
+      "path": "canonicalization.json",
+      "sha256": "5631133960cdb1bb7afb7d1acf1e7eefedd0c2d24539f888e686e918c4c8a029"
+    },
+    {
+      "path": "identities.json",
+      "sha256": "8d610e85fcda5bead511962e32c7e6ed735210893e5adb1d9a0c1e1f80c6df77"
+    },
+    {
+      "path": "validation.json",
+      "sha256": "7809599030d3ba9f32a8a235f20167eb95cd12ff9044c3954e270162435f6b58"
+    }
+  ]
+}

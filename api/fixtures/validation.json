@@ -1,0 +1,411 @@
+[
+  {
+    "id": "heartbeat",
+    "schema": "HostHeartbeat",
+    "value": {
+      "identity": {
+        "hostId": "host-a",
+        "keyId": "key-a",
+        "keyVersion": "1",
+        "sessionEpoch": "1"
+      },
+      "agentVersion": "0.1.0",
+      "protocolVersion": "1.0.0",
+      "inventoryGeneration": "1",
+      "effectivePolicyGeneration": "1",
+      "capabilities": {
+        "host": {
+          "os": "linux",
+          "architecture": "amd64",
+          "build": "candidate"
+        },
+        "engine": {
+          "os": "linux",
+          "architecture": "amd64",
+          "build": "candidate"
+        },
+        "endpointIdentity": "engine-a",
+        "runtimeVersion": "candidate",
+        "configurationGeneration": "1",
+        "probeGeneration": "1",
+        "observedAt": "2026-10-25T00:00:00.000Z",
+        "profiles": [
+          "standard-linux-v1"
+        ],
+        "dockerBuild": false,
+        "hardStorageLimit": false,
+        "capacity": {
+          "cpuMillis": "1000",
+          "memoryBytes": "1073741824",
+          "storageBytes": "10737418240",
+          "slots": "1"
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "id": "heartbeat-unknown",
+    "schema": "HostHeartbeat",
+    "value": {
+      "identity": {
+        "hostId": "host-a",
+        "keyId": "key-a",
+        "keyVersion": "1",
+        "sessionEpoch": "1"
+      },
+      "agentVersion": "0.1.0",
+      "protocolVersion": "1.0.0",
+      "inventoryGeneration": "1",
+      "effectivePolicyGeneration": "1",
+      "capabilities": {
+        "host": {
+          "os": "linux",
+          "architecture": "amd64",
+          "build": "candidate"
+        },
+        "engine": {
+          "os": "linux",
+          "architecture": "amd64",
+          "build": "candidate"
+        },
+        "endpointIdentity": "engine-a",
+        "runtimeVersion": "candidate",
+        "configurationGeneration": "1",
+        "probeGeneration": "1",
+        "observedAt": "2026-10-25T00:00:00.000Z",
+        "profiles": [
+          "standard-linux-v1"
+        ],
+        "dockerBuild": false,
+        "hardStorageLimit": false,
+        "capacity": {
+          "cpuMillis": "1000",
+          "memoryBytes": "1073741824",
+          "storageBytes": "10737418240",
+          "slots": "1"
+        }
+      },
+      "futureField": true
+    },
+    "valid": false
+  },
+  {
+    "id": "heartbeat-missing",
+    "schema": "HostHeartbeat",
+    "value": {
+      "agentVersion": "0.1.0",
+      "protocolVersion": "1.0.0",
+      "inventoryGeneration": "1",
+      "effectivePolicyGeneration": "1",
+      "capabilities": {
+        "host": {
+          "os": "linux",
+          "architecture": "amd64",
+          "build": "candidate"
+        },
+        "engine": {
+          "os": "linux",
+          "architecture": "amd64",
+          "build": "candidate"
+        },
+        "endpointIdentity": "engine-a",
+        "runtimeVersion": "candidate",
+        "configurationGeneration": "1",
+        "probeGeneration": "1",
+        "observedAt": "2026-10-25T00:00:00.000Z",
+        "profiles": [
+          "standard-linux-v1"
+        ],
+        "dockerBuild": false,
+        "hardStorageLimit": false,
+        "capacity": {
+          "cpuMillis": "1000",
+          "memoryBytes": "1073741824",
+          "storageBytes": "10737418240",
+          "slots": "1"
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "id": "heartbeat-null",
+    "schema": "HostHeartbeat",
+    "value": {
+      "identity": null,
+      "agentVersion": "0.1.0",
+      "protocolVersion": "1.0.0",
+      "inventoryGeneration": "1",
+      "effectivePolicyGeneration": "1",
+      "capabilities": {
+        "host": {
+          "os": "linux",
+          "architecture": "amd64",
+          "build": "candidate"
+        },
+        "engine": {
+          "os": "linux",
+          "architecture": "amd64",
+          "build": "candidate"
+        },
+        "endpointIdentity": "engine-a",
+        "runtimeVersion": "candidate",
+        "configurationGeneration": "1",
+        "probeGeneration": "1",
+        "observedAt": "2026-10-25T00:00:00.000Z",
+        "profiles": [
+          "standard-linux-v1"
+        ],
+        "dockerBuild": false,
+        "hardStorageLimit": false,
+        "capacity": {
+          "cpuMillis": "1000",
+          "memoryBytes": "1073741824",
+          "storageBytes": "10737418240",
+          "slots": "1"
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "id": "uint64-9223372036854775807",
+    "schema": "UInt64String",
+    "value": "9223372036854775807",
+    "valid": true
+  },
+  {
+    "id": "uint64-9223372036854775808",
+    "schema": "UInt64String",
+    "value": "9223372036854775808",
+    "valid": true
+  },
+  {
+    "id": "uint64-18446744073709551615",
+    "schema": "UInt64String",
+    "value": "18446744073709551615",
+    "valid": true
+  },
+  {
+    "id": "uint64-18446744073709551616",
+    "schema": "UInt64String",
+    "value": "18446744073709551616",
+    "valid": false
+  },
+  {
+    "id": "uint64-01",
+    "schema": "UInt64String",
+    "value": "01",
+    "valid": false
+  },
+  {
+    "id": "uint64--1",
+    "schema": "UInt64String",
+    "value": "-1",
+    "valid": false
+  },
+  {
+    "id": "uint64-1.0",
+    "schema": "UInt64String",
+    "value": "1.0",
+    "valid": false
+  },
+  {
+    "id": "uint64-9007199254740992",
+    "schema": "UInt64String",
+    "value": 9007199254740992,
+    "valid": false
+  },
+  {
+    "id": "generation-zero",
+    "schema": "Generation",
+    "value": "0",
+    "valid": false
+  },
+  {
+    "id": "timestamp-format",
+    "schema": "Timestamp",
+    "value": "2026-02-30T00:00:00.000Z",
+    "valid": false
+  },
+  {
+    "id": "start-command",
+    "schema": "HostCommand",
+    "value": {
+      "commandId": "cmd-a",
+      "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "generation": "1",
+      "kind": "start",
+      "spec": {
+        "executionId": "exec-a",
+        "attemptId": "attempt-a",
+        "generation": "1",
+        "executionBackend": "customer-host",
+        "runtimeEngine": "docker",
+        "isolationProfile": "standard",
+        "profileVersion": "standard-linux-v1",
+        "templateVersion": "github-linux-v1",
+        "provider": "github",
+        "hostPlatform": {
+          "os": "linux",
+          "architecture": "amd64",
+          "build": "candidate"
+        },
+        "runnerPlatform": {
+          "os": "linux",
+          "architecture": "amd64",
+          "build": "candidate"
+        },
+        "imageDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "trustClass": "trusted",
+        "dockerBuild": false,
+        "resources": {
+          "cpuMillis": "1000",
+          "memoryBytes": "1073741824",
+          "storageBytes": "10737418240",
+          "slots": "1"
+        },
+        "policyGeneration": "1",
+        "compatibilityRecordId": "candidate-a",
+        "authorizationExpiresAt": "2026-10-25T01:00:00.000Z",
+        "specHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    "valid": true
+  },
+  {
+    "id": "cancel-command",
+    "schema": "HostCommand",
+    "value": {
+      "commandId": "cmd-a",
+      "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "generation": "1",
+      "kind": "cancel",
+      "executionId": "exec-a"
+    },
+    "valid": true
+  },
+  {
+    "id": "unknown-command",
+    "schema": "HostCommand",
+    "value": {
+      "commandId": "cmd-a",
+      "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "generation": "1",
+      "kind": "future",
+      "executionId": "exec-a"
+    },
+    "valid": false
+  },
+  {
+    "id": "event",
+    "schema": "HostEvent",
+    "value": {
+      "eventId": "event-a",
+      "executionId": "exec-a",
+      "attemptId": "attempt-a",
+      "generation": "1",
+      "sequence": "1",
+      "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "observation": {
+        "runtimeRef": {
+          "engine": "docker",
+          "scope": "engine-a",
+          "resourceKind": "container",
+          "resourceId": "immutable-a",
+          "executionId": "exec-a",
+          "generation": "1",
+          "specHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "state": "running",
+        "observedAt": "2026-10-25T00:00:00.000Z"
+      }
+    },
+    "valid": true
+  },
+  {
+    "id": "exit-null",
+    "schema": "RuntimeObservation",
+    "value": {
+      "runtimeRef": {
+        "engine": "docker",
+        "scope": "engine-a",
+        "resourceKind": "container",
+        "resourceId": "immutable-a",
+        "executionId": "exec-a",
+        "generation": "1",
+        "specHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "state": "running",
+      "observedAt": "2026-10-25T00:00:00.000Z",
+      "exitCode": null
+    },
+    "valid": true
+  },
+  {
+    "id": "exit-overflow",
+    "schema": "RuntimeObservation",
+    "value": {
+      "runtimeRef": {
+        "engine": "docker",
+        "scope": "engine-a",
+        "resourceKind": "container",
+        "resourceId": "immutable-a",
+        "executionId": "exec-a",
+        "generation": "1",
+        "specHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "state": "running",
+      "observedAt": "2026-10-25T00:00:00.000Z",
+      "exitCode": 2147483648
+    },
+    "valid": false
+  },
+  {
+    "id": "inventory-cursor-null",
+    "schema": "InventorySnapshot",
+    "value": {
+      "inventoryGeneration": "1",
+      "endpointIdentity": "engine-a",
+      "complete": false,
+      "nextCursor": null,
+      "observedAt": "2026-10-25T00:00:00.000Z",
+      "resources": [
+        {
+          "runtimeRef": {
+            "engine": "docker",
+            "scope": "engine-a",
+            "resourceKind": "container",
+            "resourceId": "immutable-a",
+            "executionId": "exec-a",
+            "generation": "1",
+            "specHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "state": "running",
+          "observedAt": "2026-10-25T00:00:00.000Z"
+        }
+      ]
+    },
+    "valid": true
+  },
+  {
+    "id": "unsigned-bootstrap",
+    "schema": "StartResponse",
+    "value": {
+      "issuanceId": "i",
+      "state": "UNCERTAIN"
+    },
+    "valid": true
+  },
+  {
+    "id": "nullable-bootstrap",
+    "schema": "StartResponse",
+    "value": {
+      "issuanceId": "i",
+      "state": "ISSUED",
+      "encryptedBootstrap": null
+    },
+    "valid": true
+  }
+]
