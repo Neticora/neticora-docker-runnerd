@@ -285,7 +285,8 @@
         "policyGeneration": "1",
         "compatibilityRecordId": "candidate-a",
         "authorizationExpiresAt": "2026-10-25T01:00:00.000Z",
-        "specHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        "specHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "poolId": "pool-a"
       }
     },
     "valid": true
@@ -469,6 +470,853 @@
       "generation": "1",
       "sequence": "1",
       "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "valid": false
+  },
+  {
+    "id": "customer-policy",
+    "schema": "CustomerPolicy",
+    "value": {
+      "schemaVersion": "1.0",
+      "generation": "1",
+      "allowedTenantIds": [
+        "tenant-a"
+      ],
+      "allowedPoolIds": [
+        "pool-a"
+      ],
+      "allowedProfiles": [
+        "standard-linux-v1"
+      ],
+      "allowedTrustClasses": [
+        "trusted"
+      ],
+      "limits": {
+        "cpuMillis": "1000",
+        "memoryBytes": "1073741824",
+        "storageBytes": "10737418240",
+        "slots": "1"
+      },
+      "maxConcurrentExecutions": "1",
+      "images": {
+        "requireSignature": true,
+        "allowedDigests": [
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "trustRootId": "root-a",
+        "trustRootVersion": "1",
+        "trustRootSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "trustedIssuer": "https://issuer.example",
+        "trustedSubject": "repo:Neticora/runner:ref:refs/heads/main",
+        "trustExpiresAt": "2026-10-26T00:00:00.000Z",
+        "maxOfflineAgeSeconds": 3600
+      },
+      "network": {
+        "mode": "reserved-bridge",
+        "ipv4Pool": "10.200.0.0/16",
+        "interfacePrefix": "nrd",
+        "enforcementId": "firewall-a",
+        "ipv6": "disabled",
+        "denyHostAccess": true,
+        "denyMetadata": true,
+        "denyCrossExecution": true,
+        "allowedServiceCidrs": []
+      },
+      "transport": {
+        "proxyUrl": null,
+        "customCaSha256": null,
+        "maxClockSkewSeconds": 60
+      },
+      "onReload": "new-admissions-only",
+      "restrictions": {
+        "runnerUid": 1000,
+        "allowRunnerSudo": false,
+        "hostManagementAccess": false,
+        "hostSshAgent": false,
+        "dockerRestartPolicy": "no"
+      }
+    },
+    "valid": true
+  },
+  {
+    "id": "policy-unknown-security",
+    "schema": "CustomerPolicy",
+    "value": {
+      "schemaVersion": "1.0",
+      "generation": "1",
+      "allowedTenantIds": [
+        "tenant-a"
+      ],
+      "allowedPoolIds": [
+        "pool-a"
+      ],
+      "allowedProfiles": [
+        "standard-linux-v1"
+      ],
+      "allowedTrustClasses": [
+        "trusted"
+      ],
+      "limits": {
+        "cpuMillis": "1000",
+        "memoryBytes": "1073741824",
+        "storageBytes": "10737418240",
+        "slots": "1"
+      },
+      "maxConcurrentExecutions": "1",
+      "images": {
+        "requireSignature": true,
+        "allowedDigests": [
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "trustRootId": "root-a",
+        "trustRootVersion": "1",
+        "trustRootSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "trustedIssuer": "https://issuer.example",
+        "trustedSubject": "repo:Neticora/runner:ref:refs/heads/main",
+        "trustExpiresAt": "2026-10-26T00:00:00.000Z",
+        "maxOfflineAgeSeconds": 3600
+      },
+      "network": {
+        "mode": "reserved-bridge",
+        "ipv4Pool": "10.200.0.0/16",
+        "interfacePrefix": "nrd",
+        "enforcementId": "firewall-a",
+        "ipv6": "disabled",
+        "denyHostAccess": true,
+        "denyMetadata": true,
+        "denyCrossExecution": true,
+        "allowedServiceCidrs": []
+      },
+      "transport": {
+        "proxyUrl": null,
+        "customCaSha256": null,
+        "maxClockSkewSeconds": 60
+      },
+      "onReload": "new-admissions-only",
+      "ignoreSignatures": true,
+      "restrictions": {
+        "runnerUid": 1000,
+        "allowRunnerSudo": false,
+        "hostManagementAccess": false,
+        "hostSshAgent": false,
+        "dockerRestartPolicy": "no"
+      }
+    },
+    "valid": false
+  },
+  {
+    "id": "policy-nested-unknown",
+    "schema": "CustomerPolicy",
+    "value": {
+      "schemaVersion": "1.0",
+      "generation": "1",
+      "allowedTenantIds": [
+        "tenant-a"
+      ],
+      "allowedPoolIds": [
+        "pool-a"
+      ],
+      "allowedProfiles": [
+        "standard-linux-v1"
+      ],
+      "allowedTrustClasses": [
+        "trusted"
+      ],
+      "limits": {
+        "cpuMillis": "1000",
+        "memoryBytes": "1073741824",
+        "storageBytes": "10737418240",
+        "slots": "1"
+      },
+      "maxConcurrentExecutions": "1",
+      "images": {
+        "requireSignature": true,
+        "allowedDigests": [
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "trustRootId": "root-a",
+        "trustRootVersion": "1",
+        "trustRootSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "trustedIssuer": "https://issuer.example",
+        "trustedSubject": "repo:Neticora/runner:ref:refs/heads/main",
+        "trustExpiresAt": "2026-10-26T00:00:00.000Z",
+        "maxOfflineAgeSeconds": 3600
+      },
+      "network": {
+        "mode": "reserved-bridge",
+        "ipv4Pool": "10.200.0.0/16",
+        "interfacePrefix": "nrd",
+        "enforcementId": "firewall-a",
+        "ipv6": "disabled",
+        "denyHostAccess": true,
+        "denyMetadata": true,
+        "denyCrossExecution": true,
+        "allowedServiceCidrs": [],
+        "ignoreHostDeny": true
+      },
+      "transport": {
+        "proxyUrl": null,
+        "customCaSha256": null,
+        "maxClockSkewSeconds": 60
+      },
+      "onReload": "new-admissions-only",
+      "restrictions": {
+        "runnerUid": 1000,
+        "allowRunnerSudo": false,
+        "hostManagementAccess": false,
+        "hostSshAgent": false,
+        "dockerRestartPolicy": "no"
+      }
+    },
+    "valid": false
+  },
+  {
+    "id": "policy-host-network",
+    "schema": "CustomerPolicy",
+    "value": {
+      "schemaVersion": "1.0",
+      "generation": "1",
+      "allowedTenantIds": [
+        "tenant-a"
+      ],
+      "allowedPoolIds": [
+        "pool-a"
+      ],
+      "allowedProfiles": [
+        "standard-linux-v1"
+      ],
+      "allowedTrustClasses": [
+        "trusted"
+      ],
+      "limits": {
+        "cpuMillis": "1000",
+        "memoryBytes": "1073741824",
+        "storageBytes": "10737418240",
+        "slots": "1"
+      },
+      "maxConcurrentExecutions": "1",
+      "images": {
+        "requireSignature": true,
+        "allowedDigests": [
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "trustRootId": "root-a",
+        "trustRootVersion": "1",
+        "trustRootSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "trustedIssuer": "https://issuer.example",
+        "trustedSubject": "repo:Neticora/runner:ref:refs/heads/main",
+        "trustExpiresAt": "2026-10-26T00:00:00.000Z",
+        "maxOfflineAgeSeconds": 3600
+      },
+      "network": {
+        "mode": "host",
+        "ipv4Pool": "10.200.0.0/16",
+        "interfacePrefix": "nrd",
+        "enforcementId": "firewall-a",
+        "ipv6": "disabled",
+        "denyHostAccess": true,
+        "denyMetadata": true,
+        "denyCrossExecution": true,
+        "allowedServiceCidrs": []
+      },
+      "transport": {
+        "proxyUrl": null,
+        "customCaSha256": null,
+        "maxClockSkewSeconds": 60
+      },
+      "onReload": "new-admissions-only",
+      "restrictions": {
+        "runnerUid": 1000,
+        "allowRunnerSudo": false,
+        "hostManagementAccess": false,
+        "hostSshAgent": false,
+        "dockerRestartPolicy": "no"
+      }
+    },
+    "valid": false
+  },
+  {
+    "id": "policy-ipv6-unqualified",
+    "schema": "CustomerPolicy",
+    "value": {
+      "schemaVersion": "1.0",
+      "generation": "1",
+      "allowedTenantIds": [
+        "tenant-a"
+      ],
+      "allowedPoolIds": [
+        "pool-a"
+      ],
+      "allowedProfiles": [
+        "standard-linux-v1"
+      ],
+      "allowedTrustClasses": [
+        "trusted"
+      ],
+      "limits": {
+        "cpuMillis": "1000",
+        "memoryBytes": "1073741824",
+        "storageBytes": "10737418240",
+        "slots": "1"
+      },
+      "maxConcurrentExecutions": "1",
+      "images": {
+        "requireSignature": true,
+        "allowedDigests": [
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "trustRootId": "root-a",
+        "trustRootVersion": "1",
+        "trustRootSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "trustedIssuer": "https://issuer.example",
+        "trustedSubject": "repo:Neticora/runner:ref:refs/heads/main",
+        "trustExpiresAt": "2026-10-26T00:00:00.000Z",
+        "maxOfflineAgeSeconds": 3600
+      },
+      "network": {
+        "mode": "reserved-bridge",
+        "ipv4Pool": "10.200.0.0/16",
+        "interfacePrefix": "nrd",
+        "enforcementId": "firewall-a",
+        "ipv6": "enabled",
+        "denyHostAccess": true,
+        "denyMetadata": true,
+        "denyCrossExecution": true,
+        "allowedServiceCidrs": []
+      },
+      "transport": {
+        "proxyUrl": null,
+        "customCaSha256": null,
+        "maxClockSkewSeconds": 60
+      },
+      "onReload": "new-admissions-only",
+      "restrictions": {
+        "runnerUid": 1000,
+        "allowRunnerSudo": false,
+        "hostManagementAccess": false,
+        "hostSshAgent": false,
+        "dockerRestartPolicy": "no"
+      }
+    },
+    "valid": false
+  },
+  {
+    "id": "policy-signature-disable",
+    "schema": "CustomerPolicy",
+    "value": {
+      "schemaVersion": "1.0",
+      "generation": "1",
+      "allowedTenantIds": [
+        "tenant-a"
+      ],
+      "allowedPoolIds": [
+        "pool-a"
+      ],
+      "allowedProfiles": [
+        "standard-linux-v1"
+      ],
+      "allowedTrustClasses": [
+        "trusted"
+      ],
+      "limits": {
+        "cpuMillis": "1000",
+        "memoryBytes": "1073741824",
+        "storageBytes": "10737418240",
+        "slots": "1"
+      },
+      "maxConcurrentExecutions": "1",
+      "images": {
+        "requireSignature": false,
+        "allowedDigests": [
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "trustRootId": "root-a",
+        "trustRootVersion": "1",
+        "trustRootSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "trustedIssuer": "https://issuer.example",
+        "trustedSubject": "repo:Neticora/runner:ref:refs/heads/main",
+        "trustExpiresAt": "2026-10-26T00:00:00.000Z",
+        "maxOfflineAgeSeconds": 3600
+      },
+      "network": {
+        "mode": "reserved-bridge",
+        "ipv4Pool": "10.200.0.0/16",
+        "interfacePrefix": "nrd",
+        "enforcementId": "firewall-a",
+        "ipv6": "disabled",
+        "denyHostAccess": true,
+        "denyMetadata": true,
+        "denyCrossExecution": true,
+        "allowedServiceCidrs": []
+      },
+      "transport": {
+        "proxyUrl": null,
+        "customCaSha256": null,
+        "maxClockSkewSeconds": 60
+      },
+      "onReload": "new-admissions-only",
+      "restrictions": {
+        "runnerUid": 1000,
+        "allowRunnerSudo": false,
+        "hostManagementAccess": false,
+        "hostSshAgent": false,
+        "dockerRestartPolicy": "no"
+      }
+    },
+    "valid": false
+  },
+  {
+    "id": "policy-wildcard-subject",
+    "schema": "CustomerPolicy",
+    "value": {
+      "schemaVersion": "1.0",
+      "generation": "1",
+      "allowedTenantIds": [
+        "tenant-a"
+      ],
+      "allowedPoolIds": [
+        "pool-a"
+      ],
+      "allowedProfiles": [
+        "standard-linux-v1"
+      ],
+      "allowedTrustClasses": [
+        "trusted"
+      ],
+      "limits": {
+        "cpuMillis": "1000",
+        "memoryBytes": "1073741824",
+        "storageBytes": "10737418240",
+        "slots": "1"
+      },
+      "maxConcurrentExecutions": "1",
+      "images": {
+        "requireSignature": true,
+        "allowedDigests": [
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "trustRootId": "root-a",
+        "trustRootVersion": "1",
+        "trustRootSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "trustedIssuer": "https://issuer.example",
+        "trustedSubject": "*",
+        "trustExpiresAt": "2026-10-26T00:00:00.000Z",
+        "maxOfflineAgeSeconds": 3600
+      },
+      "network": {
+        "mode": "reserved-bridge",
+        "ipv4Pool": "10.200.0.0/16",
+        "interfacePrefix": "nrd",
+        "enforcementId": "firewall-a",
+        "ipv6": "disabled",
+        "denyHostAccess": true,
+        "denyMetadata": true,
+        "denyCrossExecution": true,
+        "allowedServiceCidrs": []
+      },
+      "transport": {
+        "proxyUrl": null,
+        "customCaSha256": null,
+        "maxClockSkewSeconds": 60
+      },
+      "onReload": "new-admissions-only",
+      "restrictions": {
+        "runnerUid": 1000,
+        "allowRunnerSudo": false,
+        "hostManagementAccess": false,
+        "hostSshAgent": false,
+        "dockerRestartPolicy": "no"
+      }
+    },
+    "valid": false
+  },
+  {
+    "id": "policy-proxy-credentials",
+    "schema": "CustomerPolicy",
+    "value": {
+      "schemaVersion": "1.0",
+      "generation": "1",
+      "allowedTenantIds": [
+        "tenant-a"
+      ],
+      "allowedPoolIds": [
+        "pool-a"
+      ],
+      "allowedProfiles": [
+        "standard-linux-v1"
+      ],
+      "allowedTrustClasses": [
+        "trusted"
+      ],
+      "limits": {
+        "cpuMillis": "1000",
+        "memoryBytes": "1073741824",
+        "storageBytes": "10737418240",
+        "slots": "1"
+      },
+      "maxConcurrentExecutions": "1",
+      "images": {
+        "requireSignature": true,
+        "allowedDigests": [
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "trustRootId": "root-a",
+        "trustRootVersion": "1",
+        "trustRootSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "trustedIssuer": "https://issuer.example",
+        "trustedSubject": "repo:Neticora/runner:ref:refs/heads/main",
+        "trustExpiresAt": "2026-10-26T00:00:00.000Z",
+        "maxOfflineAgeSeconds": 3600
+      },
+      "network": {
+        "mode": "reserved-bridge",
+        "ipv4Pool": "10.200.0.0/16",
+        "interfacePrefix": "nrd",
+        "enforcementId": "firewall-a",
+        "ipv6": "disabled",
+        "denyHostAccess": true,
+        "denyMetadata": true,
+        "denyCrossExecution": true,
+        "allowedServiceCidrs": []
+      },
+      "transport": {
+        "proxyUrl": "https://user:secret@proxy.example:443",
+        "customCaSha256": null,
+        "maxClockSkewSeconds": 60
+      },
+      "onReload": "new-admissions-only",
+      "restrictions": {
+        "runnerUid": 1000,
+        "allowRunnerSudo": false,
+        "hostManagementAccess": false,
+        "hostSshAgent": false,
+        "dockerRestartPolicy": "no"
+      }
+    },
+    "valid": false
+  },
+  {
+    "id": "policy-excess-clock-skew",
+    "schema": "CustomerPolicy",
+    "value": {
+      "schemaVersion": "1.0",
+      "generation": "1",
+      "allowedTenantIds": [
+        "tenant-a"
+      ],
+      "allowedPoolIds": [
+        "pool-a"
+      ],
+      "allowedProfiles": [
+        "standard-linux-v1"
+      ],
+      "allowedTrustClasses": [
+        "trusted"
+      ],
+      "limits": {
+        "cpuMillis": "1000",
+        "memoryBytes": "1073741824",
+        "storageBytes": "10737418240",
+        "slots": "1"
+      },
+      "maxConcurrentExecutions": "1",
+      "images": {
+        "requireSignature": true,
+        "allowedDigests": [
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "trustRootId": "root-a",
+        "trustRootVersion": "1",
+        "trustRootSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "trustedIssuer": "https://issuer.example",
+        "trustedSubject": "repo:Neticora/runner:ref:refs/heads/main",
+        "trustExpiresAt": "2026-10-26T00:00:00.000Z",
+        "maxOfflineAgeSeconds": 3600
+      },
+      "network": {
+        "mode": "reserved-bridge",
+        "ipv4Pool": "10.200.0.0/16",
+        "interfacePrefix": "nrd",
+        "enforcementId": "firewall-a",
+        "ipv6": "disabled",
+        "denyHostAccess": true,
+        "denyMetadata": true,
+        "denyCrossExecution": true,
+        "allowedServiceCidrs": []
+      },
+      "transport": {
+        "proxyUrl": null,
+        "customCaSha256": null,
+        "maxClockSkewSeconds": 301
+      },
+      "onReload": "new-admissions-only",
+      "restrictions": {
+        "runnerUid": 1000,
+        "allowRunnerSudo": false,
+        "hostManagementAccess": false,
+        "hostSshAgent": false,
+        "dockerRestartPolicy": "no"
+      }
+    },
+    "valid": false
+  },
+  {
+    "id": "policy-unknown-version",
+    "schema": "CustomerPolicy",
+    "value": {
+      "schemaVersion": "2.0",
+      "generation": "1",
+      "allowedTenantIds": [
+        "tenant-a"
+      ],
+      "allowedPoolIds": [
+        "pool-a"
+      ],
+      "allowedProfiles": [
+        "standard-linux-v1"
+      ],
+      "allowedTrustClasses": [
+        "trusted"
+      ],
+      "limits": {
+        "cpuMillis": "1000",
+        "memoryBytes": "1073741824",
+        "storageBytes": "10737418240",
+        "slots": "1"
+      },
+      "maxConcurrentExecutions": "1",
+      "images": {
+        "requireSignature": true,
+        "allowedDigests": [
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "trustRootId": "root-a",
+        "trustRootVersion": "1",
+        "trustRootSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "trustedIssuer": "https://issuer.example",
+        "trustedSubject": "repo:Neticora/runner:ref:refs/heads/main",
+        "trustExpiresAt": "2026-10-26T00:00:00.000Z",
+        "maxOfflineAgeSeconds": 3600
+      },
+      "network": {
+        "mode": "reserved-bridge",
+        "ipv4Pool": "10.200.0.0/16",
+        "interfacePrefix": "nrd",
+        "enforcementId": "firewall-a",
+        "ipv6": "disabled",
+        "denyHostAccess": true,
+        "denyMetadata": true,
+        "denyCrossExecution": true,
+        "allowedServiceCidrs": []
+      },
+      "transport": {
+        "proxyUrl": null,
+        "customCaSha256": null,
+        "maxClockSkewSeconds": 60
+      },
+      "onReload": "new-admissions-only",
+      "restrictions": {
+        "runnerUid": 1000,
+        "allowRunnerSudo": false,
+        "hostManagementAccess": false,
+        "hostSshAgent": false,
+        "dockerRestartPolicy": "no"
+      }
+    },
+    "valid": false
+  },
+  {
+    "id": "policy-root-listener",
+    "schema": "CustomerPolicy",
+    "value": {
+      "schemaVersion": "1.0",
+      "generation": "1",
+      "allowedTenantIds": [
+        "tenant-a"
+      ],
+      "allowedPoolIds": [
+        "pool-a"
+      ],
+      "allowedProfiles": [
+        "standard-linux-v1"
+      ],
+      "allowedTrustClasses": [
+        "trusted"
+      ],
+      "limits": {
+        "cpuMillis": "1000",
+        "memoryBytes": "1073741824",
+        "storageBytes": "10737418240",
+        "slots": "1"
+      },
+      "maxConcurrentExecutions": "1",
+      "images": {
+        "requireSignature": true,
+        "allowedDigests": [
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "trustRootId": "root-a",
+        "trustRootVersion": "1",
+        "trustRootSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "trustedIssuer": "https://issuer.example",
+        "trustedSubject": "repo:Neticora/runner:ref:refs/heads/main",
+        "trustExpiresAt": "2026-10-26T00:00:00.000Z",
+        "maxOfflineAgeSeconds": 3600
+      },
+      "network": {
+        "mode": "reserved-bridge",
+        "ipv4Pool": "10.200.0.0/16",
+        "interfacePrefix": "nrd",
+        "enforcementId": "firewall-a",
+        "ipv6": "disabled",
+        "denyHostAccess": true,
+        "denyMetadata": true,
+        "denyCrossExecution": true,
+        "allowedServiceCidrs": []
+      },
+      "transport": {
+        "proxyUrl": null,
+        "customCaSha256": null,
+        "maxClockSkewSeconds": 60
+      },
+      "onReload": "new-admissions-only",
+      "restrictions": {
+        "runnerUid": 0,
+        "allowRunnerSudo": false,
+        "hostManagementAccess": false,
+        "hostSshAgent": false,
+        "dockerRestartPolicy": "no"
+      }
+    },
+    "valid": false
+  },
+  {
+    "id": "policy-sudo-listener",
+    "schema": "CustomerPolicy",
+    "value": {
+      "schemaVersion": "1.0",
+      "generation": "1",
+      "allowedTenantIds": [
+        "tenant-a"
+      ],
+      "allowedPoolIds": [
+        "pool-a"
+      ],
+      "allowedProfiles": [
+        "standard-linux-v1"
+      ],
+      "allowedTrustClasses": [
+        "trusted"
+      ],
+      "limits": {
+        "cpuMillis": "1000",
+        "memoryBytes": "1073741824",
+        "storageBytes": "10737418240",
+        "slots": "1"
+      },
+      "maxConcurrentExecutions": "1",
+      "images": {
+        "requireSignature": true,
+        "allowedDigests": [
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "trustRootId": "root-a",
+        "trustRootVersion": "1",
+        "trustRootSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "trustedIssuer": "https://issuer.example",
+        "trustedSubject": "repo:Neticora/runner:ref:refs/heads/main",
+        "trustExpiresAt": "2026-10-26T00:00:00.000Z",
+        "maxOfflineAgeSeconds": 3600
+      },
+      "network": {
+        "mode": "reserved-bridge",
+        "ipv4Pool": "10.200.0.0/16",
+        "interfacePrefix": "nrd",
+        "enforcementId": "firewall-a",
+        "ipv6": "disabled",
+        "denyHostAccess": true,
+        "denyMetadata": true,
+        "denyCrossExecution": true,
+        "allowedServiceCidrs": []
+      },
+      "transport": {
+        "proxyUrl": null,
+        "customCaSha256": null,
+        "maxClockSkewSeconds": 60
+      },
+      "onReload": "new-admissions-only",
+      "restrictions": {
+        "runnerUid": 1000,
+        "allowRunnerSudo": true,
+        "hostManagementAccess": false,
+        "hostSshAgent": false,
+        "dockerRestartPolicy": "no"
+      }
+    },
+    "valid": false
+  },
+  {
+    "id": "policy-automatic-restart",
+    "schema": "CustomerPolicy",
+    "value": {
+      "schemaVersion": "1.0",
+      "generation": "1",
+      "allowedTenantIds": [
+        "tenant-a"
+      ],
+      "allowedPoolIds": [
+        "pool-a"
+      ],
+      "allowedProfiles": [
+        "standard-linux-v1"
+      ],
+      "allowedTrustClasses": [
+        "trusted"
+      ],
+      "limits": {
+        "cpuMillis": "1000",
+        "memoryBytes": "1073741824",
+        "storageBytes": "10737418240",
+        "slots": "1"
+      },
+      "maxConcurrentExecutions": "1",
+      "images": {
+        "requireSignature": true,
+        "allowedDigests": [
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "trustRootId": "root-a",
+        "trustRootVersion": "1",
+        "trustRootSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "trustedIssuer": "https://issuer.example",
+        "trustedSubject": "repo:Neticora/runner:ref:refs/heads/main",
+        "trustExpiresAt": "2026-10-26T00:00:00.000Z",
+        "maxOfflineAgeSeconds": 3600
+      },
+      "network": {
+        "mode": "reserved-bridge",
+        "ipv4Pool": "10.200.0.0/16",
+        "interfacePrefix": "nrd",
+        "enforcementId": "firewall-a",
+        "ipv6": "disabled",
+        "denyHostAccess": true,
+        "denyMetadata": true,
+        "denyCrossExecution": true,
+        "allowedServiceCidrs": []
+      },
+      "transport": {
+        "proxyUrl": null,
+        "customCaSha256": null,
+        "maxClockSkewSeconds": 60
+      },
+      "onReload": "new-admissions-only",
+      "restrictions": {
+        "runnerUid": 1000,
+        "allowRunnerSudo": false,
+        "hostManagementAccess": false,
+        "hostSshAgent": false,
+        "dockerRestartPolicy": "always"
+      }
     },
     "valid": false
   }

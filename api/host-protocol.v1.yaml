@@ -812,6 +812,11 @@
           },
           "specHash": {
             "$ref": "#/components/schemas/Digest"
+          },
+          "poolId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
           }
         },
         "required": [
@@ -833,7 +838,8 @@
           "policyGeneration",
           "compatibilityRecordId",
           "authorizationExpiresAt",
-          "specHash"
+          "specHash",
+          "poolId"
         ],
         "additionalProperties": false
       },
@@ -1449,6 +1455,267 @@
             "$ref": "#/components/schemas/Timestamp"
           }
         }
+      },
+      "CustomerPolicy": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "const": "1.0"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "allowedTenantIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "minItems": 1,
+            "maxItems": 128,
+            "uniqueItems": true
+          },
+          "allowedPoolIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "minItems": 1,
+            "maxItems": 128,
+            "uniqueItems": true
+          },
+          "allowedProfiles": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "minItems": 1,
+            "maxItems": 128,
+            "uniqueItems": true
+          },
+          "allowedTrustClasses": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "trusted",
+                "untrusted"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 128,
+            "uniqueItems": true
+          },
+          "limits": {
+            "$ref": "#/components/schemas/ResourceBudget"
+          },
+          "maxConcurrentExecutions": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "images": {
+            "type": "object",
+            "properties": {
+              "requireSignature": {
+                "const": true
+              },
+              "allowedDigests": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                },
+                "minItems": 1,
+                "maxItems": 128,
+                "uniqueItems": true
+              },
+              "trustRootId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "trustRootVersion": {
+                "$ref": "#/components/schemas/Generation"
+              },
+              "trustRootSha256": {
+                "$ref": "#/components/schemas/Digest"
+              },
+              "trustedIssuer": {
+                "type": "string",
+                "format": "uri",
+                "pattern": "^https://",
+                "maxLength": 2048
+              },
+              "trustedSubject": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048,
+                "not": {
+                  "pattern": "\\*"
+                }
+              },
+              "trustExpiresAt": {
+                "$ref": "#/components/schemas/Timestamp"
+              },
+              "maxOfflineAgeSeconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              }
+            },
+            "required": [
+              "requireSignature",
+              "allowedDigests",
+              "trustRootId",
+              "trustRootVersion",
+              "trustRootSha256",
+              "trustedIssuer",
+              "trustedSubject",
+              "trustExpiresAt",
+              "maxOfflineAgeSeconds"
+            ],
+            "additionalProperties": false
+          },
+          "network": {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "const": "reserved-bridge"
+              },
+              "ipv4Pool": {
+                "type": "string",
+                "pattern": "^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}/(?:[0-9]|[12][0-9]|3[0-2])$"
+              },
+              "interfacePrefix": {
+                "const": "nrd"
+              },
+              "enforcementId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "ipv6": {
+                "const": "disabled"
+              },
+              "denyHostAccess": {
+                "const": true
+              },
+              "denyMetadata": {
+                "const": true
+              },
+              "denyCrossExecution": {
+                "const": true
+              },
+              "allowedServiceCidrs": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}/(?:[0-9]|[12][0-9]|3[0-2])$"
+                },
+                "maxItems": 128,
+                "uniqueItems": true
+              }
+            },
+            "required": [
+              "mode",
+              "ipv4Pool",
+              "interfacePrefix",
+              "enforcementId",
+              "ipv6",
+              "denyHostAccess",
+              "denyMetadata",
+              "denyCrossExecution",
+              "allowedServiceCidrs"
+            ],
+            "additionalProperties": false
+          },
+          "transport": {
+            "type": "object",
+            "properties": {
+              "proxyUrl": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 2048,
+                "pattern": "^https?://[^/@\\s]+(?::[0-9]+)?/?$"
+              },
+              "customCaSha256": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/Digest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "maxClockSkewSeconds": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 300
+              }
+            },
+            "required": [
+              "proxyUrl",
+              "customCaSha256",
+              "maxClockSkewSeconds"
+            ],
+            "additionalProperties": false
+          },
+          "onReload": {
+            "const": "new-admissions-only"
+          },
+          "restrictions": {
+            "type": "object",
+            "properties": {
+              "runnerUid": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              },
+              "allowRunnerSudo": {
+                "const": false
+              },
+              "hostManagementAccess": {
+                "const": false
+              },
+              "hostSshAgent": {
+                "const": false
+              },
+              "dockerRestartPolicy": {
+                "const": "no"
+              }
+            },
+            "required": [
+              "runnerUid",
+              "allowRunnerSudo",
+              "hostManagementAccess",
+              "hostSshAgent",
+              "dockerRestartPolicy"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "generation",
+          "allowedTenantIds",
+          "allowedPoolIds",
+          "allowedProfiles",
+          "allowedTrustClasses",
+          "limits",
+          "maxConcurrentExecutions",
+          "images",
+          "network",
+          "transport",
+          "onReload",
+          "restrictions"
+        ],
+        "additionalProperties": false
       }
     }
   }

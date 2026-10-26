@@ -81,3 +81,28 @@ host-bound encrypted bootstrap envelope; encryption/auth and one-use delivery
 must be qualified before endpoint implementation. No tuple is schedulable from
 a HostCapabilities claim alone: SaaS accepted evidence, local policy and tenant/
 pool authorization must all agree. No default Docker management socket in jobs.
+
+## Customer policy v1
+
+`components.schemas.CustomerPolicy` is the canonical strict versioned local policy
+schema. It is distinct from the SaaS config `LocalPolicy` DTO: remote policy can
+only narrow provisioned customer authority. Unknown root/nested security fields
+reject. `poolId` is immutable execution-spec input and included in its hash.
+The sample policy in fixtures is test data, not provisioned signing trust or an
+approved address allocation. CIDR syntax validation is followed by semantic
+subnet validation and installer-qualified route/firewall evidence at admission.
+
+Signing roots are bootstrapped independently via the signed installer/update
+mechanism; policy cannot manufacture a trusted root. Verify image digest, exact
+issuer/subject, root version/hash, validity, freshness and revocation through a
+qualified verifier before admitting work. Offline bundles require provisioned
+unexpired roots and bounded freshness, not indefinite acceptance of stale trust.
+Installer-owned reserved networks and persistent host rules must be verified;
+CIDR/name matching alone cannot establish firewall enforcement. Runnerd restart
+must not terminate healthy jobs; Docker daemon restart survival is conditional
+on separately tested live-restore for the exact runtime. RestartPolicy is `no`.
+
+Validate the whole replacement policy and stage a detached immutable snapshot.
+Generation must increase; invalid reload retains the prior snapshot and reports
+failure. Runtime activation is atomic in the daemon; defaults affect new starts
+only. Emergency containment/revocation is a separate explicit audited operation.
