@@ -20,9 +20,11 @@ jobs:
             api/conformance/go.sum
       - name: Download pinned validation dependencies
         run: |
+          set -euo pipefail
           for module in tools protocol conformance; do
-            (cd "api/$module" && go mod download all)
+            (cd "api/$module" && go mod download)
           done
+          git diff --exit-code -- api
       - name: Verify deterministic Go generation and reject drift offline
         working-directory: api/tools
         env:

@@ -17,9 +17,17 @@ checksum verification enabled:
 
 ```sh
 for module in tools protocol conformance; do
-  (cd "api/$module" && go mod download all)
+  (cd "api/$module" && go mod download)
 done
+git diff --exit-code -- api
 ```
+
+Use `go mod download` without `all`. These Go 1.25 modules explicitly list the
+dependencies needed by their build/test graphs. `all` expands the download scope
+and can append unrelated transitive checksums to `go.sum`, dirtying a pinned
+checkout and invalidating generation provenance. Cache preparation must preserve
+the committed module files. Keep clean-source and generation-lock checks enabled;
+do not accept or hide checksum drift to get qualification to pass.
 
 Generation checks and tests then run without remote module/schema resolution:
 
