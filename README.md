@@ -1,19 +1,27 @@
-# neticora-docker-runnerd
+# Neticora Runnerd
 
-Canonical Neticora host-protocol contracts and Go bindings for the planned
-standalone runner manager. No executable agent or accepted runtime is included.
-The existing repository/module identity is retained pending the coordinated
-release-name decision.
+Neticora Runnerd is an open-source runner-management agent being developed for
+customers who want to run CI workloads on infrastructure they control.
 
-## Contract layout
+Runnerd is designed to connect customer-managed hosts to Neticora and manage the
+local lifecycle of ephemeral CI runners, while keeping execution subject to
+customer-defined policy.
 
-- `api/host-protocol.v1.yaml`: canonical OpenAPI 3.1 / JSON Schema 2020-12.
-- `api/fixtures/`: shared wire, canonicalization and replay vectors.
-- `api/tools/`: pinned Go generator, offline drift checks and failure tests.
-- `api/protocol/`: generated models, lossless nullable fields and validated decode.
-- `api/conformance/`: independent schema, logical hash and identity conformance.
+## Project status
 
-See [the protocol specification](api/README.md) and
-[Go tooling and qualification](api/GO-BINDINGS.md) for commands and limitations.
-Alpha imports the canonical schema and fixtures through an immutable source lock;
-the Go tooling does not require the alpha checkout or Node.js.
+Runnerd is under active development. This repository currently contains the
+versioned host protocol, Go protocol bindings, validation code and automated
+contract checks. An installable agent and production-ready runner execution are
+not yet available.
+
+The presence of protocol definitions does not imply support for a particular
+operating system, container runtime or isolation profile.
+
+## Feedback and contributions
+
+Use [GitHub Issues](https://github.com/Neticora/neticora-docker-runnerd/issues)
+for bug reports, feature requests and general feedback. Discuss substantial
+changes with maintainers before opening a pull request.
+
+Do not include credentials, access tokens or private infrastructure details in
+public issues or pull requests.
