@@ -1,57 +1,80 @@
 name: Host contract conformance
 on:
   pull_request:
-    paths: ['api/**', '.github/workflows/host-contract.yml']
   push:
-    paths: ['api/**', '.github/workflows/host-contract.yml']
 permissions:
   contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  GOTOOLCHAIN: local
+
 jobs:
-  contract:
+  lint:
+    name: lint
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
         with:
-          go-version: '1.27.3'
-          cache-dependency-path: |
-            api/tools/go.sum
-            api/protocol/go.sum
-            api/conformance/go.sum
-      - name: Download pinned validation dependencies
-        run: |
-          set -euo pipefail
-          for module in tools protocol conformance; do
-            (cd "api/$module" && go mod download)
-          done
-          git diff --exit-code -- api
-      - name: Verify deterministic Go generation and reject drift offline
-        working-directory: api/tools
-        env:
-          GOPROXY: 'off'
-          GOSUMDB: 'off'
-          GOTOOLCHAIN: local
-        run: |
-          go run -mod=readonly ./cmd/contract
-          go test -count=1 -mod=readonly ./...
-      - name: Qualify generated models and runtime validation offline
-        working-directory: api/protocol
-        env:
-          GOPROXY: 'off'
-          GOSUMDB: 'off'
-          GOTOOLCHAIN: local
-        run: |
-          go test -count=1 -mod=readonly -race ./...
-          go vet -mod=readonly ./...
-      - name: Validate canonical schema, hashes and identities offline
-        working-directory: api/conformance
-        env:
-          GOPROXY: 'off'
-          GOSUMDB: 'off'
-          GOTOOLCHAIN: local
-        run: go test -count=1 -mod=readonly -v ./...
-      - name: Verify generation left checkout unchanged
-        run: |
-          git diff --exit-code
-          git diff --cached --exit-code
-          test -z "$(git ls-files --others --exclude-standard)"
+          persist-credentials: false
+      - uses: ./.github/actions/setup-contract
+      - run: bash .github/scripts/check-contract.sh lint
+
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-contract
+      - run: bash .github/scripts/check-contract.sh typecheck
+
+  unit-tests:
+    name: unit-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-contract
+      - run: bash .github/scripts/check-contract.sh unit-tests
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-contract
+      - run: bash .github/scripts/check-contract.sh build
+
+  contract-validation:
+    name: contract-validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-contract
+      - run: bash .github/scripts/check-contract.sh contract-validation
+
+  protocol-conformance:
+    name: protocol-conformance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-contract
+      - run: bash .github/scripts/check-contract.sh protocol-conformance

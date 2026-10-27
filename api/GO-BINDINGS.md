@@ -54,6 +54,30 @@ globally. The separate tools module keeps generator dependencies out of the Go
 protocol consumer. CI downloads dependencies in an explicit step and runs drift,
 generated-model qualification and independent conformance with lookup disabled.
 
+## Required CI checks
+
+Every pull request and push runs six independent jobs on isolated hosted runners.
+No path filters are applied, so documentation-only changes also report the required
+statuses. Each job prepares pinned dependencies, then checks offline with Go 1.27.3.
+
+| Check | Qualification |
+| --- | --- |
+| `lint` | `gofmt` verification and `go vet` across all three modules |
+| `typecheck` | Compile production and test code in all modules without executing test cases |
+| `unit-tests` | Uncached tools/protocol tests with the race detector |
+| `build` | Build the contract CLI and protocol package; outputs stay outside the checkout |
+| `contract-validation` | Validate locked inputs and deterministic generated output |
+| `protocol-conformance` | Independent schema, canonical-byte/hash and identity fixture tests |
+
+Run an individual check from the repository root after dependency preparation:
+
+```sh
+bash .github/scripts/check-contract.sh contract-validation
+```
+
+All six checks reject tracked or untracked API drift. Passing checks do not replace
+the repository's required approving review.
+
 ## Qualified representation
 
 The canonical schema is unchanged by generation. The locked overlay supplies
