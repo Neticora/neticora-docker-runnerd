@@ -1,0 +1,195 @@
+{
+  "overlay": "1.0.0",
+  "info": {
+    "title": "Lossless Go binding annotations; canonical validation remains authoritative",
+    "version": "1.0.0"
+  },
+  "actions": [
+    {
+      "target": "$.components.schemas.Timestamp",
+      "update": {
+        "x-go-type": "string"
+      }
+    },
+    {
+      "target": "$.components.schemas.Generation.allOf[1].not",
+      "update": {
+        "type": "string"
+      }
+    },
+    {
+      "target": "$.components.schemas.Platform.properties.os",
+      "update": {
+        "type": "string"
+      }
+    },
+    {
+      "target": "$.components.schemas.Platform.properties.architecture",
+      "update": {
+        "type": "string"
+      }
+    },
+    {
+      "target": "$.components.schemas.RuntimeRef.properties.engine",
+      "update": {
+        "type": "string"
+      }
+    },
+    {
+      "target": "$.components.schemas.LocalPolicy.properties.allowedTrustClasses.items",
+      "update": {
+        "type": "string"
+      }
+    },
+    {
+      "target": "$.components.schemas.ExecutionSpec.properties.executionBackend",
+      "update": {
+        "type": "string"
+      }
+    },
+    {
+      "target": "$.components.schemas.ExecutionSpec.properties.runtimeEngine",
+      "update": {
+        "type": "string"
+      }
+    },
+    {
+      "target": "$.components.schemas.ExecutionSpec.properties.isolationProfile",
+      "update": {
+        "type": "string"
+      }
+    },
+    {
+      "target": "$.components.schemas.ExecutionSpec.properties.provider",
+      "update": {
+        "type": "string"
+      }
+    },
+    {
+      "target": "$.components.schemas.ExecutionSpec.properties.trustClass",
+      "update": {
+        "type": "string"
+      }
+    },
+    {
+      "target": "$.components.schemas.StartCommand.properties.kind",
+      "update": {
+        "type": "string"
+      }
+    },
+    {
+      "target": "$.components.schemas.ControlCommand.properties.kind",
+      "update": {
+        "type": "string"
+      }
+    },
+    {
+      "target": "$.components.schemas.CommandAck.properties.acceptance",
+      "update": {
+        "type": "string"
+      }
+    },
+    {
+      "target": "$.components.schemas.StartResponse.properties.state",
+      "update": {
+        "type": "string"
+      }
+    },
+    {
+      "target": "$.components.schemas.RuntimeObservation.properties.state",
+      "update": {
+        "type": "string"
+      }
+    },
+    {
+      "target": "$.components.schemas.ProviderObservation.properties.provider",
+      "update": {
+        "type": "string"
+      }
+    },
+    {
+      "target": "$.components.schemas.CustomerPolicy.properties.schemaVersion",
+      "update": {
+        "type": "string"
+      }
+    },
+    {
+      "target": "$.components.schemas.CustomerPolicy.properties.allowedTrustClasses.items",
+      "update": {
+        "type": "string"
+      }
+    },
+    {
+      "target": "$.components.schemas.CustomerPolicy.properties.images.properties.requireSignature",
+      "update": {
+        "type": "boolean"
+      }
+    },
+    {
+      "target": "$.components.schemas.CustomerPolicy.properties.network.properties.mode",
+      "update": {
+        "type": "string"
+      }
+    },
+    {
+      "target": "$.components.schemas.CustomerPolicy.properties.network.properties.interfacePrefix",
+      "update": {
+        "type": "string"
+      }
+    },
+    {
+      "target": "$.components.schemas.CustomerPolicy.properties.network.properties.ipv6",
+      "update": {
+        "type": "string"
+      }
+    },
+    {
+      "target": "$.components.schemas.CustomerPolicy.properties.network.properties.denyHostAccess",
+      "update": {
+        "type": "boolean"
+      }
+    },
+    {
+      "target": "$.components.schemas.CustomerPolicy.properties.network.properties.denyMetadata",
+      "update": {
+        "type": "boolean"
+      }
+    },
+    {
+      "target": "$.components.schemas.CustomerPolicy.properties.network.properties.denyCrossExecution",
+      "update": {
+        "type": "boolean"
+      }
+    },
+    {
+      "target": "$.components.schemas.CustomerPolicy.properties.onReload",
+      "update": {
+        "type": "string"
+      }
+    },
+    {
+      "target": "$.components.schemas.CustomerPolicy.properties.restrictions.properties.allowRunnerSudo",
+      "update": {
+        "type": "boolean"
+      }
+    },
+    {
+      "target": "$.components.schemas.CustomerPolicy.properties.restrictions.properties.hostManagementAccess",
+      "update": {
+        "type": "boolean"
+      }
+    },
+    {
+      "target": "$.components.schemas.CustomerPolicy.properties.restrictions.properties.hostSshAgent",
+      "update": {
+        "type": "boolean"
+      }
+    },
+    {
+      "target": "$.components.schemas.CustomerPolicy.properties.restrictions.properties.dockerRestartPolicy",
+      "update": {
+        "type": "string"
+      }
+    }
+  ]
+}

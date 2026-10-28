@@ -1,0 +1,79 @@
+[
+  {
+    "id": "ordering",
+    "value": {
+      "z": "last",
+      "a": "first"
+    },
+    "canonical": "{\"a\":\"first\",\"z\":\"last\"}",
+    "sha256": "af3bf072ea841a14c20d546622a7edd6ecb1b6a59c12f49cef627eac17416041"
+  },
+  {
+    "id": "unicode",
+    "value": {
+      "text": "é 雪 😀 <&>",
+      "nested": {
+        "b": null,
+        "a": []
+      }
+    },
+    "canonical": "{\"nested\":{\"a\":[],\"b\":null},\"text\":\"é 雪 😀 <&>\"}",
+    "sha256": "f42bd5dab0f6d6c707e68729a4b78cd8ab6e18396d44ac89ec63b604cd3bb6a2"
+  },
+  {
+    "id": "decimal",
+    "value": {
+      "sequence": "18446744073709551615",
+      "time": "2026-10-25T00:00:00.000Z"
+    },
+    "canonical": "{\"sequence\":\"18446744073709551615\",\"time\":\"2026-10-25T00:00:00.000Z\"}",
+    "sha256": "054402b75434652e40f9db57207ba480d5063905d5898735786fbba426f1f089"
+  },
+  {
+    "id": "absent",
+    "value": {},
+    "canonical": "{}",
+    "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+  },
+  {
+    "id": "null",
+    "value": {
+      "a": null
+    },
+    "canonical": "{\"a\":null}",
+    "sha256": "d091f9c83c091f79652fe8786375b3fe4ce0861a56f5bfbafedbe431877ff0e8"
+  },
+  {
+    "id": "empty",
+    "value": {
+      "a": []
+    },
+    "canonical": "{\"a\":[]}",
+    "sha256": "50e8660084976a10f0b3b9b3a6352d5881cbd219b5587a26224971a60ff2cc55"
+  },
+  {
+    "id": "unicode-keys",
+    "value": {
+      "𐀀": 1,
+      "": 2
+    },
+    "canonical": "{\"\":2,\"𐀀\":1}",
+    "sha256": "daec79d8b6582badd3b46bd783a72379bc0b5ae29f5d59f6133025aad69bc8d4"
+  },
+  {
+    "id": "numeric-integer-form",
+    "value": {
+      "n": 1.0
+    },
+    "canonical": "{\"n\":1}",
+    "sha256": "2bfd14f43d17fc7cea24e0917a8879b4b2f880b8baeec1b9d90fbaad655e71bd"
+  },
+  {
+    "id": "negative-zero",
+    "value": {
+      "n": -0.0
+    },
+    "canonical": "{\"n\":0}",
+    "sha256": "f3013f933b9fb80ab6d995e7ad9da36f683837ba1d81e950c943d40111eac2f0"
+  }
+]

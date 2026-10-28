@@ -1,0 +1,31 @@
+{
+  "formatVersion": 1,
+  "protocolVersion": "1.0.0",
+  "goVersion": "go1.27.3",
+  "generatorModule": "github.com/oapi-codegen/oapi-codegen/v2",
+  "generatorVersion": "v2.8.1",
+  "provenance": {
+    "consumerRepository": "Neticora/neticora-alpha",
+    "sourceRepository": "Neticora/neticora-docker-runnerd"
+  },
+  "inputs": {
+    "fixtures/canonicalization.json": "15c0658fd0da5c948b70c9abd033fc3aeb8b3f86fcf8f3fc64d3b19e572addea",
+    "fixtures/duplicate-keys.json": "4f0adb5499373d59fb2e49c51cc06cab7ddd0393e28e753ae20d2d4ba196c70d",
+    "fixtures/identities.json": "8d610e85fcda5bead511962e32c7e6ed735210893e5adb1d9a0c1e1f80c6df77",
+    "fixtures/manifest.json": "645d164d78d218345861c451a2df35f8e0e5e50e9185b4dac6ff13802bb8f55c",
+    "fixtures/outbound-wire.json": "b063e613421fd84419268ca48c6e25c88c85b82f8e9b0119323bd049658230e8",
+    "fixtures/unicode-wire.json": "510e4afc924b82f1b79ebde9c13c638a32b997fa069412aae14398638a9feae4",
+    "fixtures/validation.json": "eebad21000ce70c0f6aa3b4c658f233e1f619177b0bc33d2565a0617e56eb49b",
+    "go-codegen-overlay.yaml": "654bab71e0ac40306a624dca1a95038415e610ebb7e0e71ae0adf136ab86536f",
+    "go-codegen.yaml": "1394287e30f53b03e52d8f171e2ec067e0f5edd09f019890a9471a2b6b3abbbe",
+    "host-protocol.v1.yaml": "a344ac9b83d46bd03f5b9e0074d9ede2483442d19dc7b98c7e86bcf8a3f99c81",
+    "tools/cmd/contract/main.go": "138e2811839019cc0ae844e0982487e9fd0e48b00fc050a0790fe436ffa0d7d3",
+    "tools/go.mod": "d85f7783c293ada884a821b18d9007c28898ffb67bfd3b5c9f3a679b91c43526",
+    "tools/go.sum": "2c69f11b4382bba2db7398f0b780e895614ce7d54c2ea589ca839769ae5daeb9"
+  },
+  "outputs": {
+    "protocol/decode.gen.go": "83e6cc99cb1e46767b8914a3e8ccc08372054bf1a56fa953c3f649c0bd5cedb4",
+    "protocol/models.gen.go": "befc63ede9e26bd3afeac7dbc9d14fcd29425ef1cd91c6a8299a15fd3bb5ad48",
+    "protocol/schema.gen.json": "a344ac9b83d46bd03f5b9e0074d9ede2483442d19dc7b98c7e86bcf8a3f99c81"
+  }
+}

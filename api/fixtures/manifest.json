@@ -1,0 +1,30 @@
+{
+  "formatVersion": 1,
+  "protocolVersion": "1.0.0",
+  "files": [
+    {
+      "path": "canonicalization.json",
+      "sha256": "15c0658fd0da5c948b70c9abd033fc3aeb8b3f86fcf8f3fc64d3b19e572addea"
+    },
+    {
+      "path": "duplicate-keys.json",
+      "sha256": "4f0adb5499373d59fb2e49c51cc06cab7ddd0393e28e753ae20d2d4ba196c70d"
+    },
+    {
+      "path": "identities.json",
+      "sha256": "8d610e85fcda5bead511962e32c7e6ed735210893e5adb1d9a0c1e1f80c6df77"
+    },
+    {
+      "path": "outbound-wire.json",
+      "sha256": "b063e613421fd84419268ca48c6e25c88c85b82f8e9b0119323bd049658230e8"
+    },
+    {
+      "path": "unicode-wire.json",
+      "sha256": "510e4afc924b82f1b79ebde9c13c638a32b997fa069412aae14398638a9feae4"
+    },
+    {
+      "path": "validation.json",
+      "sha256": "eebad21000ce70c0f6aa3b4c658f233e1f619177b0bc33d2565a0617e56eb49b"
+    }
+  ]
+}
