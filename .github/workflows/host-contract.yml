@@ -13,9 +13,11 @@ env:
   GOTOOLCHAIN: local
 
 jobs:
+  # Public PR code must run only on an isolated, disposable public-CI fleet.
+  # The dedicated label must never be assigned to private platform runners.
   lint:
     name: lint
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, runnerd-public]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -28,7 +30,7 @@ jobs:
 
   typecheck:
     name: typecheck
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, runnerd-public]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -39,7 +41,7 @@ jobs:
 
   unit-tests:
     name: unit-tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, runnerd-public]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -54,7 +56,7 @@ jobs:
 
   build:
     name: build
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, runnerd-public]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -65,7 +67,7 @@ jobs:
 
   contract-validation:
     name: contract-validation
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, runnerd-public]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -76,7 +78,7 @@ jobs:
 
   protocol-conformance:
     name: protocol-conformance
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, runnerd-public]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
