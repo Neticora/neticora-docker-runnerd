@@ -1,0 +1,34 @@
+[Unit]
+Description=Neticora Runnerd
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=neticora-runnerd
+Group=neticora-runnerd
+ExecStart=/usr/bin/runnerd --config /etc/neticora-runnerd/config.json
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=10s
+KillMode=process
+UMask=0077
+StateDirectory=neticora-runnerd
+StateDirectoryMode=0700
+RuntimeDirectory=neticora-runnerd
+RuntimeDirectoryMode=0750
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

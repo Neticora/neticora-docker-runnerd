@@ -20,8 +20,8 @@
     "go-codegen.yaml": "1394287e30f53b03e52d8f171e2ec067e0f5edd09f019890a9471a2b6b3abbbe",
     "host-protocol.v1.yaml": "a344ac9b83d46bd03f5b9e0074d9ede2483442d19dc7b98c7e86bcf8a3f99c81",
     "tools/cmd/contract/main.go": "138e2811839019cc0ae844e0982487e9fd0e48b00fc050a0790fe436ffa0d7d3",
-    "tools/go.mod": "d85f7783c293ada884a821b18d9007c28898ffb67bfd3b5c9f3a679b91c43526",
-    "tools/go.sum": "2c69f11b4382bba2db7398f0b780e895614ce7d54c2ea589ca839769ae5daeb9"
+    "tools/go.mod": "436ee56dafbd999b1657b721f688d96b968a27f7845255550deab0cc8ed1a823",
+    "tools/go.sum": "9223e7ae692c6954b0872fc2b030bfc79a78622ec37dce09df127a756f76ba72"
   },
   "outputs": {
     "protocol/decode.gen.go": "83e6cc99cb1e46767b8914a3e8ccc08372054bf1a56fa953c3f649c0bd5cedb4",

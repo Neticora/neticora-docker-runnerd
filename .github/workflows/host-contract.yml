@@ -23,6 +23,8 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-contract
       - run: bash .github/scripts/check-contract.sh lint
+      - name: Scan all Go dependency graphs
+        run: bash .github/scripts/scan-dependencies.sh
 
   typecheck:
     name: typecheck

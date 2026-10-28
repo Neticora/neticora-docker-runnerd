@@ -1,0 +1,60 @@
+name: Foundational candidate build
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  candidate:
+    name: Foundation artifacts and provenance
+    # Deliberately disabled until maintainers provision the protected environment.
+    if: github.ref == 'refs/heads/main' && vars.RUNNERD_RELEASE_CANDIDATES_ENABLED == 'true'
+    environment: runnerd-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-contract
+      - name: Check foundational source
+        shell: bash
+        run: |
+          set -euo pipefail
+          for check in lint typecheck unit-tests build contract-validation protocol-conformance; do
+            bash .github/scripts/check-contract.sh "$check"
+          done
+      - name: Scan Go dependencies before signing
+        run: bash .github/scripts/scan-dependencies.sh
+      - name: Build foundation-only Linux candidate without publishing
+        shell: bash
+        run: bash packaging/build-candidate.sh "$RUNNER_TEMP/candidate"
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          path: ${{ runner.temp }}/candidate
+          format: spdx-json
+          output-file: ${{ runner.temp }}/candidate/sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+          syft-version: v1.55.0
+      - name: Record checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/candidate"
+          sha256sum ./*.tar.gz ./sbom.spdx.json > SHA256SUMS
+      - name: Attest build origin (not production qualification)
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: ${{ runner.temp }}/candidate/*
+      - name: Retain candidate for review
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: runnerd-foundation-${{ github.sha }}
+          path: ${{ runner.temp }}/candidate/
+          retention-days: 14
+          if-no-files-found: error

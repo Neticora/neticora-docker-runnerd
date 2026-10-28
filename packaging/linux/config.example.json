@@ -1,0 +1,7 @@
+{
+  "controlPlaneUrl": "https://control.example.invalid",
+  "stateDir": "/var/lib/neticora-runnerd",
+  "runtimeEndpoint": "unix:///run/docker.sock",
+  "credentialFile": "/etc/neticora-runnerd/identity.json",
+  "requestTimeoutSeconds": 15
+}
