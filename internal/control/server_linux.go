@@ -42,6 +42,7 @@ func Listen(path string, snapshot func() Snapshot, drain func(), audit func(stri
 	mux.HandleFunc("POST /drain", func(w http.ResponseWriter, r *http.Request) {
 		uid, ok := r.Context().Value(peerKey{}).(uint32)
 		if !ok || (uid != 0 && int(uid) != os.Geteuid()) {
+			audit("drain rejected")
 			http.Error(w, "administrative permission required", http.StatusForbidden)
 			return
 		}

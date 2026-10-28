@@ -27,6 +27,10 @@ type Snapshot struct {
 
 // Runtime never owns daemon lifetime. Cancellation stops an operation, not an
 // already-running workflow; Stop/Remove require separately authorized intent.
+// Implementations do not administer customer host firewall, DNS, routes, proxies,
+// destination filtering or address pools. Workload attachment uses explicitly
+// customer-approved runtime networking; credential/management isolation remains
+// mandatory independently of customer network policy.
 type Runtime interface {
 	Probe(context.Context) (Snapshot, error)
 	Ensure(context.Context, Identity) (Observation, error)

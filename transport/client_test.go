@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"encoding/pem"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -159,5 +160,48 @@ func TestHTTPSRejectsSchemaValidStaleMessageHashes(t *testing.T) {
 	defer server.Close()
 	if _, err = trustedClient(t, server).Post(context.Background(), "/message", "secret", request, "HostCommand"); err == nil {
 		t.Fatal("stale nested spec accepted from HTTPS response")
+	}
+}
+
+func TestInFlightCancellationIsBoundedAndRedacted(t *testing.T) {
+	message, err := protocol.EncodeValidatedJSON("Timestamp", []byte(timestamp))
+	if err != nil {
+		t.Fatal(err)
+	}
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		close(entered)
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
+	}))
+	defer server.Close()
+	defer close(release)
+	client := trustedClient(t, server)
+	client.http.Timeout = 10 * time.Second
+	client.http.Transport.(*http.Transport).ResponseHeaderTimeout = 10 * time.Second
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		_, err := client.Post(ctx, "/secret-path", "canary-credential", message, "Timestamp")
+		done <- err
+	}()
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("request never reached HTTPS server")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err == nil || strings.Contains(err.Error(), "canary-credential") || strings.Contains(err.Error(), "secret-path") || strings.Contains(err.Error(), server.URL) {
+			t.Fatal("cancellation succeeded or disclosed request metadata")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("cancellation waited for the whole-request timeout")
 	}
 }

@@ -4,15 +4,35 @@ on:
 permissions:
   contents: read
 jobs:
+  release-controls:
+    name: Verify candidate signing controls
+    if: github.ref == 'refs/heads/main' && vars.RUNNERD_RELEASE_CANDIDATES_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Fail closed on missing release controls
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: bash .github/scripts/check-release-controls.sh
   candidate:
     name: Foundation artifacts and provenance
     # Deliberately disabled until maintainers provision the protected environment.
     if: github.ref == 'refs/heads/main' && vars.RUNNERD_RELEASE_CANDIDATES_ENABLED == 'true'
+    needs: release-controls
     environment: runnerd-release
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
+      actions: read
       id-token: write
       attestations: write
     steps:
@@ -20,6 +40,11 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-contract
+      - name: Recheck controls after environment approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: bash .github/scripts/check-release-controls.sh
       - name: Check foundational source
         shell: bash
         run: |
@@ -32,10 +57,12 @@ jobs:
       - name: Build foundation-only Linux candidate without publishing
         shell: bash
         run: bash packaging/build-candidate.sh "$RUNNER_TEMP/candidate"
+      - name: Stage binaries for SBOM inspection
+        run: bash packaging/prepare-sbom.sh "$RUNNER_TEMP/candidate" "$RUNNER_TEMP/sbom-input"
       - name: Generate SPDX SBOM
         uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
-          path: ${{ runner.temp }}/candidate
+          path: ${{ runner.temp }}/sbom-input
           format: spdx-json
           output-file: ${{ runner.temp }}/candidate/sbom.spdx.json
           upload-artifact: false
@@ -48,9 +75,14 @@ jobs:
           cd "$RUNNER_TEMP/candidate"
           sha256sum ./*.tar.gz ./sbom.spdx.json > SHA256SUMS
       - name: Attest build origin (not production qualification)
+        id: attest
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
         with:
           subject-path: ${{ runner.temp }}/candidate/*
+      - name: Retain offline provenance evidence
+        env:
+          ATTESTATION_BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+        run: python3 packaging/capture-provenance.py "$ATTESTATION_BUNDLE" "$RUNNER_TEMP/candidate"
       - name: Retain candidate for review
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

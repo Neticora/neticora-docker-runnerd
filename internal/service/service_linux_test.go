@@ -3,6 +3,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"github.com/Neticora/neticora-docker-runnerd/internal/config"
@@ -18,6 +19,16 @@ import (
 func TestLocalServiceCancellationAndRestart(t *testing.T) {
 	state := t.TempDir()
 	if err := os.Chmod(state, 0700); err != nil {
+		t.Fatal(err)
+	}
+	// Unknown durable records must survive read-only diagnostics and cancellation.
+	marker := filepath.Join(state, "pending-cleanup.json")
+	markerBytes := []byte(`{"unknownOwnership":true,"cleanupPending":true}`)
+	if err := os.WriteFile(marker, markerBytes, 0600); err != nil {
+		t.Fatal(err)
+	}
+	markerInfo, err := os.Stat(marker)
+	if err != nil {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
@@ -73,6 +84,14 @@ func TestLocalServiceCancellationAndRestart(t *testing.T) {
 		}
 		if _, err := os.Stat(filepath.Join(state, "instance.lock")); err != nil {
 			t.Fatal("installation lock inode must survive shutdown")
+		}
+		after, err := os.Stat(marker)
+		if err != nil || !os.SameFile(markerInfo, after) || after.Mode().Perm() != 0600 {
+			t.Fatal("shutdown changed ambiguous durable state identity or permissions")
+		}
+		raw, err := os.ReadFile(marker)
+		if err != nil || !bytes.Equal(raw, markerBytes) {
+			t.Fatal("shutdown changed ambiguous durable state contents")
 		}
 
 	}

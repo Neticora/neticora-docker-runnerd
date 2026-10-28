@@ -22,6 +22,7 @@ case "${1:-}" in
     done
     ;;
   unit-tests)
+    PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s .github/scripts -p 'test_*.py'
     for module in . api/tools api/protocol; do
       (cd "$module" && go test -count=1 -mod=readonly -race ./...)
     done
