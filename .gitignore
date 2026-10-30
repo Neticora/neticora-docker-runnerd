@@ -1,0 +1,12 @@
+# Local builds and qualification output
+/dist/
+/runnerd
+/runnerctl
+*.test
+*.out
+*.log
+.runnerd-reports/
+# Local credentials and environment
+.env
+.env.*
+*.key

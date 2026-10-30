@@ -13,23 +13,27 @@ env:
   GOTOOLCHAIN: local
 
 jobs:
+  # Public PR code must run only on an isolated, disposable public-CI fleet.
+  # The dedicated label must never be assigned to private platform runners.
   lint:
     name: lint
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, runnerd-public]
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-contract
       - run: bash .github/scripts/check-contract.sh lint
+      - name: Scan all Go dependency graphs
+        run: bash .github/scripts/scan-dependencies.sh
 
   typecheck:
     name: typecheck
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, runnerd-public]
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-contract
@@ -37,21 +41,25 @@ jobs:
 
   unit-tests:
     name: unit-tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, runnerd-public]
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-contract
       - run: bash .github/scripts/check-contract.sh unit-tests
+      - name: Prepare pinned SBOM scanner
+        run: bash .github/scripts/prepare-syft.sh "$RUNNER_TEMP/syft"
+      - name: Qualify real offline signed foundation artifacts
+        run: bash packaging/qualify-foundation.sh "$RUNNER_TEMP/qualification" "$RUNNER_TEMP/syft/syft"
 
   build:
     name: build
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, runnerd-public]
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-contract
@@ -59,10 +67,10 @@ jobs:
 
   contract-validation:
     name: contract-validation
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, runnerd-public]
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-contract
@@ -70,10 +78,10 @@ jobs:
 
   protocol-conformance:
     name: protocol-conformance
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, runnerd-public]
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-contract

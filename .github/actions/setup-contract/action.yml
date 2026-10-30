@@ -3,10 +3,11 @@ description: Install the pinned Go toolchain and prepare immutable module caches
 runs:
   using: composite
   steps:
-    - uses: actions/setup-go@v5
+    - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
       with:
         go-version: '1.27.3'
         cache-dependency-path: |
+          go.sum
           api/tools/go.sum
           api/protocol/go.sum
           api/conformance/go.sum
@@ -16,7 +17,7 @@ runs:
         GOTOOLCHAIN: local
       run: |
         set -euo pipefail
-        for module in tools protocol conformance; do
-          (cd "api/$module" && go mod download)
+        for module in . api/tools api/protocol api/conformance; do
+          (cd "$module" && go mod download)
         done
-        git diff --exit-code -- api
+        git diff --exit-code -- go.mod go.sum api

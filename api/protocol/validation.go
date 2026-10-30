@@ -112,6 +112,9 @@ func scanJSONValue(decoder *json.Decoder) error {
 
 // Validate checks the exact schema dialect without coercing or stripping fields.
 func Validate(schema string, data []byte) error {
+	if err := checkWireBudget(data); err != nil {
+		return err
+	}
 	if err := validateJSONUnicode(data); err != nil {
 		return err
 	}
@@ -131,6 +134,9 @@ func Validate(schema string, data []byte) error {
 	var value any
 	if err := d.Decode(&value); err != nil {
 		return fmt.Errorf("invalid host JSON")
+	}
+	if _, err := canonicalValue(value); err != nil {
+		return err
 	}
 	if err := validator.Validate(value); err != nil {
 		// Validator details may include transient credentials from the payload.

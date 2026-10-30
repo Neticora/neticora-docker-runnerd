@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "exceptions": [
+    {
+      "id": "GO-2026-5932",
+      "module": "golang.org/x/crypto",
+      "version": "v0.58.0",
+      "expires": "2026-11-27",
+      "forbiddenImportPrefix": "golang.org/x/crypto/openpgp",
+      "reason": "Upstream has no fixed version for the unmaintained OpenPGP packages. The module is needed for maintained cryptography; OpenPGP must remain absent from Linux, Windows and macOS production and test dependency graphs.",
+      "source": "https://pkg.go.dev/vuln/GO-2026-5932"
+    }
+  ]
+}
