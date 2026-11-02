@@ -546,6 +546,22 @@ func (e StartResponseState) Valid() bool {
 	}
 }
 
+// BootstrapEnvelope defines model for BootstrapEnvelope.
+type BootstrapEnvelope struct {
+	Ciphertext     string      `json:"ciphertext"`
+	Ephemeral      string      `json:"ephemeral"`
+	ExecutionId    string      `json:"executionId"`
+	ExpiresAt      Timestamp   `json:"expiresAt"`
+	Generation     Generation  `json:"generation"`
+	HostId         string      `json:"hostId"`
+	Nonce          string      `json:"nonce"`
+	Recipient      string      `json:"recipient"`
+	SpecHash       Digest      `json:"specHash"`
+	StartRequestId string      `json:"startRequestId"`
+	TenantId       string      `json:"tenantId"`
+	Version        interface{} `json:"version"`
+}
+
 // CommandAck defines model for CommandAck.
 type CommandAck struct {
 	Acceptance  CommandAckAcceptance `json:"acceptance"`
@@ -575,6 +591,43 @@ type ControlCommand struct {
 
 // ControlCommandKind defines model for ControlCommand.Kind.
 type ControlCommandKind string
+
+// CustomerManagedPolicy defines model for CustomerManagedPolicy.
+type CustomerManagedPolicy struct {
+	AllowedPoolIds      []string      `json:"allowedPoolIds"`
+	AllowedProfiles     []string      `json:"allowedProfiles"`
+	AllowedTenantIds    []string      `json:"allowedTenantIds"`
+	AllowedTrustClasses []interface{} `json:"allowedTrustClasses"`
+	Generation          Generation    `json:"generation"`
+	Images              struct {
+		AllowedDigests       []string    `json:"allowedDigests"`
+		MaxOfflineAgeSeconds int         `json:"maxOfflineAgeSeconds"`
+		RequireSignature     interface{} `json:"requireSignature"`
+		TrustExpiresAt       Timestamp   `json:"trustExpiresAt"`
+		TrustRootId          string      `json:"trustRootId"`
+		TrustRootSha256      Digest      `json:"trustRootSha256"`
+		TrustRootVersion     Generation  `json:"trustRootVersion"`
+		TrustedIssuer        string      `json:"trustedIssuer"`
+		TrustedSubject       string      `json:"trustedSubject"`
+	} `json:"images"`
+	Limits                  ResourceBudget `json:"limits"`
+	MaxConcurrentExecutions Generation     `json:"maxConcurrentExecutions"`
+	NetworkOwnership        interface{}    `json:"networkOwnership"`
+	OnReload                interface{}    `json:"onReload"`
+	Restrictions            struct {
+		AllowRunnerSudo      interface{} `json:"allowRunnerSudo"`
+		DockerRestartPolicy  interface{} `json:"dockerRestartPolicy"`
+		HostManagementAccess interface{} `json:"hostManagementAccess"`
+		HostSshAgent         interface{} `json:"hostSshAgent"`
+		RunnerUid            int         `json:"runnerUid"`
+	} `json:"restrictions"`
+	SchemaVersion interface{} `json:"schemaVersion"`
+	Transport     struct {
+		CustomCaSha256      nullable.Nullable[Digest] `json:"customCaSha256"`
+		MaxClockSkewSeconds int                       `json:"maxClockSkewSeconds"`
+		ProxyUrl            nullable.Nullable[string] `json:"proxyUrl"`
+	} `json:"transport"`
+}
 
 // CustomerPolicy defines model for CustomerPolicy.
 type CustomerPolicy struct {
@@ -930,13 +983,16 @@ type StartCommandKind string
 
 // StartRequest defines model for StartRequest.
 type StartRequest struct {
-	AttemptId        string     `json:"attemptId"`
-	CommandId        string     `json:"commandId"`
-	ExecutionId      string     `json:"executionId"`
-	Generation       Generation `json:"generation"`
-	PolicyGeneration Generation `json:"policyGeneration"`
-	SpecHash         Digest     `json:"specHash"`
-	StartRequestId   string     `json:"startRequestId"`
+	AttemptId string `json:"attemptId"`
+
+	// BootstrapPublicKey X25519 recipient for runnerd05-sealed-v1. Required by Runnerd05 issuance, separate from enrollment signing keys.
+	BootstrapPublicKey *string    `json:"bootstrapPublicKey,omitempty"`
+	CommandId          string     `json:"commandId"`
+	ExecutionId        string     `json:"executionId"`
+	Generation         Generation `json:"generation"`
+	PolicyGeneration   Generation `json:"policyGeneration"`
+	SpecHash           Digest     `json:"specHash"`
+	StartRequestId     string     `json:"startRequestId"`
 }
 
 // StartResponse defines model for StartResponse.

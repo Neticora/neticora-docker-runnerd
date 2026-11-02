@@ -983,6 +983,11 @@
           },
           "policyGeneration": {
             "$ref": "#/components/schemas/Generation"
+          },
+          "bootstrapPublicKey": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "description": "X25519 recipient for runnerd05-sealed-v1. Required by Runnerd05 issuance, separate from enrollment signing keys."
           }
         },
         "required": [
@@ -1714,6 +1719,287 @@
           "transport",
           "onReload",
           "restrictions"
+        ],
+        "additionalProperties": false
+      },
+      "CustomerManagedPolicy": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "const": "1.1"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "allowedTenantIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "minItems": 1,
+            "maxItems": 128,
+            "uniqueItems": true
+          },
+          "allowedPoolIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "minItems": 1,
+            "maxItems": 128,
+            "uniqueItems": true
+          },
+          "allowedProfiles": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "minItems": 1,
+            "maxItems": 128,
+            "uniqueItems": true
+          },
+          "allowedTrustClasses": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "trusted",
+                "untrusted"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 128,
+            "uniqueItems": true
+          },
+          "limits": {
+            "$ref": "#/components/schemas/ResourceBudget"
+          },
+          "maxConcurrentExecutions": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "images": {
+            "type": "object",
+            "properties": {
+              "requireSignature": {
+                "const": true
+              },
+              "allowedDigests": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                },
+                "minItems": 1,
+                "maxItems": 128,
+                "uniqueItems": true
+              },
+              "trustRootId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "trustRootVersion": {
+                "$ref": "#/components/schemas/Generation"
+              },
+              "trustRootSha256": {
+                "$ref": "#/components/schemas/Digest"
+              },
+              "trustedIssuer": {
+                "type": "string",
+                "format": "uri",
+                "pattern": "^https://",
+                "maxLength": 2048
+              },
+              "trustedSubject": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048,
+                "not": {
+                  "pattern": "\\*"
+                }
+              },
+              "trustExpiresAt": {
+                "$ref": "#/components/schemas/Timestamp"
+              },
+              "maxOfflineAgeSeconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              }
+            },
+            "required": [
+              "requireSignature",
+              "allowedDigests",
+              "trustRootId",
+              "trustRootVersion",
+              "trustRootSha256",
+              "trustedIssuer",
+              "trustedSubject",
+              "trustExpiresAt",
+              "maxOfflineAgeSeconds"
+            ],
+            "additionalProperties": false
+          },
+          "transport": {
+            "type": "object",
+            "properties": {
+              "proxyUrl": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 2048,
+                "pattern": "^https?://[^/@\\s]+(?::[0-9]+)?/?$"
+              },
+              "customCaSha256": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/Digest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "maxClockSkewSeconds": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 300
+              }
+            },
+            "required": [
+              "proxyUrl",
+              "customCaSha256",
+              "maxClockSkewSeconds"
+            ],
+            "additionalProperties": false
+          },
+          "onReload": {
+            "const": "new-admissions-only"
+          },
+          "restrictions": {
+            "type": "object",
+            "properties": {
+              "runnerUid": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              },
+              "allowRunnerSudo": {
+                "const": false
+              },
+              "hostManagementAccess": {
+                "const": false
+              },
+              "hostSshAgent": {
+                "const": false
+              },
+              "dockerRestartPolicy": {
+                "const": "no"
+              }
+            },
+            "required": [
+              "runnerUid",
+              "allowRunnerSudo",
+              "hostManagementAccess",
+              "hostSshAgent",
+              "dockerRestartPolicy"
+            ],
+            "additionalProperties": false
+          },
+          "networkOwnership": {
+            "const": "customer"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "generation",
+          "allowedTenantIds",
+          "allowedPoolIds",
+          "allowedProfiles",
+          "allowedTrustClasses",
+          "limits",
+          "maxConcurrentExecutions",
+          "images",
+          "transport",
+          "onReload",
+          "restrictions",
+          "networkOwnership"
+        ],
+        "additionalProperties": false
+      },
+      "BootstrapEnvelope": {
+        "type": "object",
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "hostId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "executionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "startRequestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "generation": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "specHash": {
+            "$ref": "#/components/schemas/Digest"
+          },
+          "expiresAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "version": {
+            "const": "runnerd05-sealed-v1"
+          },
+          "recipient": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$"
+          },
+          "ephemeral": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$"
+          },
+          "nonce": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{16}$"
+          },
+          "ciphertext": {
+            "type": "string",
+            "minLength": 22,
+            "maxLength": 64000,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        },
+        "required": [
+          "tenantId",
+          "hostId",
+          "executionId",
+          "startRequestId",
+          "generation",
+          "specHash",
+          "expiresAt",
+          "version",
+          "recipient",
+          "ephemeral",
+          "nonce",
+          "ciphertext"
         ],
         "additionalProperties": false
       }
