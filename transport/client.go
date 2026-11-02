@@ -62,7 +62,7 @@ func (c *Client) Post(ctx context.Context, path, token string, message protocol.
 	if len(data) == 0 {
 		return nil, errors.New("empty outbound message")
 	}
-	if strings.ContainsAny(token, "\r\n") || token == "" {
+	if strings.ContainsAny(token, "\r\n") || (token == "" && path != "/enroll" && path != "/token") {
 		return nil, errors.New("invalid host credential")
 	}
 	endpoint := *c.base
@@ -75,7 +75,9 @@ func (c *Client) Post(ctx context.Context, path, token string, message protocol.
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Accept-Encoding", "identity")
-	req.Header.Set("Authorization", "Bearer "+token)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	response, err := c.http.Do(req)
 	if err != nil {
 		return nil, errors.New("protocol request failed")
@@ -92,6 +94,43 @@ func (c *Client) Post(ctx context.Context, path, token string, message protocol.
 		return nil, errors.New("protocol response unreadable or oversized")
 	}
 	if err := protocol.ValidateInboundJSON(responseSchema, raw); err != nil {
+		return nil, errors.New("invalid protocol response")
+	}
+	return raw, nil
+}
+
+// Config fetches a fresh, validated narrowing proposal. Callers must intersect it
+// with root-owned local policy; a server response never grants local authority.
+func (c *Client) Config(ctx context.Context, token string) ([]byte, error) {
+	if token == "" || strings.ContainsAny(token, "\r\n") {
+		return nil, errors.New("invalid host credential")
+	}
+	endpoint := *c.base
+	endpoint.Path = strings.TrimRight(endpoint.Path, "/") + "/me/config"
+	endpoint.RawPath = ""
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+	if err != nil {
+		return nil, errors.New("cannot create protocol request")
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept-Encoding", "identity")
+	response, err := c.http.Do(req)
+	if err != nil {
+		return nil, errors.New("protocol request failed")
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return nil, errors.New("protocol request rejected")
+	}
+	if encoding := response.Header.Get("Content-Encoding"); encoding != "" && encoding != "identity" {
+		return nil, errors.New("compressed protocol response is disabled")
+	}
+	raw, err := io.ReadAll(io.LimitReader(response.Body, protocol.MaxWireBytes+1))
+	if err != nil || len(raw) > protocol.MaxWireBytes {
+		return nil, errors.New("protocol response unreadable or oversized")
+	}
+	if err = protocol.ValidateInboundJSON("ConfigResponse", raw); err != nil {
 		return nil, errors.New("invalid protocol response")
 	}
 	return raw, nil

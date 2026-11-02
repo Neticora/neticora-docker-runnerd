@@ -27,3 +27,11 @@ changes with maintainers before opening a pull request.
 
 Do not include credentials, access tokens or private infrastructure details in
 public issues or pull requests.
+
+The `identity` SDK constructs Ed25519 enrollment, short-lived assertion and
+rotation proofs without storing private keys. `identity.NarrowPolicy` intersects
+server configuration with locally provisioned ceilings. `transport.Client.Config`
+retrieves strictly validated configuration; enrollment/token requests can omit a
+bearer credential. These helpers do not wire daemon enrollment, durable identity
+storage or execution. Persist request IDs/keys securely before enrollment or
+rotation; retain old/new keys until rotation response recovery is durable.

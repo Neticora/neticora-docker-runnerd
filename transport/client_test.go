@@ -205,3 +205,37 @@ func TestInFlightCancellationIsBoundedAndRedacted(t *testing.T) {
 		t.Fatal("cancellation waited for the whole-request timeout")
 	}
 }
+
+func TestGatewayEnrollmentAndConfigTransport(t *testing.T) {
+	config := `{"admissionEnabled":false,"protocol":{"version":"1.0.0","minimumRecoveryVersion":"1.0.0","minimumAdmissionVersion":"1.0.0"},"policy":{"generation":"1","allowedTrustClasses":[],"allowedProfiles":[],"limits":{"cpuMillis":"0","memoryBytes":"0","storageBytes":"0","slots":"0"}}}`
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/me/config" {
+			if r.Method != "GET" || r.Header.Get("Authorization") != "Bearer secret" {
+				t.Error("invalid config request")
+			}
+			_, _ = w.Write([]byte(config))
+			return
+		}
+		if r.Header.Get("Authorization") != "" {
+			t.Error("enrollment sent bearer credentials")
+		}
+		_, _ = w.Write([]byte(timestamp))
+	}))
+	defer server.Close()
+	client := trustedClient(t, server)
+	message, _ := protocol.EncodeValidatedJSON("Timestamp", []byte(timestamp))
+	for _, path := range []string{"/enroll", "/token"} {
+		if _, err := client.Post(context.Background(), path, "", message, "Timestamp"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := client.Post(context.Background(), "/me/heartbeat", "", message, "Timestamp"); err == nil {
+		t.Fatal("missing bearer accepted")
+	}
+	if _, err := client.Config(context.Background(), "secret"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Config(context.Background(), ""); err == nil {
+		t.Fatal("config accepted no credential")
+	}
+}
