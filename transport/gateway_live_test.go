@@ -9,13 +9,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
 	"github.com/Neticora/neticora-docker-runnerd/identity"
+	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
 	"github.com/Neticora/neticora-docker-runnerd/transport"
 )
 
@@ -29,23 +29,21 @@ func TestLiveGatewayEnrollment(t *testing.T) {
 	}
 	tokenFile := os.Getenv("RUNNERD04_ENROLLMENT_TOKEN_FILE")
 	stateDir := os.Getenv("RUNNERD04_LIVE_STATE_DIR")
-	if tokenFile == "" || stateDir == "" {
-		t.Fatal("token file and a new protected state directory are required")
+	expectedTenant := os.Getenv("RUNNERD04_EXPECTED_TENANT_ID")
+	if tokenFile == "" || stateDir == "" || expectedTenant == "" {
+		t.Fatal("token file, canonical expected tenant ID and a new protected state directory are required")
 	}
 	client, err := transport.New(endpoint, 15*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer client.Close()
-	if err := os.Mkdir(stateDir, 0700); err != nil {
-		t.Fatal("state directory must be new; retain previous state for recovery/revocation")
+	if err := createLiveState(stateDir); err != nil {
+		t.Fatal("state directory must be new and protected:", err)
 	}
-	write := func(name string, data []byte) {
-		t.Helper()
-		if err := os.WriteFile(filepath.Join(stateDir, name), data, 0600); err != nil {
-			t.Fatal("cannot persist test identity")
-		}
-	}
+	lockLiveState(t)
+	write := func(name string, data []byte) { t.Helper(); liveWrite(t, name, data) }
+
 	nonce := func() string {
 		t.Helper()
 		var bytes [24]byte
@@ -63,7 +61,7 @@ func TestLiveGatewayEnrollment(t *testing.T) {
 	write("request-id", []byte(requestID))
 	write("boot-id", []byte(bootID))
 	write("endpoint", []byte(endpoint))
-	rawToken, err := os.ReadFile(tokenFile)
+	rawToken, err := hostfs.ReadPrivate(tokenFile, 16384)
 	if err != nil {
 		t.Fatal("cannot read enrollment token file")
 	}
@@ -126,4 +124,10 @@ func TestLiveGatewayEnrollment(t *testing.T) {
 			t.Fatal("live qualification must not enable execution admission")
 		}
 	}
+	marker, err := json.Marshal(disposableHost{Purpose: disposablePurpose, Endpoint: strings.TrimRight(endpoint, "/"), HostID: enrolled.Identity.HostId, TenantID: expectedTenant, RequestID: requestID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	write("disposable-host.json", marker)
+
 }
