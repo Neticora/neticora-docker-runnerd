@@ -1,0 +1,15 @@
+{
+  "privateKey": "gFnvox2oz1hzi6w2JePV6gd68NnFFQN2ZSc47OP9I2s",
+  "publicKey": "fGSshq0bjkfJepyBQ79Vz3Im97mZxHU3lpMdEn6rDF4",
+  "binding": {
+    "tenantId": "fixture-tenant",
+    "hostId": "fixture-host",
+    "executionId": "fixture-execution",
+    "generation": "7",
+    "startRequestId": "fixture-start",
+    "specHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "expiresAt": "2099-01-01T00:00:00.000Z"
+  },
+  "bootstrap": "public-fixture-bootstrap",
+  "sealed": "eyJjaXBoZXJ0ZXh0IjoiYUpSV2VoTnJlTUxCU1doN2pET3JoSzREZ0xHWVhmN0M2eDcwVVYzdHN1TlhCSExDeFFpQjBnIiwiZXBoZW1lcmFsIjoiMkx2QlNReGFHTEthRXhLV0t0LTZXalI3QWhGVk1NblplNFBqUWJleUR5OCIsImV4ZWN1dGlvbklkIjoiZml4dHVyZS1leGVjdXRpb24iLCJleHBpcmVzQXQiOiIyMDk5LTAxLTAxVDAwOjAwOjAwLjAwMFoiLCJnZW5lcmF0aW9uIjoiNyIsImhvc3RJZCI6ImZpeHR1cmUtaG9zdCIsIm5vbmNlIjoiejViaEhtdEwzclJlVXAtWSIsInJlY2lwaWVudCI6ImZHU3NocTBiamtmSmVweUJRNzlWejNJbTk3bVp4SFUzbHBNZEVuNnJERjQiLCJzcGVjSGFzaCI6ImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLCJzdGFydFJlcXVlc3RJZCI6ImZpeHR1cmUtc3RhcnQiLCJ0ZW5hbnRJZCI6ImZpeHR1cmUtdGVuYW50IiwidmVyc2lvbiI6InJ1bm5lcmQwNS1zZWFsZWQtdjEifQ"
+}
