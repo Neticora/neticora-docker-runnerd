@@ -820,6 +820,7 @@ type HostEvent struct {
 	EventId             string               `json:"eventId"`
 	ExecutionId         string               `json:"executionId"`
 	Generation          Generation           `json:"generation"`
+	NeverStarted        *NeverStartedProof   `json:"neverStarted,omitempty"`
 	Observation         *RuntimeObservation  `json:"observation,omitempty"`
 	PayloadHash         Digest               `json:"payloadHash"`
 	ProviderObservation *ProviderObservation `json:"providerObservation,omitempty"`
@@ -832,6 +833,9 @@ type HostEvent0 = interface{}
 
 // HostEvent1 defines model for HostEvent.1.
 type HostEvent1 = interface{}
+
+// HostEvent2 defines model for HostEvent.2.
+type HostEvent2 = interface{}
 
 // HostHeartbeat defines model for HostHeartbeat.
 type HostHeartbeat struct {
@@ -880,6 +884,49 @@ type LocalPolicy struct {
 
 // LocalPolicyAllowedTrustClasses defines model for LocalPolicy.AllowedTrustClasses.
 type LocalPolicyAllowedTrustClasses string
+
+// NeverStartedCommand defines model for NeverStartedCommand.
+type NeverStartedCommand struct {
+	Challenge        string      `json:"challenge"`
+	CommandId        string      `json:"commandId"`
+	EndpointIdentity string      `json:"endpointIdentity"`
+	ExecutionId      string      `json:"executionId"`
+	Generation       Generation  `json:"generation"`
+	HostId           string      `json:"hostId"`
+	IssuedAt         Timestamp   `json:"issuedAt"`
+	Kind             interface{} `json:"kind"`
+	PayloadHash      Digest      `json:"payloadHash"`
+	SessionEpoch     Generation  `json:"sessionEpoch"`
+	SpecHash         Digest      `json:"specHash"`
+	StartCommandId   string      `json:"startCommandId"`
+	StartPayloadHash Digest      `json:"startPayloadHash"`
+	TenantId         string      `json:"tenantId"`
+}
+
+// NeverStartedProof defines model for NeverStartedProof.
+type NeverStartedProof struct {
+	AttemptId        string      `json:"attemptId"`
+	AttestedAt       Timestamp   `json:"attestedAt"`
+	Challenge        string      `json:"challenge"`
+	Domain           interface{} `json:"domain"`
+	EndpointIdentity string      `json:"endpointIdentity"`
+	ExecutionId      string      `json:"executionId"`
+	FenceCommandId   string      `json:"fenceCommandId"`
+	FencePayloadHash Digest      `json:"fencePayloadHash"`
+	FencedAt         Timestamp   `json:"fencedAt"`
+	Generation       Generation  `json:"generation"`
+	HostId           string      `json:"hostId"`
+	JournalId        string      `json:"journalId"`
+	JournalSequence  interface{} `json:"journalSequence"`
+	JournalVersion   interface{} `json:"journalVersion"`
+	KeyId            string      `json:"keyId"`
+	SessionEpoch     Generation  `json:"sessionEpoch"`
+	Signature        string      `json:"signature"`
+	SpecHash         Digest      `json:"specHash"`
+	StartCommandId   string      `json:"startCommandId"`
+	StartPayloadHash Digest      `json:"startPayloadHash"`
+	TenantId         string      `json:"tenantId"`
+}
 
 // Platform defines model for Platform.
 type Platform struct {
@@ -1100,6 +1147,32 @@ func (t *HostCommand) MergeControlCommand(v ControlCommand) error {
 	return err
 }
 
+// AsNeverStartedCommand returns the union data inside the HostCommand as a NeverStartedCommand
+func (t HostCommand) AsNeverStartedCommand() (NeverStartedCommand, error) {
+	var body NeverStartedCommand
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromNeverStartedCommand overwrites any union data inside the HostCommand as the provided NeverStartedCommand
+func (t *HostCommand) FromNeverStartedCommand(v NeverStartedCommand) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeNeverStartedCommand performs a merge with any union data inside the HostCommand, using the provided NeverStartedCommand
+func (t *HostCommand) MergeNeverStartedCommand(v NeverStartedCommand) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
 func (t HostCommand) Discriminator() (string, error) {
 	var discriminator struct {
 		Discriminator string `json:"kind"`
@@ -1118,6 +1191,8 @@ func (t HostCommand) ValueByDiscriminator() (interface{}, error) {
 		return t.AsControlCommand()
 	case "cleanup":
 		return t.AsControlCommand()
+	case "fence-never-started":
+		return t.AsNeverStartedCommand()
 	case "start":
 		return t.AsStartCommand()
 	default:
@@ -1187,6 +1262,32 @@ func (t *HostEvent) MergeHostEvent1(v HostEvent1) error {
 	return err
 }
 
+// AsHostEvent2 returns the union data inside the HostEvent as a HostEvent2
+func (t HostEvent) AsHostEvent2() (HostEvent2, error) {
+	var body HostEvent2
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromHostEvent2 overwrites any union data inside the HostEvent as the provided HostEvent2
+func (t *HostEvent) FromHostEvent2(v HostEvent2) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeHostEvent2 performs a merge with any union data inside the HostEvent, using the provided HostEvent2
+func (t *HostEvent) MergeHostEvent2(v HostEvent2) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
 func (t HostEvent) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	if err != nil {
@@ -1218,6 +1319,15 @@ func (t HostEvent) MarshalJSON() ([]byte, error) {
 	object["generation"], err = json.Marshal(t.Generation)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'generation': %w", err)
+	}
+
+	if t.NeverStarted != nil {
+		object["neverStarted"], err = json.Marshal(t.NeverStarted)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'neverStarted': %w", err)
+		}
+	} else {
+		delete(object, "neverStarted")
 	}
 
 	if t.Observation != nil {
@@ -1288,6 +1398,13 @@ func (t *HostEvent) UnmarshalJSON(b []byte) error {
 		err = json.Unmarshal(raw, &t.Generation)
 		if err != nil {
 			return fmt.Errorf("error reading 'generation': %w", err)
+		}
+	}
+
+	if raw, found := object["neverStarted"]; found {
+		err = json.Unmarshal(raw, &t.NeverStarted)
+		if err != nil {
+			return fmt.Errorf("error reading 'neverStarted': %w", err)
 		}
 	}
 

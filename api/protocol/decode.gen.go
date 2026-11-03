@@ -155,6 +155,20 @@ func DecodeLocalPolicy(data []byte) (LocalPolicy, error) {
 	return value, err
 }
 
+// DecodeNeverStartedCommand validates the original wire bytes before binding the generated model.
+func DecodeNeverStartedCommand(data []byte) (NeverStartedCommand, error) {
+	var value NeverStartedCommand
+	err := decode("NeverStartedCommand", data, &value)
+	return value, err
+}
+
+// DecodeNeverStartedProof validates the original wire bytes before binding the generated model.
+func DecodeNeverStartedProof(data []byte) (NeverStartedProof, error) {
+	var value NeverStartedProof
+	err := decode("NeverStartedProof", data, &value)
+	return value, err
+}
+
 // DecodePlatform validates the original wire bytes before binding the generated model.
 func DecodePlatform(data []byte) (Platform, error) {
 	var value Platform
@@ -283,6 +297,8 @@ var wireDecoders = map[string]func([]byte) (any, error){
 	"InventorySnapshot":     func(data []byte) (any, error) { return DecodeInventorySnapshot(data) },
 	"KeyRotationRequest":    func(data []byte) (any, error) { return DecodeKeyRotationRequest(data) },
 	"LocalPolicy":           func(data []byte) (any, error) { return DecodeLocalPolicy(data) },
+	"NeverStartedCommand":   func(data []byte) (any, error) { return DecodeNeverStartedCommand(data) },
+	"NeverStartedProof":     func(data []byte) (any, error) { return DecodeNeverStartedProof(data) },
 	"Platform":              func(data []byte) (any, error) { return DecodePlatform(data) },
 	"Problem":               func(data []byte) (any, error) { return DecodeProblem(data) },
 	"ProtocolCompatibility": func(data []byte) (any, error) { return DecodeProtocolCompatibility(data) },

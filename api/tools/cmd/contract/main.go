@@ -65,6 +65,12 @@ func applyHostEventUnionFieldCleanup(generated []byte) []byte {
 	}
 	updated := strings.Replace(text, observationOld, observationNew, 1)
 	updated = strings.Replace(updated, providerOld, providerNew, 1)
+	neverOld := "if t.NeverStarted != nil {\n\t\tobject[\"neverStarted\"], err = json.Marshal(t.NeverStarted)\n\t\tif err != nil {\n\t\t\treturn nil, fmt.Errorf(\"error marshaling 'neverStarted': %w\", err)\n\t\t}\n\t}\n"
+	neverNew := strings.TrimSuffix(neverOld, "\n") + " else {\n\t\tdelete(object, \"neverStarted\")\n\t}\n"
+	if strings.Count(updated, neverOld) != 1 {
+		fail("expected one HostEvent neverStarted marshal block")
+	}
+	updated = strings.Replace(updated, neverOld, neverNew, 1)
 	return []byte(updated)
 }
 

@@ -14,6 +14,8 @@ import (
 const observationMarshalBlock = "if t.Observation != nil {\n\t\tobject[\"observation\"], err = json.Marshal(t.Observation)\n\t\tif err != nil {\n\t\t\treturn nil, fmt.Errorf(\"error marshaling 'observation': %w\", err)\n\t\t}\n\t}\n"
 const providerMarshalBlock = "if t.ProviderObservation != nil {\n\t\tobject[\"providerObservation\"], err = json.Marshal(t.ProviderObservation)\n\t\tif err != nil {\n\t\t\treturn nil, fmt.Errorf(\"error marshaling 'providerObservation': %w\", err)\n\t\t}\n\t}\n"
 
+const neverMarshalBlock = "if t.NeverStarted != nil {\n\t\tobject[\"neverStarted\"], err = json.Marshal(t.NeverStarted)\n\t\tif err != nil {\n\t\t\treturn nil, fmt.Errorf(\"error marshaling 'neverStarted': %w\", err)\n\t\t}\n\t}\n"
+
 func panicMessage(fn func()) (string, bool) {
 	panicked := false
 	message := ""
@@ -30,7 +32,7 @@ func panicMessage(fn func()) (string, bool) {
 }
 
 func TestApplyHostEventUnionFieldCleanupRequiresExactPatternCount(t *testing.T) {
-	fixture := []byte("func (t HostEvent) MarshalJSON() ([]byte, error) {\n\tvar err error\n\tobject := make(map[string]json.RawMessage)\n" + observationMarshalBlock + providerMarshalBlock + "\treturn json.Marshal(object)\n}\n")
+	fixture := []byte("func (t HostEvent) MarshalJSON() ([]byte, error) {\n\tvar err error\n\tobject := make(map[string]json.RawMessage)\n" + observationMarshalBlock + providerMarshalBlock + neverMarshalBlock + "\treturn json.Marshal(object)\n}\n")
 
 	outputMessage, panicked := panicMessage(func() { _ = applyHostEventUnionFieldCleanup(fixture) })
 	if panicked {
@@ -38,6 +40,9 @@ func TestApplyHostEventUnionFieldCleanupRequiresExactPatternCount(t *testing.T) 
 	}
 
 	transformed := applyHostEventUnionFieldCleanup(fixture)
+	if strings.Count(string(transformed), `delete(object, "neverStarted")`) != 1 {
+		t.Fatal("neverStarted cleanup missing")
+	}
 	if strings.Count(string(transformed), `delete(object, "observation")`) != 1 {
 		t.Fatal("observation cleanup branch missing after transformation")
 	}

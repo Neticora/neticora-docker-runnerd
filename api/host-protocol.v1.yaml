@@ -915,6 +915,9 @@
           },
           {
             "$ref": "#/components/schemas/ControlCommand"
+          },
+          {
+            "$ref": "#/components/schemas/NeverStartedCommand"
           }
         ],
         "discriminator": {
@@ -922,7 +925,8 @@
           "mapping": {
             "start": "#/components/schemas/StartCommand",
             "cancel": "#/components/schemas/ControlCommand",
-            "cleanup": "#/components/schemas/ControlCommand"
+            "cleanup": "#/components/schemas/ControlCommand",
+            "fence-never-started": "#/components/schemas/NeverStartedCommand"
           }
         }
       },
@@ -1106,6 +1110,9 @@
           },
           "providerObservation": {
             "$ref": "#/components/schemas/ProviderObservation"
+          },
+          "neverStarted": {
+            "$ref": "#/components/schemas/NeverStartedProof"
           }
         },
         "required": [
@@ -1126,6 +1133,11 @@
           {
             "required": [
               "providerObservation"
+            ]
+          },
+          {
+            "required": [
+              "neverStarted"
             ]
           }
         ]
@@ -2000,6 +2012,194 @@
           "ephemeral",
           "nonce",
           "ciphertext"
+        ],
+        "additionalProperties": false
+      },
+      "NeverStartedCommand": {
+        "type": "object",
+        "properties": {
+          "commandId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "payloadHash": {
+            "$ref": "#/components/schemas/Digest"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "kind": {
+            "const": "fence-never-started"
+          },
+          "executionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "tenantId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "hostId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "startCommandId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "startPayloadHash": {
+            "$ref": "#/components/schemas/Digest"
+          },
+          "specHash": {
+            "$ref": "#/components/schemas/Digest"
+          },
+          "sessionEpoch": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "endpointIdentity": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "challenge": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$"
+          },
+          "issuedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        },
+        "required": [
+          "commandId",
+          "payloadHash",
+          "generation",
+          "kind",
+          "executionId",
+          "tenantId",
+          "hostId",
+          "startCommandId",
+          "startPayloadHash",
+          "specHash",
+          "sessionEpoch",
+          "endpointIdentity",
+          "challenge",
+          "issuedAt"
+        ],
+        "additionalProperties": false
+      },
+      "NeverStartedProof": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "const": "neticora-runnerd-never-started-v1"
+          },
+          "journalVersion": {
+            "const": "runnerd05-file-fence-v1"
+          },
+          "journalId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "journalSequence": {
+            "const": "1"
+          },
+          "tenantId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "hostId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "executionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "attemptId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "generation": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "specHash": {
+            "$ref": "#/components/schemas/Digest"
+          },
+          "startCommandId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "startPayloadHash": {
+            "$ref": "#/components/schemas/Digest"
+          },
+          "fenceCommandId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "fencePayloadHash": {
+            "$ref": "#/components/schemas/Digest"
+          },
+          "challenge": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$"
+          },
+          "sessionEpoch": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "keyId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "endpointIdentity": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "fencedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "signature": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{86}$"
+          },
+          "attestedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        },
+        "required": [
+          "domain",
+          "journalVersion",
+          "journalId",
+          "journalSequence",
+          "tenantId",
+          "hostId",
+          "executionId",
+          "attemptId",
+          "generation",
+          "specHash",
+          "startCommandId",
+          "startPayloadHash",
+          "fenceCommandId",
+          "fencePayloadHash",
+          "challenge",
+          "sessionEpoch",
+          "keyId",
+          "endpointIdentity",
+          "fencedAt",
+          "signature",
+          "attestedAt"
         ],
         "additionalProperties": false
       }
