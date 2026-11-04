@@ -9,22 +9,17 @@ import (
 
 	"github.com/Neticora/neticora-docker-runnerd/internal/config"
 	"github.com/Neticora/neticora-docker-runnerd/internal/control"
-	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
+	"github.com/Neticora/neticora-docker-runnerd/journal"
 )
 
 // Run starts the bounded local service shell. No execution controller is wired
 // yet; admission remains disabled. Shutdown never invokes runtime Stop/Remove.
 func Run(ctx context.Context, c config.Config, socket string) error {
-	root, err := hostfs.OpenState(c.StateDir)
+	store, err := journal.OpenRecovery(ctx, c.StateDir, journal.Options{})
 	if err != nil {
 		return err
 	}
-	defer root.Close()
-	lock, err := hostfs.Lock(root)
-	if err != nil {
-		return err
-	}
-	defer lock.Close()
+	defer store.Close()
 	var draining atomic.Bool
 	draining.Store(true)
 	server, err := control.Listen(socket, func() control.Snapshot {
@@ -32,7 +27,10 @@ func Run(ctx context.Context, c config.Config, socket string) error {
 		if draining.Load() {
 			state = "drained"
 		}
-		return control.Snapshot{State: state, AdmissionEnabled: false, RuntimeQualified: false}
+		healthCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		defer cancel()
+		health := store.Health(healthCtx)
+		return control.Snapshot{State: state, AdmissionEnabled: false, RuntimeQualified: false, RecoveryReady: health.Ready, RecoveryReason: health.Reason}
 	}, func() { draining.Store(true) }, func(event string) { log.Print(event) })
 	if err != nil {
 		return err

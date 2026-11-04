@@ -11,6 +11,7 @@ type Identity struct {
 	ExecutionID    string
 	Generation     string
 	SpecHash       string
+	AttemptID      string
 }
 type RuntimeRef struct {
 	Identity             Identity
@@ -38,19 +39,4 @@ type Runtime interface {
 	Inventory(context.Context) (Snapshot, error)
 	Stop(context.Context, RuntimeRef) error
 	Remove(context.Context, RuntimeRef) error
-}
-
-// RecoveryStore is independent of SQL and persists receipt before ACK. Commit
-// must atomically apply state and required outgoing facts; no network/runtime
-// calls belong inside it. Cleanup obligations survive process termination.
-type RecoveryStore interface {
-	Commit(context.Context, Transition) error
-	Pending(context.Context, int) ([]Transition, error)
-}
-type Transition struct {
-	Identity               Identity
-	CommandID, PayloadHash string
-	State                  []byte
-	Events                 [][]byte
-	CleanupPending         bool
 }

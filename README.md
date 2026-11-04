@@ -10,7 +10,8 @@ customer-defined policy.
 ## Project status
 
 Runnerd is under active development. This repository currently contains the
-versioned host protocol, Go SDK, and a development Linux service/CLI foundation.
+versioned host protocol, Go SDK, a SQLite recovery store with a durable event
+outbox, and a development Linux service/CLI foundation.
 The service reports local status and remains unavailable for job admission.
 An offline verification foundation checks signed update artifacts against
 independently provisioned trust. Production installation and runner execution are
@@ -143,7 +144,7 @@ public fixtures exercise TypeScript sealing and Go decryption with binding,
 expiry, duplicate-key and ciphertext rejection.
 
 The SaaS owns placement, issuance uncertainty, provider identity and physical
-reservation decisions. These helpers add no SQLite/Docker execution controller;
+reservation decisions. These helpers add no Docker execution controller;
 process persistence, automatic fenced local recovery and live runtime admission
 remain separate milestones. See Alpha's `docs/runnerd/RUNNERD05-DISPATCH.md`.
 
@@ -162,3 +163,10 @@ creation claim cannot produce absence evidence; do not delete or compact markers
 The platform also requires fresh complete inventory and independent qualification
 of this journal boundary. This library does not yet wire the daemon to Docker or
 provide autonomous recovery.
+
+The Runnerd06 SQLite adapter opens under the same installation owner and preserves
+these permanent creation fences. It commits command/spec/reservations before
+receipt, stable start requests before issuance, and state/events/cleanup together.
+Every restart requires authenticated reconciliation before new work or replay.
+The Linux service initializes the private database but remains drained, with
+admission disabled and no wired runtime or control-plane execution loops.

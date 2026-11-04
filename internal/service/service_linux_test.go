@@ -52,7 +52,7 @@ func TestLocalServiceCancellationAndRestart(t *testing.T) {
 				var s control.Snapshot
 				err = json.NewDecoder(response.Body).Decode(&s)
 				response.Body.Close()
-				if err != nil || s.AdmissionEnabled || s.RuntimeQualified || s.State != "drained" {
+				if err != nil || s.AdmissionEnabled || s.RuntimeQualified || s.State != "drained" || s.RecoveryReady || s.RecoveryReason != "reconciliation-required" {
 					t.Fatal("unqualified execution advertised")
 				}
 				ready = true
@@ -85,6 +85,12 @@ func TestLocalServiceCancellationAndRestart(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(state, "instance.lock")); err != nil {
 			t.Fatal("installation lock inode must survive shutdown")
 		}
+		for _, name := range []string{"journal.db", "recovery.anchor.json"} {
+			info, e := os.Stat(filepath.Join(state, name))
+			if e != nil || info.Mode().Perm() != 0600 {
+				t.Fatal("missing or unsafe recovery state", name, e)
+			}
+		}
 		after, err := os.Stat(marker)
 		if err != nil || !os.SameFile(markerInfo, after) || after.Mode().Perm() != 0600 {
 			t.Fatal("shutdown changed ambiguous durable state identity or permissions")
@@ -94,5 +100,30 @@ func TestLocalServiceCancellationAndRestart(t *testing.T) {
 			t.Fatal("shutdown changed ambiguous durable state contents")
 		}
 
+	}
+}
+
+func TestCorruptRecoveryStorePreventsServiceStartup(t *testing.T) {
+	state := t.TempDir()
+	if err := os.Chmod(state, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(state, "journal.db"), []byte("retain corrupt evidence"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	socket := filepath.Join(dir, "control.sock")
+	if err := Run(context.Background(), config.Config{StateDir: state}, socket); err == nil {
+		t.Fatal("corrupt store exposed service")
+	}
+	if _, err := os.Lstat(socket); !os.IsNotExist(err) {
+		t.Fatal("unavailable store created control socket")
+	}
+	raw, err := os.ReadFile(filepath.Join(state, "journal.db"))
+	if err != nil || string(raw) != "retain corrupt evidence" {
+		t.Fatal("failed startup reset journal")
 	}
 }
