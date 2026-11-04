@@ -1,6 +1,7 @@
 // Package journal implements the durable creation boundary used by never-started
 // evidence. The executor MUST claim this boundary before any runtime create call.
-// It is not a daemon, SQLite journal or a runtime executor.
+// Open retains the original Runnerd05 file-fence API. OpenRecovery adds SQLite
+// under the same installation owner; neither API is a runtime executor.
 package journal
 
 import (

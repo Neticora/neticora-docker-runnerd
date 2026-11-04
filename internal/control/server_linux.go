@@ -18,6 +18,8 @@ type Snapshot struct {
 	State            string `json:"state"`
 	AdmissionEnabled bool   `json:"admissionEnabled"`
 	RuntimeQualified bool   `json:"runtimeQualified"`
+	RecoveryReady    bool   `json:"recoveryReady"`
+	RecoveryReason   string `json:"recoveryReason"`
 }
 type Server struct {
 	http     *http.Server

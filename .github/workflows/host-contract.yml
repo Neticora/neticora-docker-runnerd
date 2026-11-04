@@ -11,6 +11,8 @@ defaults:
 
 env:
   GOTOOLCHAIN: local
+  # SQLite durability tests reject tmpfs/network filesystems. Use local disk.
+  TMPDIR: /var/tmp
 
 jobs:
   # Public PR code must run only on an isolated, disposable public-CI fleet.
