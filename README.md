@@ -115,3 +115,50 @@ until resolved; remove credential/state files only after final revocation. Local
 mock/safety tests do not establish live acceptance. Previously recorded live
 results predate these stronger guards; rerun them on a new disposable host before
 claiming qualification of this revised harness.
+
+### Runnerd05 bootstrap recovery transport
+
+The additive `CustomerManagedPolicy` wire schema is explicitly version 1.1 and
+assigns host networking to the customer. Legacy CustomerPolicy 1.0 retains its
+published semantics. Both retain signature trust, tenant/pool/profile/resource
+limits, credential/interface isolation, TLS, freshness and replay protections.
+This schema addition does not implement local daemon admission or runtime policy.
+
+Runnerd05 `/start` requests include an independent X25519 `bootstrapPublicKey`.
+Persist its protected private key and startRequestId before requesting bootstrap;
+never substitute the Ed25519 enrollment key or write private keys/bootstrap into
+command/event/journal payloads. `transport.OpenBootstrap` validates/decrypts the
+`runnerd05-sealed-v1` response against exact tenant/host/execution/generation,
+startRequestId/spec and expiry. It is a transport helper, not launch authority.
+The caller must recheck current signed command, local non-network policy, image
+trust and cancellation before execution. Erase plaintext immediately after use.
+
+The envelope derives AES-256-GCM from ephemeral X25519 via HKDF-SHA256. Its salt is
+SHA256 of canonical context (all envelope fields except nonce/ciphertext), info is
+`neticora-runnerd-bootstrap-v1`, nonce is 12 bytes and the 16-byte tag follows the
+ciphertext. Outer encoding is base64url canonical JSON. The context includes both
+recipient/ephemeral public keys and immutable start identity; delivery expires by
+the provider/bootstrap deadline independently of bearer renewal. Cross-language
+public fixtures exercise TypeScript sealing and Go decryption with binding,
+expiry, duplicate-key and ciphertext rejection.
+
+The SaaS owns placement, issuance uncertainty, provider identity and physical
+reservation decisions. These helpers add no SQLite/Docker execution controller;
+process persistence, automatic fenced local recovery and live runtime admission
+remain separate milestones. See Alpha's `docs/runnerd/RUNNERD05-DISPATCH.md`.
+
+# Runnerd05 creation fence
+
+The repository declares Go 1.26 and pins the Go 1.27.3 toolchain. Contract CI
+installs Go 1.27.3 with `GOTOOLCHAIN=local`; its root-module compile, race tests and
+build include both `journal` and `transport`. This supports `crypto/hkdf` and
+`os.Root`; Go 1.23 is below the repository's supported version.
+
+`journal.Open` requires a protected pre-provisioned directory. An executor must
+call `ClaimCreation` and durably commit its exclusive marker before **any** Docker
+create for a start command. `FenceNeverStarted` writes a permanent tombstone and
+signs a scoped proof only when no creation marker exists. A crashed or uncertain
+creation claim cannot produce absence evidence; do not delete or compact markers.
+The platform also requires fresh complete inventory and independent qualification
+of this journal boundary. This library does not yet wire the daemon to Docker or
+provide autonomous recovery.

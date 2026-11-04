@@ -1319,5 +1319,330 @@
       }
     },
     "valid": false
+  },
+  {
+    "id": "customer-managed-policy-1.1",
+    "schema": "CustomerManagedPolicy",
+    "value": {
+      "schemaVersion": "1.1",
+      "generation": "1",
+      "allowedTenantIds": [
+        "tenant-a"
+      ],
+      "allowedPoolIds": [
+        "pool-a"
+      ],
+      "allowedProfiles": [
+        "standard-linux-v1"
+      ],
+      "allowedTrustClasses": [
+        "trusted"
+      ],
+      "limits": {
+        "cpuMillis": "1000",
+        "memoryBytes": "1073741824",
+        "storageBytes": "10737418240",
+        "slots": "1"
+      },
+      "maxConcurrentExecutions": "1",
+      "images": {
+        "requireSignature": true,
+        "allowedDigests": [
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "trustRootId": "root-a",
+        "trustRootVersion": "1",
+        "trustRootSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "trustedIssuer": "https://issuer.example",
+        "trustedSubject": "repo:Neticora/runner:ref:refs/heads/main",
+        "trustExpiresAt": "2026-10-26T00:00:00.000Z",
+        "maxOfflineAgeSeconds": 3600
+      },
+      "transport": {
+        "proxyUrl": null,
+        "customCaSha256": null,
+        "maxClockSkewSeconds": 60
+      },
+      "onReload": "new-admissions-only",
+      "restrictions": {
+        "runnerUid": 1000,
+        "allowRunnerSudo": false,
+        "hostManagementAccess": false,
+        "hostSshAgent": false,
+        "dockerRestartPolicy": "no"
+      },
+      "networkOwnership": "customer"
+    },
+    "valid": true
+  },
+  {
+    "id": "customer-managed-reject-legacy-reinterpretation",
+    "schema": "CustomerManagedPolicy",
+    "value": {
+      "schemaVersion": "1.0",
+      "generation": "1",
+      "allowedTenantIds": [
+        "tenant-a"
+      ],
+      "allowedPoolIds": [
+        "pool-a"
+      ],
+      "allowedProfiles": [
+        "standard-linux-v1"
+      ],
+      "allowedTrustClasses": [
+        "trusted"
+      ],
+      "limits": {
+        "cpuMillis": "1000",
+        "memoryBytes": "1073741824",
+        "storageBytes": "10737418240",
+        "slots": "1"
+      },
+      "maxConcurrentExecutions": "1",
+      "images": {
+        "requireSignature": true,
+        "allowedDigests": [
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "trustRootId": "root-a",
+        "trustRootVersion": "1",
+        "trustRootSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "trustedIssuer": "https://issuer.example",
+        "trustedSubject": "repo:Neticora/runner:ref:refs/heads/main",
+        "trustExpiresAt": "2026-10-26T00:00:00.000Z",
+        "maxOfflineAgeSeconds": 3600
+      },
+      "transport": {
+        "proxyUrl": null,
+        "customCaSha256": null,
+        "maxClockSkewSeconds": 60
+      },
+      "onReload": "new-admissions-only",
+      "restrictions": {
+        "runnerUid": 1000,
+        "allowRunnerSudo": false,
+        "hostManagementAccess": false,
+        "hostSshAgent": false,
+        "dockerRestartPolicy": "no"
+      },
+      "networkOwnership": "customer"
+    },
+    "valid": false
+  },
+  {
+    "id": "customer-managed-retains-isolation",
+    "schema": "CustomerManagedPolicy",
+    "value": {
+      "schemaVersion": "1.1",
+      "generation": "1",
+      "allowedTenantIds": [
+        "tenant-a"
+      ],
+      "allowedPoolIds": [
+        "pool-a"
+      ],
+      "allowedProfiles": [
+        "standard-linux-v1"
+      ],
+      "allowedTrustClasses": [
+        "trusted"
+      ],
+      "limits": {
+        "cpuMillis": "1000",
+        "memoryBytes": "1073741824",
+        "storageBytes": "10737418240",
+        "slots": "1"
+      },
+      "maxConcurrentExecutions": "1",
+      "images": {
+        "requireSignature": true,
+        "allowedDigests": [
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "trustRootId": "root-a",
+        "trustRootVersion": "1",
+        "trustRootSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "trustedIssuer": "https://issuer.example",
+        "trustedSubject": "repo:Neticora/runner:ref:refs/heads/main",
+        "trustExpiresAt": "2026-10-26T00:00:00.000Z",
+        "maxOfflineAgeSeconds": 3600
+      },
+      "transport": {
+        "proxyUrl": null,
+        "customCaSha256": null,
+        "maxClockSkewSeconds": 60
+      },
+      "onReload": "new-admissions-only",
+      "restrictions": {
+        "runnerUid": 1000,
+        "allowRunnerSudo": true,
+        "hostManagementAccess": false,
+        "hostSshAgent": false,
+        "dockerRestartPolicy": "no"
+      },
+      "networkOwnership": "customer"
+    },
+    "valid": false
+  },
+  {
+    "id": "never-started-fence",
+    "schema": "HostCommand",
+    "value": {
+      "commandId": "fence-a",
+      "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "generation": "1",
+      "kind": "fence-never-started",
+      "executionId": "exec-a",
+      "tenantId": "tenant-a",
+      "hostId": "host-a",
+      "startCommandId": "start-a",
+      "startPayloadHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "specHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "sessionEpoch": "1",
+      "endpointIdentity": "engine-a",
+      "challenge": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "issuedAt": "2026-11-02T00:00:00.000Z"
+    },
+    "valid": true
+  },
+  {
+    "id": "never-started-proof",
+    "schema": "NeverStartedProof",
+    "value": {
+      "domain": "neticora-runnerd-never-started-v1",
+      "journalVersion": "runnerd05-file-fence-v1",
+      "journalId": "dddddddddddddddddddddddddddddddd",
+      "journalSequence": "1",
+      "tenantId": "tenant-a",
+      "hostId": "host-a",
+      "executionId": "exec-a",
+      "attemptId": "attempt-a",
+      "generation": "1",
+      "specHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "startCommandId": "start-a",
+      "startPayloadHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "fenceCommandId": "fence-a",
+      "fencePayloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "challenge": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "sessionEpoch": "1",
+      "keyId": "key-a",
+      "endpointIdentity": "engine-a",
+      "fencedAt": "2026-11-02T00:00:00.001Z",
+      "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "attestedAt": "2026-11-02T00:00:00.001Z"
+    },
+    "valid": true
+  },
+  {
+    "id": "never-started-event",
+    "schema": "HostEvent",
+    "value": {
+      "eventId": "never-a",
+      "executionId": "exec-a",
+      "attemptId": "attempt-a",
+      "generation": "1",
+      "sequence": "1",
+      "payloadHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "neverStarted": {
+        "domain": "neticora-runnerd-never-started-v1",
+        "journalVersion": "runnerd05-file-fence-v1",
+        "journalId": "dddddddddddddddddddddddddddddddd",
+        "journalSequence": "1",
+        "tenantId": "tenant-a",
+        "hostId": "host-a",
+        "executionId": "exec-a",
+        "attemptId": "attempt-a",
+        "generation": "1",
+        "specHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "startCommandId": "start-a",
+        "startPayloadHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "fenceCommandId": "fence-a",
+        "fencePayloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "challenge": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "sessionEpoch": "1",
+        "keyId": "key-a",
+        "endpointIdentity": "engine-a",
+        "fencedAt": "2026-11-02T00:00:00.001Z",
+        "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "attestedAt": "2026-11-02T00:00:00.001Z"
+      }
+    },
+    "valid": true
+  },
+  {
+    "id": "never-started-no-signature",
+    "schema": "NeverStartedProof",
+    "value": {
+      "domain": "neticora-runnerd-never-started-v1",
+      "journalVersion": "runnerd05-file-fence-v1",
+      "journalId": "dddddddddddddddddddddddddddddddd",
+      "journalSequence": "1",
+      "tenantId": "tenant-a",
+      "hostId": "host-a",
+      "executionId": "exec-a",
+      "attemptId": "attempt-a",
+      "generation": "1",
+      "specHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "startCommandId": "start-a",
+      "startPayloadHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "fenceCommandId": "fence-a",
+      "fencePayloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "challenge": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "sessionEpoch": "1",
+      "keyId": "key-a",
+      "endpointIdentity": "engine-a",
+      "fencedAt": "2026-11-02T00:00:00.001Z",
+      "attestedAt": "2026-11-02T00:00:00.001Z"
+    },
+    "valid": false
+  },
+  {
+    "id": "never-started-unknown-journal",
+    "schema": "NeverStartedProof",
+    "value": {
+      "domain": "neticora-runnerd-never-started-v1",
+      "journalVersion": "unchecked",
+      "journalId": "dddddddddddddddddddddddddddddddd",
+      "journalSequence": "1",
+      "tenantId": "tenant-a",
+      "hostId": "host-a",
+      "executionId": "exec-a",
+      "attemptId": "attempt-a",
+      "generation": "1",
+      "specHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "startCommandId": "start-a",
+      "startPayloadHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "fenceCommandId": "fence-a",
+      "fencePayloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "challenge": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "sessionEpoch": "1",
+      "keyId": "key-a",
+      "endpointIdentity": "engine-a",
+      "fencedAt": "2026-11-02T00:00:00.001Z",
+      "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "attestedAt": "2026-11-02T00:00:00.001Z"
+    },
+    "valid": false
+  },
+  {
+    "id": "never-started-missing-challenge",
+    "schema": "NeverStartedCommand",
+    "value": {
+      "commandId": "fence-a",
+      "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "generation": "1",
+      "kind": "fence-never-started",
+      "executionId": "exec-a",
+      "tenantId": "tenant-a",
+      "hostId": "host-a",
+      "startCommandId": "start-a",
+      "startPayloadHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "specHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "sessionEpoch": "1",
+      "endpointIdentity": "engine-a",
+      "issuedAt": "2026-11-02T00:00:00.000Z"
+    },
+    "valid": false
   }
 ]

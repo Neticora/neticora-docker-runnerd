@@ -6,7 +6,7 @@ export GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local
 
 case "${1:-}" in
   lint)
-    unformatted=$(gofmt -l agent cmd internal transport api)
+    unformatted=$(gofmt -l agent cmd internal transport journal api)
     if [[ -n "$unformatted" ]]; then
       printf 'Go files require formatting:\n%s\n' "$unformatted" >&2
       exit 1
