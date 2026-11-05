@@ -17,6 +17,24 @@
     }
   ],
   "paths": {
+    "/me/recovery": {
+      "get": {
+        "operationId": "getRecoveryState",
+        "description": "Authenticated active recovery obligations. Fully cleaned history is retained durably but omitted. Use POST with local obligations to recover a lost final ACK for a cleaned execution. More than 1000 simultaneous obligations fail closed; there is no lifetime execution limit.",
+        "responses": {
+          "200": {
+            "description": "Current host-bound recovery watermarks and cancellation state; no launch authority is implied.",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/RecoveryState"}}}
+          }
+        }
+      },
+      "post": {
+        "operationId": "lookupRecoveryState",
+        "description": "Read-only authenticated reconciliation of active server obligations plus explicitly requested local execution generations, including cleaned executions with a lost final ACK. Lookup keys grant no admission or execution authority.",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/RecoveryRequest"}}}},
+        "responses": {"200": {"description": "Complete bounded current obligations and requested authoritative watermarks; never a truncated snapshot.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/RecoveryState"}}}}}
+      }
+    },
     "/enroll": {
       "post": {
         "operationId": "EnrollmentResponse_enroll",
@@ -1734,6 +1752,87 @@
         ],
         "additionalProperties": false
       },
+    "RecoveryEntry": {
+      "type": "object",
+      "properties": {
+        "executionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "generation": {
+          "$ref": "#/components/schemas/Generation"
+        },
+        "commandId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "specHash": {
+          "$ref": "#/components/schemas/Digest"
+        },
+        "contiguousSequence": {
+          "$ref": "#/components/schemas/UInt64String"
+        },
+        "cancelled": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "executionId",
+        "generation",
+        "commandId",
+        "specHash",
+        "contiguousSequence",
+        "cancelled"
+      ],
+      "additionalProperties": false
+    },
+    "RecoveryLookup": {
+      "type": "object",
+      "properties": {
+        "executionId": {"type": "string", "minLength": 1, "maxLength": 256},
+        "generation": {"$ref": "#/components/schemas/Generation"}
+      },
+      "required": ["executionId", "generation"],
+      "additionalProperties": false
+    },
+    "RecoveryRequest": {
+      "type": "object",
+      "properties": {"entries": {"type": "array", "maxItems": 1000, "uniqueItems": true, "items": {"$ref": "#/components/schemas/RecoveryLookup"}}},
+      "required": ["entries"],
+      "additionalProperties": false
+    },
+    "RecoveryState": {
+      "type": "object",
+      "properties": {
+        "identity": {
+          "$ref": "#/components/schemas/HostIdentity"
+        },
+        "endpointIdentity": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "inventoryGeneration": {
+          "$ref": "#/components/schemas/UInt64String"
+        },
+        "entries": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": {
+            "$ref": "#/components/schemas/RecoveryEntry"
+          }
+        }
+      },
+      "required": [
+        "identity",
+        "endpointIdentity",
+        "inventoryGeneration",
+        "entries"
+      ],
+      "additionalProperties": false
+    },
       "CustomerManagedPolicy": {
         "type": "object",
         "properties": {

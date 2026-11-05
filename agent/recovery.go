@@ -65,7 +65,9 @@ type StoreHealth struct {
 // RecoveryCheckpoint is assembled by a trusted controller AFTER authenticated
 // SaaS reconciliation and fresh complete runtime inventory. JournalID/Revision
 // bind the exact local snapshot reviewed by that controller. ServerWatermarks
-// must cover every local execution and never trail a locally committed ACK.
+// must cover every unresolved local execution and never trail a locally committed
+// ACK. Cleaned executions whose final facts are durably ACKed are retired from
+// reconciliation, not deleted: their receipts, ACKs and creation fences remain.
 // Supplying this value is not itself proof of authentication or authorization.
 type RecoveryCheckpoint struct {
 	JournalID           string
@@ -94,6 +96,7 @@ type AbsenceEvidence struct {
 // SQLite is one adapter; the protocol and runtime never receive SQL handles.
 type RecoveryStore interface {
 	AcceptCommand(context.Context, StoreScope, json.RawMessage) (Receipt, error)
+	Receipt(context.Context, StoreScope, json.RawMessage) (Receipt, error)
 	PutStartIntent(context.Context, StoreScope, json.RawMessage) error
 	RecordObservation(context.Context, StoreScope, json.RawMessage) error
 	RequireCleanup(context.Context, StoreScope, json.RawMessage) error
@@ -101,6 +104,9 @@ type RecoveryStore interface {
 	AckEvents(context.Context, StoreScope, Watermark) error
 	PendingEvents(context.Context, EventPage) ([]json.RawMessage, error)
 	Incomplete(context.Context, ExecutionCursor, int) ([]Execution, error)
+	// Executions includes acknowledged cleaned history needed for full watermark
+	// reconciliation; identical bounded cursor semantics to Incomplete.
+	Executions(context.Context, ExecutionCursor, int) ([]Execution, error)
 	Reconcile(context.Context, RecoveryCheckpoint) error
 	InvalidateRuntime(context.Context) error
 	Health(context.Context) StoreHealth

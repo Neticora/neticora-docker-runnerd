@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/Neticora/neticora-docker-runnerd/internal/config"
+	"github.com/Neticora/neticora-docker-runnerd/internal/execution"
 	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
 	"github.com/Neticora/neticora-docker-runnerd/internal/service"
 )
@@ -20,9 +21,14 @@ func main() {
 	}
 }
 func run() error {
+	version := flag.Bool("version", false, "print actual executable version")
 	file := flag.String("config", "/etc/neticora-runnerd/config.json", "protected configuration file")
 	socket := flag.String("socket", "/run/neticora-runnerd/control.sock", "local control socket")
 	flag.Parse()
+	if *version {
+		fmt.Println(execution.Version())
+		return nil
+	}
 	if flag.NArg() != 0 {
 		return fmt.Errorf("unexpected arguments")
 	}

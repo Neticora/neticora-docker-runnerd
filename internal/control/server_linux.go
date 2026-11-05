@@ -15,6 +15,8 @@ import (
 
 type peerKey struct{}
 type Snapshot struct {
+	ExecutionReason  string `json:"executionReason,omitempty"`
+	ExecutionEnabled bool   `json:"executionEnabled,omitempty"`
 	State            string `json:"state"`
 	AdmissionEnabled bool   `json:"admissionEnabled"`
 	RuntimeQualified bool   `json:"runtimeQualified"`
@@ -22,9 +24,15 @@ type Snapshot struct {
 	RecoveryReason   string `json:"recoveryReason"`
 }
 type Server struct {
-	http     *http.Server
-	listener *socketListener
+	drainAction *drainAction
+	mux         *http.ServeMux
+	http        *http.Server
+	listener    *socketListener
 }
+
+type drainAction struct{ run func() error }
+
+func (s *Server) SetDurableDrain(action func() error) { s.drainAction.run = action }
 
 // Listen uses a service-owned directory and never removes an existing socket.
 // Stale sockets require explicit operator inspection, not a destructive reset.
@@ -34,6 +42,7 @@ func Listen(path string, snapshot func() Snapshot, drain func(), audit func(stri
 		return nil, err
 	}
 	mux := http.NewServeMux()
+	action := &drainAction{run: func() error { drain(); return nil }}
 	write := func(w http.ResponseWriter) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(snapshot())
@@ -48,7 +57,11 @@ func Listen(path string, snapshot func() Snapshot, drain func(), audit func(stri
 			http.Error(w, "administrative permission required", http.StatusForbidden)
 			return
 		}
-		drain()
+		if err := action.run(); err != nil {
+			audit("drain persistence failed")
+			http.Error(w, "drain persistence failed; admission remains fenced", http.StatusServiceUnavailable)
+			return
+		}
 		audit("drain accepted")
 		write(w)
 	})
@@ -77,7 +90,27 @@ func Listen(path string, snapshot func() Snapshot, drain func(), audit func(stri
 		}
 		return ctx
 	}}
-	return &Server{http: server, listener: listener}, nil
+	return &Server{http: server, listener: listener, mux: mux, drainAction: action}, nil
+}
+
+// ExposeExecutions adds a sensitive read-only diagnostic, restricted to the
+// service owner/root rather than the ordinary status-observer group.
+func (s *Server) ExposeExecutions(list func(context.Context, string, string) (any, error)) {
+	s.mux.HandleFunc("GET /executions", func(w http.ResponseWriter, r *http.Request) {
+		uid, ok := r.Context().Value(peerKey{}).(uint32)
+		if !ok || (uid != 0 && int(uid) != os.Geteuid()) {
+			http.Error(w, "administrative permission required", http.StatusForbidden)
+			return
+		}
+		value, err := list(r.Context(), r.URL.Query().Get("afterExecutionId"), r.URL.Query().Get("afterGeneration"))
+		if err != nil {
+			http.Error(w, "recovery diagnostic unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(value)
+	})
 }
 func (s *Server) Serve() error {
 	err := s.http.Serve(newLimitListener(s.listener, 32))

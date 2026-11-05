@@ -982,6 +982,35 @@ type Receipt struct {
 	Accepted bool `json:"accepted"`
 }
 
+// RecoveryEntry defines model for RecoveryEntry.
+type RecoveryEntry struct {
+	Cancelled          bool         `json:"cancelled"`
+	CommandId          string       `json:"commandId"`
+	ContiguousSequence UInt64String `json:"contiguousSequence"`
+	ExecutionId        string       `json:"executionId"`
+	Generation         Generation   `json:"generation"`
+	SpecHash           Digest       `json:"specHash"`
+}
+
+// RecoveryLookup defines model for RecoveryLookup.
+type RecoveryLookup struct {
+	ExecutionId string     `json:"executionId"`
+	Generation  Generation `json:"generation"`
+}
+
+// RecoveryRequest defines model for RecoveryRequest.
+type RecoveryRequest struct {
+	Entries []RecoveryLookup `json:"entries"`
+}
+
+// RecoveryState defines model for RecoveryState.
+type RecoveryState struct {
+	EndpointIdentity    string          `json:"endpointIdentity"`
+	Entries             []RecoveryEntry `json:"entries"`
+	Identity            HostIdentity    `json:"identity"`
+	InventoryGeneration UInt64String    `json:"inventoryGeneration"`
+}
+
 // ResourceBudget defines model for ResourceBudget.
 type ResourceBudget struct {
 	CpuMillis    UInt64String `json:"cpuMillis"`
@@ -1088,6 +1117,9 @@ type ReceiptMeInventoryJSONRequestBody = InventorySnapshot
 
 // EnrollmentResponseMeKeysRotateJSONRequestBody defines body for EnrollmentResponseMeKeysRotate for application/json ContentType.
 type EnrollmentResponseMeKeysRotateJSONRequestBody = KeyRotationRequest
+
+// LookupRecoveryStateJSONRequestBody defines body for LookupRecoveryState for application/json ContentType.
+type LookupRecoveryStateJSONRequestBody = RecoveryRequest
 
 // StartResponseMeStartJSONRequestBody defines body for StartResponseMeStart for application/json ContentType.
 type StartResponseMeStartJSONRequestBody = StartRequest

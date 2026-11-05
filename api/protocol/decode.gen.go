@@ -204,6 +204,34 @@ func DecodeReceipt(data []byte) (Receipt, error) {
 	return value, err
 }
 
+// DecodeRecoveryEntry validates the original wire bytes before binding the generated model.
+func DecodeRecoveryEntry(data []byte) (RecoveryEntry, error) {
+	var value RecoveryEntry
+	err := decode("RecoveryEntry", data, &value)
+	return value, err
+}
+
+// DecodeRecoveryLookup validates the original wire bytes before binding the generated model.
+func DecodeRecoveryLookup(data []byte) (RecoveryLookup, error) {
+	var value RecoveryLookup
+	err := decode("RecoveryLookup", data, &value)
+	return value, err
+}
+
+// DecodeRecoveryRequest validates the original wire bytes before binding the generated model.
+func DecodeRecoveryRequest(data []byte) (RecoveryRequest, error) {
+	var value RecoveryRequest
+	err := decode("RecoveryRequest", data, &value)
+	return value, err
+}
+
+// DecodeRecoveryState validates the original wire bytes before binding the generated model.
+func DecodeRecoveryState(data []byte) (RecoveryState, error) {
+	var value RecoveryState
+	err := decode("RecoveryState", data, &value)
+	return value, err
+}
+
 // DecodeResourceBudget validates the original wire bytes before binding the generated model.
 func DecodeResourceBudget(data []byte) (ResourceBudget, error) {
 	var value ResourceBudget
@@ -304,6 +332,10 @@ var wireDecoders = map[string]func([]byte) (any, error){
 	"ProtocolCompatibility": func(data []byte) (any, error) { return DecodeProtocolCompatibility(data) },
 	"ProviderObservation":   func(data []byte) (any, error) { return DecodeProviderObservation(data) },
 	"Receipt":               func(data []byte) (any, error) { return DecodeReceipt(data) },
+	"RecoveryEntry":         func(data []byte) (any, error) { return DecodeRecoveryEntry(data) },
+	"RecoveryLookup":        func(data []byte) (any, error) { return DecodeRecoveryLookup(data) },
+	"RecoveryRequest":       func(data []byte) (any, error) { return DecodeRecoveryRequest(data) },
+	"RecoveryState":         func(data []byte) (any, error) { return DecodeRecoveryState(data) },
 	"ResourceBudget":        func(data []byte) (any, error) { return DecodeResourceBudget(data) },
 	"RuntimeObservation":    func(data []byte) (any, error) { return DecodeRuntimeObservation(data) },
 	"RuntimeRef":            func(data []byte) (any, error) { return DecodeRuntimeRef(data) },

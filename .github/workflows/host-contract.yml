@@ -15,11 +15,11 @@ env:
   TMPDIR: /var/tmp
 
 jobs:
-  # Public PR code must run only on an isolated, disposable public-CI fleet.
-  # The dedicated label must never be assigned to private platform runners.
+  # Public PR code runs on disposable GitHub-hosted workers, without private
+  # platform credentials, Docker management access or customer network access.
   lint:
     name: lint
-    runs-on: [self-hosted, linux, x64, runnerd-public]
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -32,7 +32,7 @@ jobs:
 
   typecheck:
     name: typecheck
-    runs-on: [self-hosted, linux, x64, runnerd-public]
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -43,7 +43,7 @@ jobs:
 
   unit-tests:
     name: unit-tests
-    runs-on: [self-hosted, linux, x64, runnerd-public]
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -58,7 +58,7 @@ jobs:
 
   build:
     name: build
-    runs-on: [self-hosted, linux, x64, runnerd-public]
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -69,7 +69,7 @@ jobs:
 
   contract-validation:
     name: contract-validation
-    runs-on: [self-hosted, linux, x64, runnerd-public]
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -80,7 +80,7 @@ jobs:
 
   protocol-conformance:
     name: protocol-conformance
-    runs-on: [self-hosted, linux, x64, runnerd-public]
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

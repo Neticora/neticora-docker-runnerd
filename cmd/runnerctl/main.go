@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -21,14 +22,16 @@ func main() {
 }
 func run() error {
 	socket := flag.String("socket", "/run/neticora-runnerd/control.sock", "local control socket")
+	afterID := flag.String("after-execution", "", "exclusive execution diagnostic cursor")
+	afterGeneration := flag.String("after-generation", "", "execution diagnostic generation cursor")
 	flag.Parse()
 	if flag.NArg() != 1 {
-		return errors.New("usage: runnerctl [--socket PATH] status|doctor|capabilities|drain")
+		return errors.New("usage: runnerctl [--socket PATH] status|doctor|capabilities|executions|drain")
 	}
 	command := flag.Arg(0)
 	method := http.MethodGet
 	switch command {
-	case "status", "doctor", "capabilities":
+	case "status", "doctor", "capabilities", "executions":
 	case "drain":
 		method = http.MethodPost
 	default:
@@ -39,7 +42,12 @@ func run() error {
 	}, DisableCompression: true}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport, Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	req, _ := http.NewRequest(method, "http://localhost/"+command, nil)
+	query := url.Values{}
+	if command == "executions" {
+		query.Set("afterExecutionId", *afterID)
+		query.Set("afterGeneration", *afterGeneration)
+	}
+	req, _ := http.NewRequest(method, "http://localhost/"+command+"?"+query.Encode(), nil)
 	response, err := client.Do(req)
 	if err != nil {
 		return errors.New("local service unavailable")
@@ -48,8 +56,8 @@ func run() error {
 	if response.StatusCode != http.StatusOK {
 		return errors.New("local command rejected")
 	}
-	data, err := io.ReadAll(io.LimitReader(response.Body, 4097))
-	if err != nil || len(data) > 4096 {
+	data, err := io.ReadAll(io.LimitReader(response.Body, 65537))
+	if err != nil || len(data) > 65536 {
 		return errors.New("invalid local response")
 	}
 	_, err = fmt.Fprintln(os.Stdout, strings.TrimSpace(string(data)))

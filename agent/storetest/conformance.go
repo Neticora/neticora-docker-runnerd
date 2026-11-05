@@ -105,6 +105,13 @@ func Run(t *testing.T, factory func(*testing.T) agent.RecoveryStore) {
 			t.Fatalf("unreconciled acceptance: %v", err)
 		}
 		Reconcile(t, s, Scope, "1")
+		before := s.Health(ctx)
+		if _, err := s.Receipt(ctx, Scope, start); !errors.Is(err, agent.ErrNotFound) {
+			t.Fatal("receipt lookup admitted missing work", err)
+		}
+		if after := s.Health(ctx); after.Revision != before.Revision {
+			t.Fatal("read-only receipt lookup changed revision")
+		}
 		r, err := s.AcceptCommand(ctx, Scope, start)
 		if err != nil || r.CommandID != "cmd-a" || r.Duplicate {
 			t.Fatalf("receipt: %+v %v", r, err)
@@ -112,6 +119,9 @@ func Run(t *testing.T, factory func(*testing.T) agent.RecoveryStore) {
 		r, err = s.AcceptCommand(ctx, Scope, start)
 		if err != nil || !r.Duplicate {
 			t.Fatalf("replay: %+v %v", r, err)
+		}
+		if receipt, err := s.Receipt(ctx, Scope, start); err != nil || !receipt.Duplicate {
+			t.Fatal("durable receipt unavailable", err)
 		}
 		changed := Object(t, start)
 		changed["spec"].(map[string]any)["poolId"] = "other-pool"
