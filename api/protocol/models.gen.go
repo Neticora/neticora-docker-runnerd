@@ -992,6 +992,17 @@ type RecoveryEntry struct {
 	SpecHash           Digest       `json:"specHash"`
 }
 
+// RecoveryLookup defines model for RecoveryLookup.
+type RecoveryLookup struct {
+	ExecutionId string     `json:"executionId"`
+	Generation  Generation `json:"generation"`
+}
+
+// RecoveryRequest defines model for RecoveryRequest.
+type RecoveryRequest struct {
+	Entries []RecoveryLookup `json:"entries"`
+}
+
 // RecoveryState defines model for RecoveryState.
 type RecoveryState struct {
 	EndpointIdentity    string          `json:"endpointIdentity"`
@@ -1106,6 +1117,9 @@ type ReceiptMeInventoryJSONRequestBody = InventorySnapshot
 
 // EnrollmentResponseMeKeysRotateJSONRequestBody defines body for EnrollmentResponseMeKeysRotate for application/json ContentType.
 type EnrollmentResponseMeKeysRotateJSONRequestBody = KeyRotationRequest
+
+// LookupRecoveryStateJSONRequestBody defines body for LookupRecoveryState for application/json ContentType.
+type LookupRecoveryStateJSONRequestBody = RecoveryRequest
 
 // StartResponseMeStartJSONRequestBody defines body for StartResponseMeStart for application/json ContentType.
 type StartResponseMeStartJSONRequestBody = StartRequest
