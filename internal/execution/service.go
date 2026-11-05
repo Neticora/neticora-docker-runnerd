@@ -146,5 +146,6 @@ func Open(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drain
 		*ceilings[i] = min(*ceilings[i], limit)
 	}
 	controller.Repository = x.Repository
+	controller.MinRuntimeFreeBytes = x.MinRuntimeFreeBytes
 	return controller, cleanup, nil
 }

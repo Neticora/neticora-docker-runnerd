@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -23,6 +24,26 @@ func TestStrictConfiguration(t *testing.T) {
 	} {
 		if _, err := Parse([]byte(raw)); err == nil || strings.Contains(err.Error(), "do-not-print-me") {
 			t.Fatalf("unsafe configuration handling: %v", err)
+		}
+	}
+}
+
+func TestRuntimeHeadroomConfigurationCannotDisableProtectedMargin(t *testing.T) {
+	c, err := Parse([]byte(valid))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Execution = &Execution{Enabled: true, Repository: "org/repo", Organization: "org", Pool: "pool", PolicyFile: "/etc/runnerd/policy.json", CapabilitiesFile: "/etc/runnerd/capabilities.json", TrustRoots: "/etc/runnerd/roots", ImageBundles: "/etc/runnerd/bundles", ImageRepository: "registry/runner", NetworkID: "customer-network", BootstrapRoot: "/run/runnerd-bootstrap", KeysDirectory: "/var/lib/runnerd-keys", TrustProvisionedAt: "2026-11-05T00:00:00Z", PidsLimit: 128}
+	for _, minimum := range []uint64{0, 1, 64<<20 - 1, 64 << 20, 256 << 20} {
+		c.Execution.MinRuntimeFreeBytes = minimum
+		raw, err := json.Marshal(c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = Parse(raw)
+		valid := minimum == 0 || minimum >= 64<<20
+		if (err == nil) != valid {
+			t.Fatalf("invalid margin validation: %d %v", minimum, err)
 		}
 	}
 }

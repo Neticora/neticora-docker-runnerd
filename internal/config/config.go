@@ -26,21 +26,22 @@ type Config struct {
 // Execution is an explicit operator opt-in. Old foundation configurations remain
 // drained and never open Docker or contact the platform.
 type Execution struct {
-	Repository         string `json:"repository"`
-	CustomCAFile       string `json:"customCaFile,omitempty"`
-	Enabled            bool   `json:"enabled"`
-	PolicyFile         string `json:"policyFile"`
-	CapabilitiesFile   string `json:"capabilitiesFile"`
-	ImageRepository    string `json:"imageRepository"`
-	NetworkID          string `json:"networkId"`
-	BootstrapRoot      string `json:"bootstrapRoot"`
-	KeysDirectory      string `json:"keysDirectory"`
-	TrustRoots         string `json:"trustRoots"`
-	ImageBundles       string `json:"imageBundles"`
-	TrustProvisionedAt string `json:"trustProvisionedAt"`
-	Organization       string `json:"organization"`
-	Pool               string `json:"pool"`
-	PidsLimit          int64  `json:"pidsLimit"`
+	Repository          string `json:"repository"`
+	CustomCAFile        string `json:"customCaFile,omitempty"`
+	Enabled             bool   `json:"enabled"`
+	PolicyFile          string `json:"policyFile"`
+	CapabilitiesFile    string `json:"capabilitiesFile"`
+	ImageRepository     string `json:"imageRepository"`
+	NetworkID           string `json:"networkId"`
+	BootstrapRoot       string `json:"bootstrapRoot"`
+	KeysDirectory       string `json:"keysDirectory"`
+	TrustRoots          string `json:"trustRoots"`
+	ImageBundles        string `json:"imageBundles"`
+	TrustProvisionedAt  string `json:"trustProvisionedAt"`
+	Organization        string `json:"organization"`
+	Pool                string `json:"pool"`
+	PidsLimit           int64  `json:"pidsLimit"`
+	MinRuntimeFreeBytes uint64 `json:"minRuntimeFreeBytes,omitempty"`
 }
 
 func Parse(data []byte) (Config, error) {
@@ -78,6 +79,9 @@ func Parse(data []byte) (Config, error) {
 		return Config{}, errors.New("request timeout must be between 1 and 60 seconds")
 	}
 	if x := c.Execution; x != nil && x.Enabled {
+		if x.MinRuntimeFreeBytes != 0 && x.MinRuntimeFreeBytes < 64<<20 {
+			return Config{}, errors.New("runtime storage headroom must be at least 64 MiB")
+		}
 		for _, private := range []string{c.CredentialFile, x.KeysDirectory, x.PolicyFile, x.CapabilitiesFile, x.TrustRoots, x.ImageBundles, x.CustomCAFile} {
 			if private == "" {
 				continue

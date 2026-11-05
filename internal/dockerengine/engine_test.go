@@ -14,10 +14,15 @@ import (
 )
 
 func fakeEngine(t *testing.T) (*Engine, Plan, *bool, *bool, *int, *string) {
+	return fakeEngineWithHook(t, nil)
+}
+
+func fakeEngineWithHook(t *testing.T, hook func(string)) (*Engine, Plan, *bool, *bool, *int, *string) {
 	t.Helper()
 	exists, running := false, false
 	creates := 0
 	daemon := "engine-a"
+	root := t.TempDir()
 	p := Plan{Name: "owned", Config: &container.Config{Image: "example/runner@sha256:" + strings.Repeat("a", 64), User: "10001:10001", WorkingDir: "/runner", Entrypoint: []string{"/usr/local/bin/runnerd-github"}, Labels: map[string]string{LabelPrefix + "installation": "install-a"}}, HostConfig: &container.HostConfig{RestartPolicy: container.RestartPolicy{Name: "no"}, IpcMode: "private", CapDrop: []string{"ALL"}, SecurityOpt: []string{"no-new-privileges=true"}}}
 	socket := filepath.Join(t.TempDir(), "docker.sock")
 	listener, err := net.Listen("unix", socket)
@@ -28,11 +33,16 @@ func fakeEngine(t *testing.T) (*Engine, Plan, *bool, *bool, *int, *string) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Api-Version", "1.52")
 		path := strings.TrimPrefix(r.URL.Path, "/v1.52")
+		if hook != nil {
+			hook(path)
+		}
 		switch {
 		case path == "/_ping":
 			w.WriteHeader(200)
 		case path == "/info":
-			_ = json.NewEncoder(w).Encode(map[string]any{"ID": daemon, "OSType": "linux"})
+			_ = json.NewEncoder(w).Encode(map[string]any{"ID": daemon, "OSType": "linux", "DockerRootDir": root})
+		case path == "/containers/json":
+			_ = json.NewEncoder(w).Encode([]any{})
 		case strings.HasPrefix(path, "/images/"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"Id": "sha256:" + strings.Repeat("b", 64), "Config": map[string]any{"Env": []string{"HOME=/runner"}}})
 		case path == "/containers/create":
@@ -66,6 +76,7 @@ func fakeEngine(t *testing.T) (*Engine, Plan, *bool, *bool, *int, *string) {
 	}
 	t.Cleanup(func() { _ = e.Close() })
 	e.observePeer = func(context.Context, string) (string, error) { return "qualified-direct-dockerd-peer", nil }
+	e.connectionPeer = func(net.Conn) (string, error) { return "qualified-direct-dockerd-peer", nil }
 	return e, p, &exists, &running, &creates, &daemon
 }
 

@@ -22,6 +22,12 @@ func peerIdentity(ctx context.Context, path string) (string, error) {
 		return "", ErrUnavailable
 	}
 	defer conn.Close()
+	return peerIdentityConnection(conn)
+}
+
+// peerIdentityConnection inspects SO_PEERCRED on the same connected socket the
+// HTTP transport will use. Checking another connection leaves a replacement race.
+func peerIdentityConnection(conn net.Conn) (string, error) {
 	u, ok := conn.(*net.UnixConn)
 	if !ok {
 		return "", ErrUnavailable

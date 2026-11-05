@@ -34,6 +34,14 @@ type fakeRuntime struct {
 	creates, starts, stops, removes   int
 	lostCreate, disconnectAfterRemove bool
 	afterEnsure, beforeStart          func()
+	pressure                          bool
+}
+
+func (f *fakeRuntime) CheckHeadroom(context.Context, uint64) error {
+	if f.pressure {
+		return dockerengine.ErrStoragePressure
+	}
+	return nil
 }
 
 func (f *fakeRuntime) Probe(context.Context) (string, error) {

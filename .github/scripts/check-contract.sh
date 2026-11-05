@@ -20,6 +20,10 @@ case "${1:-}" in
     for module in . api/tools api/protocol api/conformance; do
       (cd "$module" && go test -count=1 -mod=readonly -vet=off -run '^$' ./...)
     done
+    # Keep manual host-only qualification helpers compilable in ordinary CI.
+    # No destructive case runs without its explicit sentinel/opt-in environment.
+    go test -mod=readonly -vet=off -tags runnerd_qualification -run '^$' ./journal ./internal/execution
+    go test -mod=readonly -vet=off -tags runnerd_docker -run '^$' ./internal/dockerengine ./internal/standardlinux
     ;;
   unit-tests)
     PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s .github/scripts -p 'test_*.py'

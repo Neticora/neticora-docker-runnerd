@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -22,9 +23,10 @@ import (
 )
 
 var (
-	ErrUnavailable = errors.New("Docker unavailable or endpoint continuity uncertain")
-	ErrConflict    = errors.New("Docker resource ownership or configuration conflict")
-	ErrAbsent      = errors.New("Docker resource absent")
+	ErrUnavailable     = errors.New("Docker unavailable or endpoint continuity uncertain")
+	ErrConflict        = errors.New("Docker resource ownership or configuration conflict")
+	ErrAbsent          = errors.New("Docker resource absent")
+	ErrStoragePressure = errors.New("Docker storage headroom unavailable")
 )
 
 const LabelPrefix = "com.neticora.runnerd."
@@ -47,16 +49,19 @@ type Object struct {
 // Engine never starts discovered resources, prunes images, creates networks, or
 // reads DOCKER_HOST / DOCKER_API_VERSION. Every mutation targets an inspected ID.
 type Engine struct {
-	api          *client.Client
-	stream       *client.Client
-	socket       string
-	installation string
-	mu           sync.Mutex
-	socketInfo   os.FileInfo
-	daemonID     string
-	peer         string
-	invalidated  func()
-	observePeer  func(context.Context, string) (string, error)
+	api            *client.Client
+	stream         *client.Client
+	socket         string
+	installation   string
+	mu             sync.Mutex
+	socketInfo     os.FileInfo
+	daemonID       string
+	peer           string
+	connectedPeer  string // Pinned on the actual transport connection, never rebound.
+	boundEndpoint  string // Operations never follow a replacement engine.
+	invalidated    func()
+	observePeer    func(context.Context, string) (string, error)
+	connectionPeer func(net.Conn) (string, error)
 }
 
 func Open(endpoint, installation string, invalidated func()) (*Engine, error) {
@@ -64,16 +69,49 @@ func Open(endpoint, installation string, invalidated func()) (*Engine, error) {
 	if err != nil || u.Scheme != "unix" || u.Host != "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || !filepath.IsAbs(u.Path) || filepath.Clean(u.Path) != u.Path || installation == "" {
 		return nil, ErrUnavailable
 	}
-	api, err := client.New(client.WithHost(endpoint), client.WithTimeout(15*time.Second), client.WithAPIVersionNegotiation())
+	e := &Engine{socket: u.Path, installation: installation, invalidated: invalidated}
+	api, err := client.New(client.WithHost(endpoint), client.WithDialContext(e.dialContext), client.WithTimeout(15*time.Second), client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, ErrUnavailable
 	}
-	stream, err := client.New(client.WithHost(endpoint), client.WithAPIVersionNegotiation())
+	stream, err := client.New(client.WithHost(endpoint), client.WithDialContext(e.dialContext), client.WithAPIVersionNegotiation())
 	if err != nil {
 		_ = api.Close()
 		return nil, ErrUnavailable
 	}
-	return &Engine{api: api, stream: stream, socket: u.Path, installation: installation, invalidated: invalidated}, nil
+	e.api, e.stream = api, stream
+	return e, nil
+}
+
+// Authenticate the connection that will carry HTTP bytes. A separate socket
+// probe cannot protect the gap before a mutating request opens a new connection.
+// An already-connected Unix socket cannot be redirected by replacing its path.
+func (e *Engine) dialContext(ctx context.Context, _, _ string) (net.Conn, error) {
+	dialer := net.Dialer{Timeout: 5 * time.Second}
+	conn, err := dialer.DialContext(ctx, "unix", e.socket)
+	if err != nil {
+		return nil, e.lost()
+	}
+	reader := e.connectionPeer
+	if reader == nil {
+		reader = peerIdentityConnection
+	}
+	peer, err := reader(conn)
+	if err != nil || peer == "" {
+		_ = conn.Close()
+		return nil, e.lost()
+	}
+	e.mu.Lock()
+	if e.connectedPeer == "" {
+		e.connectedPeer = peer
+	}
+	matched := peer == e.connectedPeer
+	e.mu.Unlock()
+	if !matched {
+		_ = conn.Close()
+		return nil, e.lost()
+	}
+	return conn, nil
 }
 
 func (e *Engine) Close() error { return errors.Join(e.api.Close(), e.stream.Close()) }
@@ -105,19 +143,59 @@ func (e *Engine) Probe(ctx context.Context) (string, error) {
 		return "", e.lost()
 	}
 	e.mu.Lock()
+	connected := e.connectedPeer
 	changed := e.socketInfo != nil && (!os.SameFile(e.socketInfo, stat) || e.daemonID != info.Info.ID || e.peer != peer)
 	e.socketInfo = stat
 	e.daemonID = info.Info.ID
 	e.peer = peer
 	e.mu.Unlock()
-	if changed {
+	if changed || connected == "" || connected != peer {
 		return "", e.lost()
 	}
 	digest := sha256.Sum256([]byte(e.socket + "\x00" + info.Info.ID + "\x00" + peer))
-	return "docker-" + hex.EncodeToString(digest[:]), nil
+	endpoint := "docker-" + hex.EncodeToString(digest[:])
+	e.mu.Lock()
+	if e.boundEndpoint == "" {
+		e.boundEndpoint = endpoint
+	}
+	e.mu.Unlock()
+	return endpoint, nil
 }
 
-func (e *Engine) check(ctx context.Context) error { _, err := e.Probe(ctx); return err }
+func (e *Engine) check(ctx context.Context) error {
+	endpoint, err := e.Probe(ctx)
+	if err != nil {
+		return err
+	}
+	e.mu.Lock()
+	bound := e.boundEndpoint
+	e.mu.Unlock()
+	if endpoint != bound {
+		return e.lost()
+	}
+	return nil
+}
+
+// CheckHeadroom fences new work only. Cleanup/reporting remain available under
+// pressure. This does not establish aggregate hard storage isolation.
+func (e *Engine) CheckHeadroom(ctx context.Context, minimum uint64) error {
+	if err := e.check(ctx); err != nil {
+		return err
+	}
+	info, err := e.api.Info(ctx, client.InfoOptions{})
+	if err != nil {
+		return e.lost()
+	}
+	root := info.Info.DockerRootDir
+	if !filepath.IsAbs(root) || filepath.Clean(root) != root || minimum == 0 {
+		return ErrStoragePressure
+	}
+	available, err := storageAvailable(root)
+	if err != nil || available < minimum {
+		return ErrStoragePressure
+	}
+	return e.check(ctx)
+}
 
 // PrepareImage pulls only the immutable verified reference. It never obtains
 // authority/JIT or starts a container. Registry credentials are not inherited.
@@ -196,6 +274,9 @@ func (e *Engine) Inspect(ctx context.Context, id string, p Plan) (Object, error)
 	r, err := e.api.ContainerInspect(ctx, id, client.ContainerInspectOptions{})
 	if err != nil {
 		if errdefs.IsNotFound(err) {
+			if err := e.check(ctx); err != nil {
+				return Object{}, err
+			}
 			return Object{}, ErrAbsent
 		}
 		return Object{}, e.lost()
@@ -237,6 +318,9 @@ func (e *Engine) Inspect(ctx context.Context, id string, p Plan) (Object, error)
 	case c.State.Status == "exited" || c.State.Status == "dead":
 		state = "exited"
 	}
+	if err := e.check(ctx); err != nil {
+		return Object{}, err
+	}
 	return Object{ID: c.ID, State: state, ExitCode: c.State.ExitCode, OOMKilled: c.State.OOMKilled}, nil
 }
 
@@ -276,6 +360,9 @@ func (e *Engine) Ensure(ctx context.Context, p Plan, claim func() error) (Object
 	if err = claim(); err != nil {
 		return Object{}, err
 	}
+	if err = e.check(ctx); err != nil {
+		return Object{}, err
+	}
 	r, err := e.api.ContainerCreate(ctx, client.ContainerCreateOptions{Name: p.Name, Config: p.Config, HostConfig: p.HostConfig})
 	if err != nil {
 		return Object{}, e.lost()
@@ -311,6 +398,9 @@ func (e *Engine) Start(ctx context.Context, id string, p Plan, authorize func() 
 		return Object{}, ErrConflict
 	}
 	if err = authorize(); err != nil {
+		return Object{}, err
+	}
+	if err = e.check(ctx); err != nil {
 		return Object{}, err
 	}
 	if _, err = e.api.ContainerStart(ctx, id, client.ContainerStartOptions{}); err != nil {

@@ -45,6 +45,7 @@ type Runtime interface {
 	Stop(context.Context, string, dockerengine.Plan) error
 	Remove(context.Context, string, dockerengine.Plan) error
 	Watch(context.Context, func()) error
+	CheckHeadroom(context.Context, uint64) error
 }
 type Remote interface {
 	Recovery(context.Context, []agent.ExecutionCursor) (protocol.RecoveryState, error)
@@ -73,6 +74,7 @@ type Controller struct {
 	Pool                string
 	Drained             func() bool
 	HostLimits          agent.ReservationLimits
+	MinRuntimeFreeBytes uint64
 	mu                  sync.Mutex // One reconciliation owner; all work remains durable in Store.
 	launchMu            sync.Mutex // Serializes durable command acceptance with final Docker start.
 	wake                chan struct{}
@@ -102,6 +104,8 @@ func failureReason(err error) string {
 		return "runtime-unavailable"
 	case errors.Is(err, agent.ErrCapacity):
 		return "admission-pressure"
+	case errors.Is(err, dockerengine.ErrStoragePressure):
+		return "runtime-storage-pressure"
 	case errors.Is(err, ErrReconcile), errors.Is(err, agent.ErrRecoveryRequired):
 		return "reconciliation-required"
 	default:
@@ -228,6 +232,11 @@ func (c *Controller) accept(ctx context.Context, raw json.RawMessage) (agent.Rec
 	}
 	if err = c.activateLimits(ctx); err != nil {
 		return agent.Receipt{}, err
+	}
+	if command.Kind == "start" {
+		if err = c.runtimeHeadroom(ctx); err != nil {
+			return agent.Receipt{}, err
+		}
 	}
 	c.launchMu.Lock()
 	defer c.launchMu.Unlock()
@@ -586,6 +595,9 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 	if e.State != "accepted" && e.State != "prepared" {
 		return ErrReconcile
 	}
+	if err = c.runtimeHeadroom(ctx); err != nil {
+		return err
+	}
 	policy := c.Policy()
 	if policy.UID() != c.Profile.RunnerUID {
 		return standardlinux.ErrAdmission
@@ -640,6 +652,9 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 			return err
 		}
 		if err := c.activateLimits(ctx); err != nil {
+			return err
+		}
+		if err := c.runtimeHeadroom(ctx); err != nil {
 			return err
 		}
 		if err := c.VerifyImage(ctx, c.Policy(), c.Profile.ImageRepository, start.Spec.ImageDigest, time.Now()); err != nil {
@@ -697,6 +712,14 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 		return err
 	}
 	return c.Store.RecordObservation(ctx, c.Scope, event)
+}
+
+func (c *Controller) runtimeHeadroom(ctx context.Context) error {
+	minimum := c.MinRuntimeFreeBytes
+	if minimum == 0 {
+		minimum = 256 << 20
+	}
+	return c.Runtime.CheckHeadroom(ctx, minimum)
 }
 
 func requestID(e agent.Execution) string {
