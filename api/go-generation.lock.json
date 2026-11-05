@@ -18,14 +18,14 @@
     "fixtures/validation.json": "7d8664fb53ccaf807e4dc8791c4846b6cc28d4968b0bdade26307337e6247b22",
     "go-codegen-overlay.yaml": "654bab71e0ac40306a624dca1a95038415e610ebb7e0e71ae0adf136ab86536f",
     "go-codegen.yaml": "1394287e30f53b03e52d8f171e2ec067e0f5edd09f019890a9471a2b6b3abbbe",
-    "host-protocol.v1.yaml": "f8543b62c7c9ef7dfa2c3e04a29fa69afac22d9e0e173276ea053259b338f274",
+    "host-protocol.v1.yaml": "0778460593a6c0f34bf0afe9021725e174ebce87ccbba2e9f245c0c7c1279f34",
     "tools/cmd/contract/main.go": "c7736da2684390a7590cd01967c2bc8356a2e7a275208562982f638af6daa179",
     "tools/go.mod": "436ee56dafbd999b1657b721f688d96b968a27f7845255550deab0cc8ed1a823",
     "tools/go.sum": "9223e7ae692c6954b0872fc2b030bfc79a78622ec37dce09df127a756f76ba72"
   },
   "outputs": {
-    "protocol/decode.gen.go": "e54c6575d7566d72b3cb224e9b67f8435ea0efc3fb908b7434db140e761490f9",
-    "protocol/models.gen.go": "8729bda9f46eb41f02dbccfade6df102a30ba3523e04265ccf8322b1ec2c119c",
-    "protocol/schema.gen.json": "f8543b62c7c9ef7dfa2c3e04a29fa69afac22d9e0e173276ea053259b338f274"
+    "protocol/decode.gen.go": "8a9ab51a7aec17d2b66a6d96a5cf3f054f6b7c13e51eb009f045b1a32cd0b3d1",
+    "protocol/models.gen.go": "78a8977171fee8e2ea48e1bf86a65cbcd578b3c389f3e6ef3b4c571ba73b5cf1",
+    "protocol/schema.gen.json": "0778460593a6c0f34bf0afe9021725e174ebce87ccbba2e9f245c0c7c1279f34"
   }
 }

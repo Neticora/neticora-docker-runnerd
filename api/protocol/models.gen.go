@@ -982,6 +982,24 @@ type Receipt struct {
 	Accepted bool `json:"accepted"`
 }
 
+// RecoveryEntry defines model for RecoveryEntry.
+type RecoveryEntry struct {
+	Cancelled          bool         `json:"cancelled"`
+	CommandId          string       `json:"commandId"`
+	ContiguousSequence UInt64String `json:"contiguousSequence"`
+	ExecutionId        string       `json:"executionId"`
+	Generation         Generation   `json:"generation"`
+	SpecHash           Digest       `json:"specHash"`
+}
+
+// RecoveryState defines model for RecoveryState.
+type RecoveryState struct {
+	EndpointIdentity    string          `json:"endpointIdentity"`
+	Entries             []RecoveryEntry `json:"entries"`
+	Identity            HostIdentity    `json:"identity"`
+	InventoryGeneration UInt64String    `json:"inventoryGeneration"`
+}
+
 // ResourceBudget defines model for ResourceBudget.
 type ResourceBudget struct {
 	CpuMillis    UInt64String `json:"cpuMillis"`
