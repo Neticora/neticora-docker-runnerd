@@ -14,14 +14,38 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
 )
 
 type Client struct {
-	base *url.URL
-	http *http.Client
+	base  *url.URL
+	http  *http.Client
+	clock atomic.Pointer[clockSample]
+}
+
+type clockSample struct {
+	observed time.Time
+	skew     time.Duration
+}
+
+func (c *Client) observeClock(response *http.Response) {
+	server, err := http.ParseTime(response.Header.Get("Date"))
+	if err != nil {
+		c.clock.Store(nil)
+		return
+	}
+	now := time.Now()
+	c.clock.Store(&clockSample{observed: now, skew: server.Sub(now)})
+}
+func (c *Client) ClockSkew() (time.Duration, bool) {
+	s := c.clock.Load()
+	if s == nil || time.Since(s.observed) > time.Minute {
+		return 0, false
+	}
+	return s.skew, true
 }
 
 func New(endpoint string, timeout time.Duration) (*Client, error) {
@@ -83,6 +107,7 @@ func (c *Client) Post(ctx context.Context, path, token string, message protocol.
 		return nil, errors.New("protocol request failed")
 	}
 	defer response.Body.Close()
+	c.observeClock(response)
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return nil, errors.New("protocol request rejected")
 	}
@@ -120,6 +145,7 @@ func (c *Client) Config(ctx context.Context, token string) ([]byte, error) {
 		return nil, errors.New("protocol request failed")
 	}
 	defer response.Body.Close()
+	c.observeClock(response)
 	if response.StatusCode != http.StatusOK {
 		return nil, errors.New("protocol request rejected")
 	}

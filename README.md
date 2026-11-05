@@ -11,11 +11,24 @@ customer-defined policy.
 
 Runnerd is under active development. This repository currently contains the
 versioned host protocol, Go SDK, a SQLite recovery store with a durable event
-outbox, and a development Linux service/CLI foundation.
-The service reports local status and remains unavailable for job admission.
+outbox, and an experimental opt-in Linux Standard GitHub controller.
+Existing configurations remain drained. Execution requires explicit local
+configuration, independent image trust and authenticated platform authorization.
 An offline verification foundation checks signed update artifacts against
 independently provisioned trust. Production installation and runner execution are
 not yet supported.
+
+Runnerd07 separates Docker mechanics, a trusted process-only profile, and durable
+reconciliation. See Alpha's `docs/runnerd/RUNNERD07-LINUX-GITHUB.md` for the exact
+configuration, protected JIT handoff, cleanup contract and remaining live gates.
+No production tuple or Docker live-restore guarantee is implied.
+
+Recovery is bounded by unresolved executions, not lifetime completed history.
+Verified cleaned attempts retire from snapshots only after their final durable
+ACK; receipts, ACK identities and permanent creation fences remain. Explicit
+generation-bound lookups recover lost terminal ACKs. Local command acceptance
+and final Docker start share a serialization boundary, so a locally accepted
+pre-start cancellation cannot race past the last launch check.
 
 The presence of protocol definitions does not imply support for a particular
 operating system, container runtime or isolation profile.
@@ -168,5 +181,8 @@ The Runnerd06 SQLite adapter opens under the same installation owner and preserv
 these permanent creation fences. It commits command/spec/reservations before
 receipt, stable start requests before issuance, and state/events/cleanup together.
 Every restart requires authenticated reconciliation before new work or replay.
-The Linux service initializes the private database but remains drained, with
-admission disabled and no wired runtime or control-plane execution loops.
+The default Linux service initializes the private database and remains drained.
+Explicit Runnerd07 opt-in wires authenticated command/inventory/event loops and
+the Docker controller; automatic enrollment/key rotation remain separate work.
+`runnerctl executions` exposes a bounded owner-only summary. Drain is persisted;
+service shutdown never stops healthy runtime objects.

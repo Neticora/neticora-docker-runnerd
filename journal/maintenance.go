@@ -444,6 +444,40 @@ func RestoreBackup(ctx context.Context, sourceDir, name, destinationDir string) 
 }
 
 // Creation fences share the SQLite installation owner. A stable start intent
+
+// CheckLaunch rechecks committed cancellation, original session, expiry and
+// capacity immediately before starting a created object. It cannot create a new
+// creation claim or authorize restart of an exited execution.
+func (s *SQLiteStore) CheckLaunch(ctx context.Context, start []byte, a Authority) error {
+	var doc commandDocument
+	canonical, err := snapshot("StartCommand", start, &doc)
+	if err != nil {
+		return err
+	}
+	ctx, release, err := s.acquire(ctx)
+	if err != nil {
+		return err
+	}
+	defer release()
+	if _, err = s.launchStatus(ctx, s.db); err != nil {
+		return err
+	}
+	if a.TenantID != s.scope.TenantID || a.HostID != s.scope.HostID || a.SessionEpoch != s.scope.SessionEpoch || a.EndpointIdentity != s.scope.EndpointIdentity {
+		return agent.ErrConflict
+	}
+	var stored []byte
+	var epoch, endpoint, state string
+	var blocked int
+	err = s.db.QueryRowContext(ctx, `SELECT e.command,e.session_epoch,e.endpoint_identity,e.state,
+ (SELECT count(*) FROM commands c WHERE c.execution_id=e.execution_id AND c.generation=e.generation AND c.kind<>'start')
+ FROM executions e JOIN start_intents i USING(execution_id,generation) WHERE e.command_id=?`, doc.CommandID).Scan(&stored, &epoch, &endpoint, &state, &blocked)
+	if err != nil || !equalBytes(stored, canonical) || epoch != a.SessionEpoch || endpoint != a.EndpointIdentity || blocked != 0 || (state != "accepted" && state != "prepared") || !doc.Spec.AuthorizationExpiresAt.After(time.Now()) {
+		return agent.ErrConflict
+	}
+	return nil
+}
+
+// A stable start intent
 // must already exist. This still only claims a boundary, never starts a runtime.
 func (s *SQLiteStore) ClaimCreation(ctx context.Context, start []byte, a Authority) error {
 	var doc commandDocument
@@ -478,6 +512,67 @@ func (s *SQLiteStore) ClaimCreation(ctx context.Context, start []byte, a Authori
 	return s.fences.ClaimCreation(canonical, a)
 }
 func equalBytes(a, b []byte) bool { return string(a) == string(b) }
+
+// VerifyCreationClaim is read-only recovery evidence, usable before session
+// reconciliation. Matching container labels do not replace the durable claim.
+// It accepts an older original session for observation, never for fresh launch.
+func (s *SQLiteStore) VerifyCreationClaim(ctx context.Context, scope agent.StoreScope, startRaw []byte) error {
+	var doc commandDocument
+	canonical, e := snapshot("StartCommand", startRaw, &doc)
+	if e != nil {
+		return e
+	}
+	ctx, release, e := s.acquire(ctx)
+	if e != nil {
+		return e
+	}
+	defer release()
+	if s.failed.Load() {
+		return agent.ErrStoreUnavailable
+	}
+	if e = s.checkFiles(); e != nil {
+		return agent.ErrStoreUnavailable
+	}
+	var identityRaw, stored []byte
+	var epoch, endpoint string
+	e = s.db.QueryRowContext(ctx, "SELECT identity,command,session_epoch,endpoint_identity FROM executions WHERE command_id=?", doc.CommandID).Scan(&identityRaw, &stored, &epoch, &endpoint)
+	if e != nil {
+		return s.receiptReadFailure(ctx, e)
+	}
+	var id agent.Identity
+	if json.Unmarshal(identityRaw, &id) != nil || id.InstallationID != scope.InstallationID || id.TenantID != scope.TenantID || id.HostID != scope.HostID || id.ExecutionID != doc.Spec.ExecutionID || id.Generation != doc.Generation || id.SpecHash != doc.Spec.SpecHash || endpoint != scope.EndpointIdentity || !equalBytes(stored, canonical) {
+		return agent.ErrRecoveryRequired
+	}
+	start, e := decode("StartCommand", canonical)
+	if e != nil {
+		return e
+	}
+	b, e := binding(start, Authority{TenantID: scope.TenantID, HostID: scope.HostID, SessionEpoch: epoch, EndpointIdentity: endpoint, KeyID: "original-creation"})
+	if e != nil {
+		return e
+	}
+	name, e := hash(map[string]string{"tenantId": scope.TenantID, "hostId": scope.HostID, "executionId": id.ExecutionID, "generation": id.Generation})
+	if e != nil {
+		return e
+	}
+	raw, e := hostfs.ReadPrivate(filepath.Join(s.dir, name+".creation.json"), 8192)
+	if e != nil {
+		return agent.ErrRecoveryRequired
+	}
+	var marker record
+	if json.Unmarshal(raw, &marker) != nil || marker.State != "CREATION_CLAIMED" {
+		return agent.ErrRecoveryRequired
+	}
+	want, e := hash(b)
+	if e != nil {
+		return e
+	}
+	actual, e := hash(marker.Binding)
+	if e != nil || want != actual {
+		return agent.ErrRecoveryRequired
+	}
+	return nil
+}
 
 // FenceNeverStarted preserves Runnerd05 proof construction under the SQLite
 // installation owner. Both commands must already be durably accepted. The

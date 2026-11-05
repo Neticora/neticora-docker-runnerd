@@ -8,6 +8,8 @@ import (
 )
 
 type Snapshot struct {
+	ExecutionReason  string `json:"executionReason,omitempty"`
+	ExecutionEnabled bool   `json:"executionEnabled,omitempty"`
 	State            string `json:"state"`
 	AdmissionEnabled bool   `json:"admissionEnabled"`
 	RuntimeQualified bool   `json:"runtimeQualified"`
@@ -15,6 +17,10 @@ type Snapshot struct {
 	RecoveryReason   string `json:"recoveryReason"`
 }
 type Server struct{}
+
+func (*Server) SetDurableDrain(func() error) {}
+
+func (*Server) ExposeExecutions(func(context.Context, string, string) (any, error)) {}
 
 func Listen(string, func() Snapshot, func(), func(string)) (*Server, error) {
 	return nil, errors.New("local control supports Linux only")

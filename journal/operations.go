@@ -51,6 +51,16 @@ func snapshot(schema string, raw []byte, out any) ([]byte, error) {
 // and local reservation have committed and their revision anchor is synced.
 // Exact durable replays use a read-only path independent of launch admission.
 func (s *SQLiteStore) AcceptCommand(ctx context.Context, scope agent.StoreScope, raw json.RawMessage) (receipt agent.Receipt, err error) {
+	return s.acceptCommand(ctx, scope, raw, true)
+}
+
+// Receipt recovers an exact durable duplicate without admitting new work. It
+// shares the integrity, metadata and cancellation-safe read path with acceptance.
+func (s *SQLiteStore) Receipt(ctx context.Context, scope agent.StoreScope, raw json.RawMessage) (agent.Receipt, error) {
+	return s.acceptCommand(ctx, scope, raw, false)
+}
+
+func (s *SQLiteStore) acceptCommand(ctx context.Context, scope agent.StoreScope, raw json.RawMessage, allowNew bool) (receipt agent.Receipt, err error) {
 	var doc commandDocument
 	canonical, err := snapshot("HostCommand", raw, &doc)
 	if err != nil {
@@ -112,6 +122,9 @@ func (s *SQLiteStore) AcceptCommand(ctx context.Context, scope agent.StoreScope,
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return receipt, s.receiptReadFailure(ctx, err)
+	}
+	if !allowNew {
+		return receipt, agent.ErrNotFound
 	}
 	err = s.transactionOwned(ctx, doc.Kind == "start", doc.Kind == "start", false, func(ctx context.Context, tx *sql.Tx) error {
 		if doc.Kind == "start" {
@@ -274,13 +287,14 @@ func (s *SQLiteStore) PutStartIntent(ctx context.Context, scope agent.StoreScope
 }
 
 type eventDocument struct {
-	EventID     string `json:"eventId"`
-	ExecutionID string `json:"executionId"`
-	AttemptID   string `json:"attemptId"`
-	Generation  string `json:"generation"`
-	Sequence    string `json:"sequence"`
-	PayloadHash string `json:"payloadHash"`
-	Observation *struct {
+	NeverStarted json.RawMessage `json:"neverStarted"`
+	EventID      string          `json:"eventId"`
+	ExecutionID  string          `json:"executionId"`
+	AttemptID    string          `json:"attemptId"`
+	Generation   string          `json:"generation"`
+	Sequence     string          `json:"sequence"`
+	PayloadHash  string          `json:"payloadHash"`
+	Observation  *struct {
 		RuntimeRef json.RawMessage `json:"runtimeRef"`
 		State      string          `json:"state"`
 		ObservedAt time.Time       `json:"observedAt"`
@@ -297,6 +311,13 @@ func (s *SQLiteStore) CompleteCleanup(ctx context.Context, scope agent.StoreScop
 	return s.record(ctx, scope, event, "complete", proof)
 }
 
+// CompleteNeverStarted requires a matching permanent FENCED creation record and
+// both durable server commands. It releases only an attempt that never crossed
+// creation, together with its required outgoing signed proof.
+func (s *SQLiteStore) CompleteNeverStarted(ctx context.Context, scope agent.StoreScope, event json.RawMessage) error {
+	return s.record(ctx, scope, event, "never", agent.AbsenceEvidence{})
+}
+
 func (s *SQLiteStore) record(ctx context.Context, scope agent.StoreScope, raw json.RawMessage, operation string, proof agent.AbsenceEvidence) error {
 	var doc eventDocument
 	canonical, err := snapshot("HostEvent", raw, &doc)
@@ -311,7 +332,10 @@ func (s *SQLiteStore) record(ctx context.Context, scope agent.StoreScope, raw js
 			return agent.ErrConflict
 		}
 	}
-	if operation != "observe" && (doc.Observation == nil || (operation == "cleanup" && doc.Observation.State != "cleanup-pending") || (operation == "complete" && doc.Observation.State != "cleaned")) {
+	if operation == "never" && (doc.Observation != nil || len(doc.NeverStarted) == 0) {
+		return agent.ErrConflict
+	}
+	if operation != "observe" && operation != "never" && (doc.Observation == nil || (operation == "cleanup" && doc.Observation.State != "cleanup-pending") || (operation == "complete" && doc.Observation.State != "cleaned")) {
 		return agent.ErrConflict
 	}
 	return s.write(ctx, operation == "complete", false, func(ctx context.Context, tx *sql.Tx) error {
@@ -347,6 +371,51 @@ func (s *SQLiteStore) record(ctx context.Context, scope agent.StoreScope, raw js
 		previous, _ := strconv.ParseUint(last, 10, 64)
 		if doc.AttemptID != id.AttemptID || previous == ^uint64(0) || seq != previous+1 {
 			return agent.ErrConflict
+		}
+		if operation == "never" {
+			if len(refRaw) != 0 || state != "accepted" || cleanup {
+				return agent.ErrConflict
+			}
+			var proof map[string]string
+			if json.Unmarshal(doc.NeverStarted, &proof) != nil {
+				return agent.ErrConflict
+			}
+			if proof["tenantId"] != scope.TenantID || proof["hostId"] != scope.HostID || proof["executionId"] != id.ExecutionID || proof["generation"] != id.Generation || proof["attemptId"] != id.AttemptID || proof["specHash"] != id.SpecHash || proof["endpointIdentity"] != endpoint || proof["sessionEpoch"] != scope.SessionEpoch {
+				return agent.ErrConflict
+			}
+			name, e := hash(map[string]string{"tenantId": scope.TenantID, "hostId": scope.HostID, "executionId": id.ExecutionID, "generation": id.Generation})
+			if e != nil {
+				return e
+			}
+			raw, e := hostfs.ReadPrivate(filepath.Join(s.dir, name+".creation.json"), 8192)
+			if e != nil {
+				return agent.ErrConflict
+			}
+			var marker record
+			if json.Unmarshal(raw, &marker) != nil || marker.State != "FENCED" || marker.JournalID != proof["journalId"] || marker.FencedAt != proof["fencedAt"] {
+				return agent.ErrConflict
+			}
+			for k, v := range marker.Binding {
+				if proof[k] != v {
+					return agent.ErrConflict
+				}
+			}
+			var fenceRaw, startRaw []byte
+			if e = tx.QueryRowContext(ctx, "SELECT payload FROM commands WHERE command_id=? AND execution_id=? AND generation=? AND kind='fence-never-started'", proof["fenceCommandId"], id.ExecutionID, id.Generation).Scan(&fenceRaw); e != nil {
+				return agent.ErrConflict
+			}
+			if e = tx.QueryRowContext(ctx, "SELECT payload FROM commands WHERE command_id=? AND kind='start'", proof["startCommandId"]).Scan(&startRaw); e != nil {
+				return agent.ErrConflict
+			}
+			var fence, start map[string]any
+			if json.Unmarshal(fenceRaw, &fence) != nil || json.Unmarshal(startRaw, &start) != nil || fence["payloadHash"] != proof["fencePayloadHash"] || fence["challenge"] != proof["challenge"] || start["payloadHash"] != proof["startPayloadHash"] {
+				return agent.ErrConflict
+			}
+			if _, e = tx.ExecContext(ctx, "UPDATE reservations SET released=1 WHERE execution_id=? AND generation=?", id.ExecutionID, id.Generation); e != nil {
+				return e
+			}
+			state = "cleaned"
+			terminal = true
 		}
 		if doc.Observation != nil {
 			if terminal && (doc.Observation.State == "running" || doc.Observation.State == "prepared") {
@@ -506,12 +575,10 @@ func (s *SQLiteStore) Reconcile(ctx context.Context, c agent.RecoveryCheckpoint)
 			}
 		}
 		var count int
-		if err := tx.QueryRowContext(ctx, "SELECT count(*) FROM executions").Scan(&count); err != nil {
+		if err := tx.QueryRowContext(ctx, "SELECT count(*) FROM executions WHERE state<>'cleaned' OR cleanup_pending=1 OR last_sequence>ack_sequence").Scan(&count); err != nil {
 			return err
 		}
-		if len(c.ServerWatermarks) != count {
-			return agent.ErrRecoveryRequired
-		}
+		covered := 0
 		seen := make(map[agent.ExecutionCursor]bool)
 		for _, w := range c.ServerWatermarks {
 			key := agent.ExecutionCursor{ExecutionID: w.ExecutionID, Generation: w.Generation}
@@ -519,16 +586,23 @@ func (s *SQLiteStore) Reconcile(ctx context.Context, c agent.RecoveryCheckpoint)
 				return agent.ErrConflict
 			}
 			seen[key] = true
-			var committed string
-			if err := tx.QueryRowContext(ctx, "SELECT ack_sequence FROM executions WHERE execution_id=? AND generation=?", w.ExecutionID, w.Generation).Scan(&committed); err != nil {
+			var committed, state, last string
+			var cleanup bool
+			if err := tx.QueryRowContext(ctx, "SELECT ack_sequence,state,last_sequence,cleanup_pending FROM executions WHERE execution_id=? AND generation=?", w.ExecutionID, w.Generation).Scan(&committed, &state, &last, &cleanup); err != nil {
 				return agent.ErrRecoveryRequired
 			}
 			if !validCounter(w.ContiguousSequence, true) || padded(w.ContiguousSequence) < committed {
 				return agent.ErrRecoveryRequired
 			}
+			if state != "cleaned" || cleanup || last > committed {
+				covered++
+			}
 			if err := ack(ctx, tx, w); err != nil {
 				return err
 			}
+		}
+		if covered != count {
+			return agent.ErrRecoveryRequired
 		}
 		raw, _ := json.Marshal(c.Scope)
 		_, err := tx.ExecContext(ctx, "UPDATE metadata SET scope=?,inventory_generation=?,inventory_observed_at=?,runtime_known=1 WHERE singleton=1", raw, c.InventoryGeneration, c.ObservedAt.UTC().Format(time.RFC3339Nano))
