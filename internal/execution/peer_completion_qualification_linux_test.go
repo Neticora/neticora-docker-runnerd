@@ -6,6 +6,9 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,6 +25,59 @@ type completionLabRemote struct {
 	*HostRemote
 	phase    string
 	ordinary int
+}
+
+func TestRunnerd08LiveReadiness(t *testing.T) {
+	if os.Getenv("RUNNERD08_READINESS_DIAGNOSTIC") != "1" {
+		t.Skip("dedicated drained Vagrant diagnostic only")
+	}
+	if os.Geteuid() == 0 {
+		t.Fatal("service identity required")
+	}
+	if _, err := os.Stat("/etc/neticora-runnerd-lab"); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := hostfs.ReadPrivate("/etc/neticora-runnerd/config.json", config.MaxConfigBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := config.Parse(raw)
+	if err != nil || c.Execution == nil || c.ControlPlaneURL != "https://platform.scvcluster.neticora.com/api/v1/runner-hosts" {
+		t.Fatal("isolated execution config required")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	policy, err := NewPolicyFile(c.Execution.PolicyFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := journal.OpenRecovery(ctx, c.StateDir, journal.Options{ReservationLimits: policy.Get().Limits()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	controller, cleanup, err := Open(c, store, policy, func() bool { return true })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	version, err := exec.Command("/usr/bin/runnerd", "--version").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	controller.Remote.(*HostRemote).Version = strings.TrimSpace(string(version))
+	state, err := controller.Remote.Recovery(ctx, nil)
+	if err != nil {
+		t.Fatalf("recovery read: %T %v", err, err)
+	}
+	t.Log("authenticated recovery read passed")
+	if err = controller.Remote.(*HostRemote).Heartbeat(ctx, state.InventoryGeneration); err != nil {
+		t.Fatalf("heartbeat: %T %v", err, err)
+	}
+	_, err = controller.refresh(ctx)
+	if err != nil {
+		t.Fatalf("drained refresh: %T %v", err, err)
+	}
 }
 
 func (r *completionLabRemote) PeerRecovery(ctx context.Context, id string, complete bool) ([]byte, error) {
@@ -73,8 +129,18 @@ func TestRunnerd08LivePeerCompletion(t *testing.T) {
 	if err != nil || len(approval.Manifest.Plan.Executions) != 0 {
 		t.Fatal("exact empty-host approval required")
 	}
-	if approval.Manifest.Plan.InstallationId != credentials.InstallationID || approval.Manifest.Plan.Challenge.Identity != credentials.Identity {
+	approvedIdentity := approval.Manifest.Plan.Challenge.Identity
+	oldEpoch, oldErr := strconv.ParseUint(credentials.Identity.SessionEpoch, 10, 64)
+	newEpoch, newErr := strconv.ParseUint(approvedIdentity.SessionEpoch, 10, 64)
+	if approval.Manifest.Plan.InstallationId != credentials.InstallationID || approvedIdentity.HostId != credentials.Identity.HostId || approvedIdentity.KeyId != credentials.Identity.KeyId || approvedIdentity.KeyVersion != credentials.Identity.KeyVersion || oldErr != nil || newErr != nil || newEpoch < oldEpoch {
 		t.Fatal("identity mismatch")
+	}
+	// Match the shipping administrative CLI: the normal assertion verifier must
+	// accept the independently resynchronized session; this writes no credentials.
+	credentials.Identity = approvedIdentity
+	credentials.BootID, err = actualBootID()
+	if err != nil || credentials.BootID != approval.Manifest.Plan.BootId {
+		t.Fatal("boot identity mismatch", err)
 	}
 	public, err := hostfs.ReadPrivate("/etc/neticora-runnerd/peer-recovery-public.pem", 16384)
 	if err != nil {
