@@ -22,7 +22,20 @@ type Authorization struct {
 // VerifyCommitted must receive the result of POST /me/recovery over the existing
 // authenticated host client, not an operator-supplied file. expected is the exact
 // frozen local plan. The caller must serialize this with its durable application.
+type NativeProgress struct{ ExecutionID, Generation, LastSequence, AckSequence string }
+
 func VerifyCommitted(raw, operatorPublicPEM []byte, expected protocol.PeerRecoveryPlan, now time.Time) (*Authorization, error) {
+	progress := make([]NativeProgress, 0, len(expected.Executions))
+	for _, e := range expected.Executions {
+		progress = append(progress, NativeProgress{e.ExecutionId, e.Generation, e.LastSequence, e.AckSequence})
+	}
+	return VerifyContinuing(raw, operatorPublicPEM, expected, progress, now)
+}
+
+// VerifyContinuing permits only progress already present in the protected native
+// journal. The operator's immutable initial plan is not rewritten after cleanup
+// events commit. A platform watermark can never exceed this freshly read suffix.
+func VerifyContinuing(raw, operatorPublicPEM []byte, expected protocol.PeerRecoveryPlan, progress []NativeProgress, now time.Time) (*Authorization, error) {
 	reply, err := protocol.DecodePeerRecoveryAuthorization(raw)
 	if err != nil || (reply.Status != "APPROVED" && reply.Status != "APPLIED") {
 		return nil, ErrApproval
@@ -47,6 +60,17 @@ func VerifyCommitted(raw, operatorPublicPEM []byte, expected protocol.PeerRecove
 	if len(reply.ServerWatermarks) != len(expected.Executions) {
 		return nil, ErrApproval
 	}
+	if len(progress) != len(expected.Executions) {
+		return nil, ErrApproval
+	}
+	bounds := map[string]NativeProgress{}
+	for _, p := range progress {
+		key := p.ExecutionID + "\x00" + p.Generation
+		if _, ok := bounds[key]; ok {
+			return nil, ErrApproval
+		}
+		bounds[key] = p
+	}
 	seen := map[string]bool{}
 	for _, w := range reply.ServerWatermarks {
 		key := w.ExecutionId + "\x00" + w.Generation
@@ -64,8 +88,17 @@ func VerifyCommitted(raw, operatorPublicPEM []byte, expected protocol.PeerRecove
 			if err != nil {
 				return nil, ErrApproval
 			}
-			ack, _ := strconv.ParseUint(e.AckSequence, 10, 64)
-			last, _ := strconv.ParseUint(e.LastSequence, 10, 64)
+			bound, ok := bounds[key]
+			if !ok {
+				return nil, ErrApproval
+			}
+			ack, ackErr := strconv.ParseUint(bound.AckSequence, 10, 64)
+			last, lastErr := strconv.ParseUint(bound.LastSequence, 10, 64)
+			originalAck, _ := strconv.ParseUint(e.AckSequence, 10, 64)
+			originalLast, _ := strconv.ParseUint(e.LastSequence, 10, 64)
+			if ackErr != nil || lastErr != nil || ack > last || ack < originalAck || last < originalLast {
+				return nil, ErrApproval
+			}
 			if seq < ack || seq > last {
 				return nil, ErrApproval
 			}
@@ -92,4 +125,52 @@ func (a *Authorization) Watermarks() []protocol.EventAck {
 }
 func (a *Authorization) Current(now time.Time) bool {
 	return a != nil && a.approval != nil && a.expiresAt.After(now) && !a.verifiedAt.After(now.Add(5*time.Second)) && now.Sub(a.verifiedAt) <= 10*time.Second
+}
+
+// Completion cannot be used as Docker mutation authorization.
+type Completion struct{ authorization *Authorization }
+
+func VerifyCompletion(raw, publicPEM []byte, expected protocol.PeerRecoveryPlan, progress []NativeProgress, now time.Time) (*Completion, error) {
+	reply, err := protocol.DecodePeerRecoveryAuthorization(raw)
+	if err != nil || reply.Status != "COMPLETED" {
+		return nil, ErrApproval
+	}
+	for _, p := range progress {
+		if p.AckSequence != p.LastSequence {
+			return nil, ErrApproval
+		}
+	}
+	for _, w := range reply.ServerWatermarks {
+		found := false
+		for _, p := range progress {
+			if p.ExecutionID == w.ExecutionId && p.Generation == w.Generation {
+				found = true
+				if w.ContiguousSequence != p.LastSequence {
+					return nil, ErrApproval
+				}
+			}
+		}
+		if !found {
+			return nil, ErrApproval
+		}
+	}
+	// All other identity/signature/freshness/snapshot rules are identical. This
+	// local conversion never escapes as an Authorization or changes wire bytes.
+	reply.Status = "APPLIED"
+	encoded, err := Canonical(reply)
+	if err != nil {
+		return nil, err
+	}
+	a, err := VerifyContinuing(encoded, publicPEM, expected, progress, now)
+	if err != nil {
+		return nil, err
+	}
+	return &Completion{authorization: a}, nil
+}
+func (c *Completion) Current(now time.Time) bool { return c != nil && c.authorization.Current(now) }
+func (c *Completion) ApprovalHash() string {
+	if c == nil {
+		return ""
+	}
+	return c.authorization.approval.Hash()
 }

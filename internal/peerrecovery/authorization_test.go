@@ -64,3 +64,38 @@ func TestCommittedAuthorizationRejectsFencingAndStaleSnapshots(t *testing.T) {
 		})
 	}
 }
+
+func TestContinuingAuthorityRequiresActualNativeSuffixAndFinalAck(t *testing.T) {
+	p := testPlan(t)
+	pub, key := testKey(t)
+	signed, err := protocol.DecodeSignedPeerRecoveryApproval(encodedApproval(t, testApproval(t, p), key))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reply := protocol.PeerRecoveryAuthorization{Approval: signed, Identity: p.Challenge.Identity, Status: "APPLIED", VerifiedAt: testNow.Format("2006-01-02T15:04:05.000Z"), ServerWatermarks: []protocol.EventAck{{ExecutionId: p.Executions[0].ExecutionId, Generation: "1", ContiguousSequence: "4"}}}
+	raw, _ := json.Marshal(reply)
+	if _, err := VerifyCommitted(raw, pub, p, testNow); !errors.Is(err, ErrApproval) {
+		t.Fatal("stale initial journal accepted")
+	}
+	native := []NativeProgress{{ExecutionID: p.Executions[0].ExecutionId, Generation: "1", LastSequence: "4", AckSequence: "3"}}
+	if _, err := VerifyContinuing(raw, pub, p, native, testNow); err != nil {
+		t.Fatal("durable suffix rejected", err)
+	}
+	native[0].LastSequence = "3"
+	if _, err := VerifyContinuing(raw, pub, p, native, testNow); !errors.Is(err, ErrApproval) {
+		t.Fatal("invented native suffix accepted")
+	}
+	native[0].LastSequence = "4"
+	reply.Status = "COMPLETED"
+	raw, _ = json.Marshal(reply)
+	if _, err := VerifyContinuing(raw, pub, p, native, testNow); !errors.Is(err, ErrApproval) {
+		t.Fatal("completion granted mutation authority")
+	}
+	if _, err := VerifyCompletion(raw, pub, p, native, testNow); !errors.Is(err, ErrApproval) {
+		t.Fatal("uncommitted final native ACK accepted")
+	}
+	native[0].AckSequence = "4"
+	if c, err := VerifyCompletion(raw, pub, p, native, testNow); err != nil || !c.Current(testNow) {
+		t.Fatal("final receipt rejected", err)
+	}
+}

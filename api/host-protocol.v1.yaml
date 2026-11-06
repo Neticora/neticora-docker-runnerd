@@ -2730,6 +2730,13 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 256
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "authorize",
+              "complete"
+            ]
           }
         },
         "required": [

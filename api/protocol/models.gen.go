@@ -381,6 +381,24 @@ func (e PeerRecoveryAbsenceWitnessDomain) Valid() bool {
 	}
 }
 
+// Defines values for PeerRecoveryAccessRequestOperation.
+const (
+	PeerRecoveryAccessRequestOperationAuthorize PeerRecoveryAccessRequestOperation = "authorize"
+	PeerRecoveryAccessRequestOperationComplete  PeerRecoveryAccessRequestOperation = "complete"
+)
+
+// Valid indicates whether the value is a known member of the PeerRecoveryAccessRequestOperation enum.
+func (e PeerRecoveryAccessRequestOperation) Valid() bool {
+	switch e {
+	case PeerRecoveryAccessRequestOperationAuthorize:
+		return true
+	case PeerRecoveryAccessRequestOperationComplete:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PeerRecoveryApprovalManifestDomain.
 const (
 	PeerRecoveryApprovalManifestDomainNeticoraRunnerdPeerRecoveryApprovalV1 PeerRecoveryApprovalManifestDomain = "neticora-runnerd-peer-recovery-approval-v1"
@@ -1088,8 +1106,12 @@ type PeerRecoveryAbsenceWitnessDomain string
 
 // PeerRecoveryAccessRequest defines model for PeerRecoveryAccessRequest.
 type PeerRecoveryAccessRequest struct {
-	ApprovalId string `json:"approvalId"`
+	ApprovalId string                              `json:"approvalId"`
+	Operation  *PeerRecoveryAccessRequestOperation `json:"operation,omitempty"`
 }
+
+// PeerRecoveryAccessRequestOperation defines model for PeerRecoveryAccessRequest.Operation.
+type PeerRecoveryAccessRequestOperation string
 
 // PeerRecoveryApprovalManifest defines model for PeerRecoveryApprovalManifest.
 type PeerRecoveryApprovalManifest struct {
