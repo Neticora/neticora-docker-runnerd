@@ -50,6 +50,10 @@ func (s *SQLiteStore) ControlCommands(ctx context.Context, id, generation string
 }
 
 func (s *SQLiteStore) PendingEvents(ctx context.Context, page agent.EventPage) ([]json.RawMessage, error) {
+	return s.pendingEvents(ctx, page, true)
+}
+
+func (s *SQLiteStore) pendingEvents(ctx context.Context, page agent.EventPage, requireSession bool) ([]json.RawMessage, error) {
 	if page.Limit < 1 || page.Limit > 100 || !validID(page.ExecutionID) || !validCounter(page.Generation, false) || !validCounter(page.AfterSequence, true) {
 		return nil, agent.ErrConflict
 	}
@@ -58,7 +62,7 @@ func (s *SQLiteStore) PendingEvents(ctx context.Context, page agent.EventPage) (
 		return nil, err
 	}
 	defer release()
-	if !s.sessionReady {
+	if requireSession && !s.sessionReady {
 		return nil, agent.ErrRecoveryRequired
 	}
 	if s.failed.Load() {

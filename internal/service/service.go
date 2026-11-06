@@ -47,13 +47,21 @@ func Run(ctx context.Context, c config.Config, socket string) error {
 	controllerCtx, stopController := context.WithCancel(ctx)
 	defer stopController()
 	var controller *execution.Controller
+	recoveryReason := ""
 	if executing {
 		var cleanup func()
 		controller, cleanup, err = execution.Open(c, store, policy, draining.Load)
-		if err != nil {
+		if errors.Is(err, agent.ErrRecoveryRequired) {
+			draining.Store(true)
+			recoveryReason = "operator-peer-recovery-required"
+			if err = persistDrain(drainFile); err != nil {
+				return err
+			}
+		} else if err != nil {
 			return err
+		} else {
+			defer cleanup()
 		}
-		defer cleanup()
 	}
 	server, err := control.Listen(socket, func() control.Snapshot {
 		state := "not-ready"
@@ -69,7 +77,7 @@ func Run(ctx context.Context, c config.Config, socket string) error {
 				state = "ready"
 			}
 		}
-		reason := ""
+		reason := recoveryReason
 		if controller != nil {
 			reason = controller.Status()
 		}

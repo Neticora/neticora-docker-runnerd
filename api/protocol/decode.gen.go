@@ -169,6 +169,69 @@ func DecodeNeverStartedProof(data []byte) (NeverStartedProof, error) {
 	return value, err
 }
 
+// DecodePeerRecoveryAbsenceWitness validates the original wire bytes before binding the generated model.
+func DecodePeerRecoveryAbsenceWitness(data []byte) (PeerRecoveryAbsenceWitness, error) {
+	var value PeerRecoveryAbsenceWitness
+	err := decode("PeerRecoveryAbsenceWitness", data, &value)
+	return value, err
+}
+
+// DecodePeerRecoveryAccessRequest validates the original wire bytes before binding the generated model.
+func DecodePeerRecoveryAccessRequest(data []byte) (PeerRecoveryAccessRequest, error) {
+	var value PeerRecoveryAccessRequest
+	err := decode("PeerRecoveryAccessRequest", data, &value)
+	return value, err
+}
+
+// DecodePeerRecoveryApprovalManifest validates the original wire bytes before binding the generated model.
+func DecodePeerRecoveryApprovalManifest(data []byte) (PeerRecoveryApprovalManifest, error) {
+	var value PeerRecoveryApprovalManifest
+	err := decode("PeerRecoveryApprovalManifest", data, &value)
+	return value, err
+}
+
+// DecodePeerRecoveryAuthorization validates the original wire bytes before binding the generated model.
+func DecodePeerRecoveryAuthorization(data []byte) (PeerRecoveryAuthorization, error) {
+	var value PeerRecoveryAuthorization
+	err := decode("PeerRecoveryAuthorization", data, &value)
+	return value, err
+}
+
+// DecodePeerRecoveryChallenge validates the original wire bytes before binding the generated model.
+func DecodePeerRecoveryChallenge(data []byte) (PeerRecoveryChallenge, error) {
+	var value PeerRecoveryChallenge
+	err := decode("PeerRecoveryChallenge", data, &value)
+	return value, err
+}
+
+// DecodePeerRecoveryDecision validates the original wire bytes before binding the generated model.
+func DecodePeerRecoveryDecision(data []byte) (PeerRecoveryDecision, error) {
+	var value PeerRecoveryDecision
+	err := decode("PeerRecoveryDecision", data, &value)
+	return value, err
+}
+
+// DecodePeerRecoveryEventReference validates the original wire bytes before binding the generated model.
+func DecodePeerRecoveryEventReference(data []byte) (PeerRecoveryEventReference, error) {
+	var value PeerRecoveryEventReference
+	err := decode("PeerRecoveryEventReference", data, &value)
+	return value, err
+}
+
+// DecodePeerRecoveryExecutionPlan validates the original wire bytes before binding the generated model.
+func DecodePeerRecoveryExecutionPlan(data []byte) (PeerRecoveryExecutionPlan, error) {
+	var value PeerRecoveryExecutionPlan
+	err := decode("PeerRecoveryExecutionPlan", data, &value)
+	return value, err
+}
+
+// DecodePeerRecoveryPlan validates the original wire bytes before binding the generated model.
+func DecodePeerRecoveryPlan(data []byte) (PeerRecoveryPlan, error) {
+	var value PeerRecoveryPlan
+	err := decode("PeerRecoveryPlan", data, &value)
+	return value, err
+}
+
 // DecodePlatform validates the original wire bytes before binding the generated model.
 func DecodePlatform(data []byte) (Platform, error) {
 	var value Platform
@@ -253,6 +316,20 @@ func DecodeRuntimeRef(data []byte) (RuntimeRef, error) {
 	return value, err
 }
 
+// DecodeSignedPeerRecoveryApproval validates the original wire bytes before binding the generated model.
+func DecodeSignedPeerRecoveryApproval(data []byte) (SignedPeerRecoveryApproval, error) {
+	var value SignedPeerRecoveryApproval
+	err := decode("SignedPeerRecoveryApproval", data, &value)
+	return value, err
+}
+
+// DecodeSignedPeerRecoveryPlan validates the original wire bytes before binding the generated model.
+func DecodeSignedPeerRecoveryPlan(data []byte) (SignedPeerRecoveryPlan, error) {
+	var value SignedPeerRecoveryPlan
+	err := decode("SignedPeerRecoveryPlan", data, &value)
+	return value, err
+}
+
 // DecodeStartCommand validates the original wire bytes before binding the generated model.
 func DecodeStartCommand(data []byte) (StartCommand, error) {
 	var value StartCommand
@@ -303,47 +380,58 @@ func DecodeUInt64String(data []byte) (UInt64String, error) {
 }
 
 var wireDecoders = map[string]func([]byte) (any, error){
-	"BootstrapEnvelope":     func(data []byte) (any, error) { return DecodeBootstrapEnvelope(data) },
-	"CommandAck":            func(data []byte) (any, error) { return DecodeCommandAck(data) },
-	"ConfigResponse":        func(data []byte) (any, error) { return DecodeConfigResponse(data) },
-	"ControlCommand":        func(data []byte) (any, error) { return DecodeControlCommand(data) },
-	"CustomerManagedPolicy": func(data []byte) (any, error) { return DecodeCustomerManagedPolicy(data) },
-	"CustomerPolicy":        func(data []byte) (any, error) { return DecodeCustomerPolicy(data) },
-	"DecimalString":         func(data []byte) (any, error) { return DecodeDecimalString(data) },
-	"Digest":                func(data []byte) (any, error) { return DecodeDigest(data) },
-	"EnrollmentRequest":     func(data []byte) (any, error) { return DecodeEnrollmentRequest(data) },
-	"EnrollmentResponse":    func(data []byte) (any, error) { return DecodeEnrollmentResponse(data) },
-	"EventAck":              func(data []byte) (any, error) { return DecodeEventAck(data) },
-	"EventBatch":            func(data []byte) (any, error) { return DecodeEventBatch(data) },
-	"ExecutionSpec":         func(data []byte) (any, error) { return DecodeExecutionSpec(data) },
-	"Generation":            func(data []byte) (any, error) { return DecodeGeneration(data) },
-	"HostCapabilities":      func(data []byte) (any, error) { return DecodeHostCapabilities(data) },
-	"HostCommand":           func(data []byte) (any, error) { return DecodeHostCommand(data) },
-	"HostEvent":             func(data []byte) (any, error) { return DecodeHostEvent(data) },
-	"HostHeartbeat":         func(data []byte) (any, error) { return DecodeHostHeartbeat(data) },
-	"HostIdentity":          func(data []byte) (any, error) { return DecodeHostIdentity(data) },
-	"InventorySnapshot":     func(data []byte) (any, error) { return DecodeInventorySnapshot(data) },
-	"KeyRotationRequest":    func(data []byte) (any, error) { return DecodeKeyRotationRequest(data) },
-	"LocalPolicy":           func(data []byte) (any, error) { return DecodeLocalPolicy(data) },
-	"NeverStartedCommand":   func(data []byte) (any, error) { return DecodeNeverStartedCommand(data) },
-	"NeverStartedProof":     func(data []byte) (any, error) { return DecodeNeverStartedProof(data) },
-	"Platform":              func(data []byte) (any, error) { return DecodePlatform(data) },
-	"Problem":               func(data []byte) (any, error) { return DecodeProblem(data) },
-	"ProtocolCompatibility": func(data []byte) (any, error) { return DecodeProtocolCompatibility(data) },
-	"ProviderObservation":   func(data []byte) (any, error) { return DecodeProviderObservation(data) },
-	"Receipt":               func(data []byte) (any, error) { return DecodeReceipt(data) },
-	"RecoveryEntry":         func(data []byte) (any, error) { return DecodeRecoveryEntry(data) },
-	"RecoveryLookup":        func(data []byte) (any, error) { return DecodeRecoveryLookup(data) },
-	"RecoveryRequest":       func(data []byte) (any, error) { return DecodeRecoveryRequest(data) },
-	"RecoveryState":         func(data []byte) (any, error) { return DecodeRecoveryState(data) },
-	"ResourceBudget":        func(data []byte) (any, error) { return DecodeResourceBudget(data) },
-	"RuntimeObservation":    func(data []byte) (any, error) { return DecodeRuntimeObservation(data) },
-	"RuntimeRef":            func(data []byte) (any, error) { return DecodeRuntimeRef(data) },
-	"StartCommand":          func(data []byte) (any, error) { return DecodeStartCommand(data) },
-	"StartRequest":          func(data []byte) (any, error) { return DecodeStartRequest(data) },
-	"StartResponse":         func(data []byte) (any, error) { return DecodeStartResponse(data) },
-	"Timestamp":             func(data []byte) (any, error) { return DecodeTimestamp(data) },
-	"TokenRequest":          func(data []byte) (any, error) { return DecodeTokenRequest(data) },
-	"TokenResponse":         func(data []byte) (any, error) { return DecodeTokenResponse(data) },
-	"UInt64String":          func(data []byte) (any, error) { return DecodeUInt64String(data) },
+	"BootstrapEnvelope":            func(data []byte) (any, error) { return DecodeBootstrapEnvelope(data) },
+	"CommandAck":                   func(data []byte) (any, error) { return DecodeCommandAck(data) },
+	"ConfigResponse":               func(data []byte) (any, error) { return DecodeConfigResponse(data) },
+	"ControlCommand":               func(data []byte) (any, error) { return DecodeControlCommand(data) },
+	"CustomerManagedPolicy":        func(data []byte) (any, error) { return DecodeCustomerManagedPolicy(data) },
+	"CustomerPolicy":               func(data []byte) (any, error) { return DecodeCustomerPolicy(data) },
+	"DecimalString":                func(data []byte) (any, error) { return DecodeDecimalString(data) },
+	"Digest":                       func(data []byte) (any, error) { return DecodeDigest(data) },
+	"EnrollmentRequest":            func(data []byte) (any, error) { return DecodeEnrollmentRequest(data) },
+	"EnrollmentResponse":           func(data []byte) (any, error) { return DecodeEnrollmentResponse(data) },
+	"EventAck":                     func(data []byte) (any, error) { return DecodeEventAck(data) },
+	"EventBatch":                   func(data []byte) (any, error) { return DecodeEventBatch(data) },
+	"ExecutionSpec":                func(data []byte) (any, error) { return DecodeExecutionSpec(data) },
+	"Generation":                   func(data []byte) (any, error) { return DecodeGeneration(data) },
+	"HostCapabilities":             func(data []byte) (any, error) { return DecodeHostCapabilities(data) },
+	"HostCommand":                  func(data []byte) (any, error) { return DecodeHostCommand(data) },
+	"HostEvent":                    func(data []byte) (any, error) { return DecodeHostEvent(data) },
+	"HostHeartbeat":                func(data []byte) (any, error) { return DecodeHostHeartbeat(data) },
+	"HostIdentity":                 func(data []byte) (any, error) { return DecodeHostIdentity(data) },
+	"InventorySnapshot":            func(data []byte) (any, error) { return DecodeInventorySnapshot(data) },
+	"KeyRotationRequest":           func(data []byte) (any, error) { return DecodeKeyRotationRequest(data) },
+	"LocalPolicy":                  func(data []byte) (any, error) { return DecodeLocalPolicy(data) },
+	"NeverStartedCommand":          func(data []byte) (any, error) { return DecodeNeverStartedCommand(data) },
+	"NeverStartedProof":            func(data []byte) (any, error) { return DecodeNeverStartedProof(data) },
+	"PeerRecoveryAbsenceWitness":   func(data []byte) (any, error) { return DecodePeerRecoveryAbsenceWitness(data) },
+	"PeerRecoveryAccessRequest":    func(data []byte) (any, error) { return DecodePeerRecoveryAccessRequest(data) },
+	"PeerRecoveryApprovalManifest": func(data []byte) (any, error) { return DecodePeerRecoveryApprovalManifest(data) },
+	"PeerRecoveryAuthorization":    func(data []byte) (any, error) { return DecodePeerRecoveryAuthorization(data) },
+	"PeerRecoveryChallenge":        func(data []byte) (any, error) { return DecodePeerRecoveryChallenge(data) },
+	"PeerRecoveryDecision":         func(data []byte) (any, error) { return DecodePeerRecoveryDecision(data) },
+	"PeerRecoveryEventReference":   func(data []byte) (any, error) { return DecodePeerRecoveryEventReference(data) },
+	"PeerRecoveryExecutionPlan":    func(data []byte) (any, error) { return DecodePeerRecoveryExecutionPlan(data) },
+	"PeerRecoveryPlan":             func(data []byte) (any, error) { return DecodePeerRecoveryPlan(data) },
+	"Platform":                     func(data []byte) (any, error) { return DecodePlatform(data) },
+	"Problem":                      func(data []byte) (any, error) { return DecodeProblem(data) },
+	"ProtocolCompatibility":        func(data []byte) (any, error) { return DecodeProtocolCompatibility(data) },
+	"ProviderObservation":          func(data []byte) (any, error) { return DecodeProviderObservation(data) },
+	"Receipt":                      func(data []byte) (any, error) { return DecodeReceipt(data) },
+	"RecoveryEntry":                func(data []byte) (any, error) { return DecodeRecoveryEntry(data) },
+	"RecoveryLookup":               func(data []byte) (any, error) { return DecodeRecoveryLookup(data) },
+	"RecoveryRequest":              func(data []byte) (any, error) { return DecodeRecoveryRequest(data) },
+	"RecoveryState":                func(data []byte) (any, error) { return DecodeRecoveryState(data) },
+	"ResourceBudget":               func(data []byte) (any, error) { return DecodeResourceBudget(data) },
+	"RuntimeObservation":           func(data []byte) (any, error) { return DecodeRuntimeObservation(data) },
+	"RuntimeRef":                   func(data []byte) (any, error) { return DecodeRuntimeRef(data) },
+	"SignedPeerRecoveryApproval":   func(data []byte) (any, error) { return DecodeSignedPeerRecoveryApproval(data) },
+	"SignedPeerRecoveryPlan":       func(data []byte) (any, error) { return DecodeSignedPeerRecoveryPlan(data) },
+	"StartCommand":                 func(data []byte) (any, error) { return DecodeStartCommand(data) },
+	"StartRequest":                 func(data []byte) (any, error) { return DecodeStartRequest(data) },
+	"StartResponse":                func(data []byte) (any, error) { return DecodeStartResponse(data) },
+	"Timestamp":                    func(data []byte) (any, error) { return DecodeTimestamp(data) },
+	"TokenRequest":                 func(data []byte) (any, error) { return DecodeTokenRequest(data) },
+	"TokenResponse":                func(data []byte) (any, error) { return DecodeTokenResponse(data) },
+	"UInt64String":                 func(data []byte) (any, error) { return DecodeUInt64String(data) },
 }

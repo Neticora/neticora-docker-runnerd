@@ -366,6 +366,171 @@ func (e LocalPolicyAllowedTrustClasses) Valid() bool {
 	}
 }
 
+// Defines values for PeerRecoveryAbsenceWitnessDomain.
+const (
+	PeerRecoveryAbsenceWitnessDomainNeticoraRunnerdPhysicalAbsenceV1 PeerRecoveryAbsenceWitnessDomain = "neticora-runnerd-physical-absence-v1"
+)
+
+// Valid indicates whether the value is a known member of the PeerRecoveryAbsenceWitnessDomain enum.
+func (e PeerRecoveryAbsenceWitnessDomain) Valid() bool {
+	switch e {
+	case PeerRecoveryAbsenceWitnessDomainNeticoraRunnerdPhysicalAbsenceV1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PeerRecoveryAccessRequestOperation.
+const (
+	PeerRecoveryAccessRequestOperationAuthorize PeerRecoveryAccessRequestOperation = "authorize"
+	PeerRecoveryAccessRequestOperationComplete  PeerRecoveryAccessRequestOperation = "complete"
+)
+
+// Valid indicates whether the value is a known member of the PeerRecoveryAccessRequestOperation enum.
+func (e PeerRecoveryAccessRequestOperation) Valid() bool {
+	switch e {
+	case PeerRecoveryAccessRequestOperationAuthorize:
+		return true
+	case PeerRecoveryAccessRequestOperationComplete:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PeerRecoveryApprovalManifestDomain.
+const (
+	PeerRecoveryApprovalManifestDomainNeticoraRunnerdPeerRecoveryApprovalV1 PeerRecoveryApprovalManifestDomain = "neticora-runnerd-peer-recovery-approval-v1"
+)
+
+// Valid indicates whether the value is a known member of the PeerRecoveryApprovalManifestDomain enum.
+func (e PeerRecoveryApprovalManifestDomain) Valid() bool {
+	switch e {
+	case PeerRecoveryApprovalManifestDomainNeticoraRunnerdPeerRecoveryApprovalV1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PeerRecoveryAuthorizationStatus.
+const (
+	PeerRecoveryAuthorizationStatusAPPLIED   PeerRecoveryAuthorizationStatus = "APPLIED"
+	PeerRecoveryAuthorizationStatusAPPROVED  PeerRecoveryAuthorizationStatus = "APPROVED"
+	PeerRecoveryAuthorizationStatusCOMPLETED PeerRecoveryAuthorizationStatus = "COMPLETED"
+	PeerRecoveryAuthorizationStatusHOLD      PeerRecoveryAuthorizationStatus = "HOLD"
+	PeerRecoveryAuthorizationStatusREVOKED   PeerRecoveryAuthorizationStatus = "REVOKED"
+)
+
+// Valid indicates whether the value is a known member of the PeerRecoveryAuthorizationStatus enum.
+func (e PeerRecoveryAuthorizationStatus) Valid() bool {
+	switch e {
+	case PeerRecoveryAuthorizationStatusAPPLIED:
+		return true
+	case PeerRecoveryAuthorizationStatusAPPROVED:
+		return true
+	case PeerRecoveryAuthorizationStatusCOMPLETED:
+		return true
+	case PeerRecoveryAuthorizationStatusHOLD:
+		return true
+	case PeerRecoveryAuthorizationStatusREVOKED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PeerRecoveryDecisionAction.
+const (
+	PeerRecoveryDecisionActionCleanup           PeerRecoveryDecisionAction = "cleanup"
+	PeerRecoveryDecisionActionHold              PeerRecoveryDecisionAction = "hold"
+	PeerRecoveryDecisionActionObserveAndCleanup PeerRecoveryDecisionAction = "observe-and-cleanup"
+	PeerRecoveryDecisionActionReplayFinalAck    PeerRecoveryDecisionAction = "replay-final-ack"
+	PeerRecoveryDecisionActionVerifyAbsent      PeerRecoveryDecisionAction = "verify-absent"
+)
+
+// Valid indicates whether the value is a known member of the PeerRecoveryDecisionAction enum.
+func (e PeerRecoveryDecisionAction) Valid() bool {
+	switch e {
+	case PeerRecoveryDecisionActionCleanup:
+		return true
+	case PeerRecoveryDecisionActionHold:
+		return true
+	case PeerRecoveryDecisionActionObserveAndCleanup:
+		return true
+	case PeerRecoveryDecisionActionReplayFinalAck:
+		return true
+	case PeerRecoveryDecisionActionVerifyAbsent:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PeerRecoveryExecutionPlanCreationClaim.
+const (
+	PeerRecoveryExecutionPlanCreationClaimAmbiguous  PeerRecoveryExecutionPlanCreationClaim = "ambiguous"
+	PeerRecoveryExecutionPlanCreationClaimNotClaimed PeerRecoveryExecutionPlanCreationClaim = "not-claimed"
+	PeerRecoveryExecutionPlanCreationClaimVerified   PeerRecoveryExecutionPlanCreationClaim = "verified"
+)
+
+// Valid indicates whether the value is a known member of the PeerRecoveryExecutionPlanCreationClaim enum.
+func (e PeerRecoveryExecutionPlanCreationClaim) Valid() bool {
+	switch e {
+	case PeerRecoveryExecutionPlanCreationClaimAmbiguous:
+		return true
+	case PeerRecoveryExecutionPlanCreationClaimNotClaimed:
+		return true
+	case PeerRecoveryExecutionPlanCreationClaimVerified:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PeerRecoveryExecutionPlanObservedState.
+const (
+	PeerRecoveryExecutionPlanObservedStateAbsent   PeerRecoveryExecutionPlanObservedState = "absent"
+	PeerRecoveryExecutionPlanObservedStateExited   PeerRecoveryExecutionPlanObservedState = "exited"
+	PeerRecoveryExecutionPlanObservedStatePrepared PeerRecoveryExecutionPlanObservedState = "prepared"
+	PeerRecoveryExecutionPlanObservedStateRunning  PeerRecoveryExecutionPlanObservedState = "running"
+	PeerRecoveryExecutionPlanObservedStateUnknown  PeerRecoveryExecutionPlanObservedState = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the PeerRecoveryExecutionPlanObservedState enum.
+func (e PeerRecoveryExecutionPlanObservedState) Valid() bool {
+	switch e {
+	case PeerRecoveryExecutionPlanObservedStateAbsent:
+		return true
+	case PeerRecoveryExecutionPlanObservedStateExited:
+		return true
+	case PeerRecoveryExecutionPlanObservedStatePrepared:
+		return true
+	case PeerRecoveryExecutionPlanObservedStateRunning:
+		return true
+	case PeerRecoveryExecutionPlanObservedStateUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PeerRecoveryPlanDomain.
+const (
+	PeerRecoveryPlanDomainNeticoraRunnerdPeerRecoveryPlanV1 PeerRecoveryPlanDomain = "neticora-runnerd-peer-recovery-plan-v1"
+)
+
+// Valid indicates whether the value is a known member of the PeerRecoveryPlanDomain enum.
+func (e PeerRecoveryPlanDomain) Valid() bool {
+	switch e {
+	case PeerRecoveryPlanDomainNeticoraRunnerdPeerRecoveryPlanV1:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PlatformArchitecture.
 const (
 	PlatformArchitectureAmd64 PlatformArchitecture = "amd64"
@@ -928,6 +1093,125 @@ type NeverStartedProof struct {
 	TenantId         string      `json:"tenantId"`
 }
 
+// PeerRecoveryAbsenceWitness defines model for PeerRecoveryAbsenceWitness.
+type PeerRecoveryAbsenceWitness struct {
+	Domain     PeerRecoveryAbsenceWitnessDomain `json:"domain"`
+	ObservedAt Timestamp                        `json:"observedAt"`
+	Reference  string                           `json:"reference"`
+	Sha256     Digest                           `json:"sha256"`
+}
+
+// PeerRecoveryAbsenceWitnessDomain defines model for PeerRecoveryAbsenceWitness.Domain.
+type PeerRecoveryAbsenceWitnessDomain string
+
+// PeerRecoveryAccessRequest defines model for PeerRecoveryAccessRequest.
+type PeerRecoveryAccessRequest struct {
+	ApprovalId string                              `json:"approvalId"`
+	Operation  *PeerRecoveryAccessRequestOperation `json:"operation,omitempty"`
+}
+
+// PeerRecoveryAccessRequestOperation defines model for PeerRecoveryAccessRequest.Operation.
+type PeerRecoveryAccessRequestOperation string
+
+// PeerRecoveryApprovalManifest defines model for PeerRecoveryApprovalManifest.
+type PeerRecoveryApprovalManifest struct {
+	ApprovalId     string                             `json:"approvalId"`
+	AuditReference string                             `json:"auditReference"`
+	Decisions      []PeerRecoveryDecision             `json:"decisions"`
+	Domain         PeerRecoveryApprovalManifestDomain `json:"domain"`
+	ExpiresAt      Timestamp                          `json:"expiresAt"`
+	IssuedAt       Timestamp                          `json:"issuedAt"`
+	Plan           PeerRecoveryPlan                   `json:"plan"`
+	PlanHash       Digest                             `json:"planHash"`
+}
+
+// PeerRecoveryApprovalManifestDomain defines model for PeerRecoveryApprovalManifest.Domain.
+type PeerRecoveryApprovalManifestDomain string
+
+// PeerRecoveryAuthorization defines model for PeerRecoveryAuthorization.
+type PeerRecoveryAuthorization struct {
+	Approval         SignedPeerRecoveryApproval      `json:"approval"`
+	Identity         HostIdentity                    `json:"identity"`
+	ServerWatermarks []EventAck                      `json:"serverWatermarks"`
+	Status           PeerRecoveryAuthorizationStatus `json:"status"`
+	VerifiedAt       Timestamp                       `json:"verifiedAt"`
+}
+
+// PeerRecoveryAuthorizationStatus defines model for PeerRecoveryAuthorization.Status.
+type PeerRecoveryAuthorizationStatus string
+
+// PeerRecoveryChallenge defines model for PeerRecoveryChallenge.
+type PeerRecoveryChallenge struct {
+	ChallengeId        string       `json:"challengeId"`
+	ExpiresAt          Timestamp    `json:"expiresAt"`
+	Identity           HostIdentity `json:"identity"`
+	Nonce              string       `json:"nonce"`
+	ServerSnapshotHash Digest       `json:"serverSnapshotHash"`
+	TenantId           string       `json:"tenantId"`
+}
+
+// PeerRecoveryDecision defines model for PeerRecoveryDecision.
+type PeerRecoveryDecision struct {
+	AbsenceWitness *PeerRecoveryAbsenceWitness `json:"absenceWitness,omitempty"`
+	Action         PeerRecoveryDecisionAction  `json:"action"`
+	ExecutionId    string                      `json:"executionId"`
+	Generation     Generation                  `json:"generation"`
+}
+
+// PeerRecoveryDecisionAction defines model for PeerRecoveryDecision.Action.
+type PeerRecoveryDecisionAction string
+
+// PeerRecoveryEventReference defines model for PeerRecoveryEventReference.
+type PeerRecoveryEventReference struct {
+	EventId     string     `json:"eventId"`
+	PayloadHash Digest     `json:"payloadHash"`
+	Sequence    Generation `json:"sequence"`
+}
+
+// PeerRecoveryExecutionPlan defines model for PeerRecoveryExecutionPlan.
+type PeerRecoveryExecutionPlan struct {
+	AckSequence          UInt64String                           `json:"ackSequence"`
+	CreationClaim        PeerRecoveryExecutionPlanCreationClaim `json:"creationClaim"`
+	ExecutionId          string                                 `json:"executionId"`
+	Generation           Generation                             `json:"generation"`
+	InspectionHash       Digest                                 `json:"inspectionHash"`
+	LastSequence         UInt64String                           `json:"lastSequence"`
+	NativeState          string                                 `json:"nativeState"`
+	ObservedResourceId   *string                                `json:"observedResourceId,omitempty"`
+	ObservedState        PeerRecoveryExecutionPlanObservedState `json:"observedState"`
+	OriginalRuntimeRef   *RuntimeRef                            `json:"originalRuntimeRef,omitempty"`
+	OriginalSessionEpoch Generation                             `json:"originalSessionEpoch"`
+	PendingEvents        []PeerRecoveryEventReference           `json:"pendingEvents"`
+	SpecHash             Digest                                 `json:"specHash"`
+	StartCommandHash     Digest                                 `json:"startCommandHash"`
+}
+
+// PeerRecoveryExecutionPlanCreationClaim defines model for PeerRecoveryExecutionPlan.CreationClaim.
+type PeerRecoveryExecutionPlanCreationClaim string
+
+// PeerRecoveryExecutionPlanObservedState defines model for PeerRecoveryExecutionPlan.ObservedState.
+type PeerRecoveryExecutionPlanObservedState string
+
+// PeerRecoveryPlan defines model for PeerRecoveryPlan.
+type PeerRecoveryPlan struct {
+	AgentVersion           string                      `json:"agentVersion"`
+	BootId                 string                      `json:"bootId"`
+	Challenge              PeerRecoveryChallenge       `json:"challenge"`
+	Domain                 PeerRecoveryPlanDomain      `json:"domain"`
+	Executions             []PeerRecoveryExecutionPlan `json:"executions"`
+	InstallationId         string                      `json:"installationId"`
+	InventoryGeneration    Generation                  `json:"inventoryGeneration"`
+	InventoryHash          Digest                      `json:"inventoryHash"`
+	JournalId              string                      `json:"journalId"`
+	JournalRevision        UInt64String                `json:"journalRevision"`
+	ObservedAt             Timestamp                   `json:"observedAt"`
+	SourceEndpointIdentity string                      `json:"sourceEndpointIdentity"`
+	TargetEndpointIdentity string                      `json:"targetEndpointIdentity"`
+}
+
+// PeerRecoveryPlanDomain defines model for PeerRecoveryPlan.Domain.
+type PeerRecoveryPlanDomain string
+
 // Platform defines model for Platform.
 type Platform struct {
 	Architecture PlatformArchitecture `json:"architecture"`
@@ -1045,6 +1329,18 @@ type RuntimeRef struct {
 // RuntimeRefEngine defines model for RuntimeRef.Engine.
 type RuntimeRefEngine string
 
+// SignedPeerRecoveryApproval defines model for SignedPeerRecoveryApproval.
+type SignedPeerRecoveryApproval struct {
+	Manifest  PeerRecoveryApprovalManifest `json:"manifest"`
+	Signature string                       `json:"signature"`
+}
+
+// SignedPeerRecoveryPlan defines model for SignedPeerRecoveryPlan.
+type SignedPeerRecoveryPlan struct {
+	Plan      PeerRecoveryPlan `json:"plan"`
+	Signature string           `json:"signature"`
+}
+
 // StartCommand defines model for StartCommand.
 type StartCommand struct {
 	CommandId   string           `json:"commandId"`
@@ -1100,6 +1396,16 @@ type TokenResponse struct {
 // UInt64String defines model for UInt64String.
 type UInt64String = string
 
+// LookupRecoveryStateJSONBody defines parameters for LookupRecoveryState.
+type LookupRecoveryStateJSONBody struct {
+	union json.RawMessage
+}
+
+// LookupRecoveryState200JSONResponseBody defines parameters for LookupRecoveryState.
+type LookupRecoveryState200JSONResponseBody struct {
+	union json.RawMessage
+}
+
 // EnrollmentResponseEnrollJSONRequestBody defines body for EnrollmentResponseEnroll for application/json ContentType.
 type EnrollmentResponseEnrollJSONRequestBody = EnrollmentRequest
 
@@ -1119,7 +1425,7 @@ type ReceiptMeInventoryJSONRequestBody = InventorySnapshot
 type EnrollmentResponseMeKeysRotateJSONRequestBody = KeyRotationRequest
 
 // LookupRecoveryStateJSONRequestBody defines body for LookupRecoveryState for application/json ContentType.
-type LookupRecoveryStateJSONRequestBody = RecoveryRequest
+type LookupRecoveryStateJSONRequestBody LookupRecoveryStateJSONBody
 
 // StartResponseMeStartJSONRequestBody defines body for StartResponseMeStart for application/json ContentType.
 type StartResponseMeStartJSONRequestBody = StartRequest
@@ -1468,5 +1774,129 @@ func (t *HostEvent) UnmarshalJSON(b []byte) error {
 		}
 	}
 
+	return err
+}
+
+// AsRecoveryRequest returns the union data inside the LookupRecoveryStateJSONBody as a RecoveryRequest
+func (t LookupRecoveryStateJSONBody) AsRecoveryRequest() (RecoveryRequest, error) {
+	var body RecoveryRequest
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRecoveryRequest overwrites any union data inside the LookupRecoveryStateJSONBody as the provided RecoveryRequest
+func (t *LookupRecoveryStateJSONBody) FromRecoveryRequest(v RecoveryRequest) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRecoveryRequest performs a merge with any union data inside the LookupRecoveryStateJSONBody, using the provided RecoveryRequest
+func (t *LookupRecoveryStateJSONBody) MergeRecoveryRequest(v RecoveryRequest) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsPeerRecoveryAccessRequest returns the union data inside the LookupRecoveryStateJSONBody as a PeerRecoveryAccessRequest
+func (t LookupRecoveryStateJSONBody) AsPeerRecoveryAccessRequest() (PeerRecoveryAccessRequest, error) {
+	var body PeerRecoveryAccessRequest
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromPeerRecoveryAccessRequest overwrites any union data inside the LookupRecoveryStateJSONBody as the provided PeerRecoveryAccessRequest
+func (t *LookupRecoveryStateJSONBody) FromPeerRecoveryAccessRequest(v PeerRecoveryAccessRequest) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergePeerRecoveryAccessRequest performs a merge with any union data inside the LookupRecoveryStateJSONBody, using the provided PeerRecoveryAccessRequest
+func (t *LookupRecoveryStateJSONBody) MergePeerRecoveryAccessRequest(v PeerRecoveryAccessRequest) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t LookupRecoveryStateJSONBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *LookupRecoveryStateJSONBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsRecoveryState returns the union data inside the LookupRecoveryState200JSONResponseBody as a RecoveryState
+func (t LookupRecoveryState200JSONResponseBody) AsRecoveryState() (RecoveryState, error) {
+	var body RecoveryState
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRecoveryState overwrites any union data inside the LookupRecoveryState200JSONResponseBody as the provided RecoveryState
+func (t *LookupRecoveryState200JSONResponseBody) FromRecoveryState(v RecoveryState) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRecoveryState performs a merge with any union data inside the LookupRecoveryState200JSONResponseBody, using the provided RecoveryState
+func (t *LookupRecoveryState200JSONResponseBody) MergeRecoveryState(v RecoveryState) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsPeerRecoveryAuthorization returns the union data inside the LookupRecoveryState200JSONResponseBody as a PeerRecoveryAuthorization
+func (t LookupRecoveryState200JSONResponseBody) AsPeerRecoveryAuthorization() (PeerRecoveryAuthorization, error) {
+	var body PeerRecoveryAuthorization
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromPeerRecoveryAuthorization overwrites any union data inside the LookupRecoveryState200JSONResponseBody as the provided PeerRecoveryAuthorization
+func (t *LookupRecoveryState200JSONResponseBody) FromPeerRecoveryAuthorization(v PeerRecoveryAuthorization) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergePeerRecoveryAuthorization performs a merge with any union data inside the LookupRecoveryState200JSONResponseBody, using the provided PeerRecoveryAuthorization
+func (t *LookupRecoveryState200JSONResponseBody) MergePeerRecoveryAuthorization(v PeerRecoveryAuthorization) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t LookupRecoveryState200JSONResponseBody) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *LookupRecoveryState200JSONResponseBody) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
 	return err
 }

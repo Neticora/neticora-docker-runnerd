@@ -27,7 +27,7 @@ var migrations embed.FS
 
 const databaseName = "journal.db"
 const anchorName = "recovery.anchor.json"
-const schemaVersion = 1
+const schemaVersion = 3
 
 type Options struct {
 	// Zero values select conservative defaults, never unlimited growth.
@@ -174,7 +174,7 @@ func OpenRecovery(ctx context.Context, path string, options Options) (_ *SQLiteS
 		if e != nil || closeErr != nil {
 			return nil, agent.ErrStoreUnavailable
 		}
-		if version != schemaVersion {
+		if version < 1 || version > schemaVersion {
 			return nil, errors.New("unsupported recovery schema; preserve database")
 		}
 	}
@@ -259,18 +259,23 @@ func (s *SQLiteStore) migrate(ctx context.Context, fresh bool) error {
 		return agent.ErrStoreUnavailable
 	}
 	defer tx.Rollback()
-	raw, err := migrations.ReadFile("migrations/001_initial.sql")
-	if err != nil {
-		return err
-	}
-	if _, err = tx.ExecContext(ctx, string(raw)); err != nil {
-		return agent.ErrStoreUnavailable
-	}
-	if _, err = tx.ExecContext(ctx, "INSERT INTO metadata(singleton,journal_id,revision) VALUES(1,?,0)", s.anchor.JournalID); err != nil {
-		return agent.ErrStoreUnavailable
-	}
-	if _, err = tx.ExecContext(ctx, "PRAGMA user_version=1"); err != nil {
-		return agent.ErrStoreUnavailable
+	for next := version + 1; next <= schemaVersion; next++ {
+		name := map[int]string{1: "migrations/001_initial.sql", 2: "migrations/002_peer_recovery.sql", 3: "migrations/003_peer_recovery_completion.sql"}[next]
+		raw, e := migrations.ReadFile(name)
+		if e != nil {
+			return e
+		}
+		if _, e = tx.ExecContext(ctx, string(raw)); e != nil {
+			return agent.ErrStoreUnavailable
+		}
+		if next == 1 {
+			if _, e = tx.ExecContext(ctx, "INSERT INTO metadata(singleton,journal_id,revision) VALUES(1,?,0)", s.anchor.JournalID); e != nil {
+				return agent.ErrStoreUnavailable
+			}
+		}
+		if _, e = tx.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version=%d", next)); e != nil {
+			return agent.ErrStoreUnavailable
+		}
 	}
 	return tx.Commit()
 }
@@ -550,6 +555,13 @@ func (s *SQLiteStore) launchStatus(ctx context.Context, reader stateReader) (str
 	}
 	if count >= s.options.MaxOutboxEvents || size >= s.options.MaxOutboxBytes {
 		return "outbox-pressure", agent.ErrCapacity
+	}
+	var recovery int
+	if err := reader.QueryRowContext(ctx, "SELECT count(*) FROM peer_recovery_approvals WHERE completed=0 AND superseded=0").Scan(&recovery); err != nil {
+		return "unavailable", agent.ErrStoreUnavailable
+	}
+	if recovery != 0 {
+		return "operator-recovery", agent.ErrRecoveryRequired
 	}
 	if s.reconciled() {
 		if s.options.ReservationLimits == (agent.ReservationLimits{}) {

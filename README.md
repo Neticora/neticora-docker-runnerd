@@ -23,6 +23,27 @@ reconciliation. See Alpha's `docs/runnerd/RUNNERD07-LINUX-GITHUB.md` for the exa
 configuration, protected JIT handoff, cleanup contract and remaining live gates.
 No production tuple or Docker live-restore guarantee is implied.
 
+Runnerd08 keeps each Docker adapter bound to its first verified endpoint and
+checks continuity again after inspections and before mutation. A replacement
+peer is also rejected on the actual newly dialed HTTP connection before request
+bytes are sent, closing the preflight-to-mutation connection race. The binding
+uses a directly owned dockerd Unix peer's boot ID, PID and process start time;
+socket-activation proxies, same-process relays and compromised host root need a
+separate trust model. A replacement daemon cannot supply old cleanup proof.
+New work also requires free space on
+Docker's reported local data filesystem: `execution.minRuntimeFreeBytes` defaults
+to 256 MiB and explicit values must be at least 64 MiB. Cleanup and durable
+receipt replay remain available under that runtime admission pressure; the
+journal retains its independent headroom gate. This is soft admission fencing,
+not an aggregate hard storage guarantee.
+
+Lab-only `runnerd_qualification` and `runnerd_docker` test builds support
+externally witnessed VM power removal, bounded-volume ENOSPC and actual Docker
+daemon restart tests. Their synthetic authority and fault-control inputs are
+excluded from shipping binaries. Qualification details and rollout gates live in
+Alpha's `docs/runnerd/RUNNERD08-LINUX-RECOVERY.md` and the private infrastructure
+runbook; source tests alone do not approve a production release.
+
 Recovery is bounded by unresolved executions, not lifetime completed history.
 Verified cleaned attempts retire from snapshots only after their final durable
 ACK; receipts, ACK identities and permanent creation fences remain. Explicit

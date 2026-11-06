@@ -60,6 +60,11 @@ func Open(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drain
 	if err != nil {
 		return nil, nil, err
 	}
+	bootID, bootErr := actualBootID()
+	if bootErr != nil || credentials.BootID != bootID {
+		clear(key)
+		return nil, nil, agent.ErrRecoveryRequired
+	}
 	if err = hostfs.CheckAncestors(filepath.Dir(x.BootstrapRoot)); err != nil {
 		return nil, nil, err
 	}
@@ -146,5 +151,6 @@ func Open(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drain
 		*ceilings[i] = min(*ceilings[i], limit)
 	}
 	controller.Repository = x.Repository
+	controller.MinRuntimeFreeBytes = x.MinRuntimeFreeBytes
 	return controller, cleanup, nil
 }
