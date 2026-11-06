@@ -23,10 +23,11 @@ import (
 )
 
 var (
-	ErrUnavailable     = errors.New("Docker unavailable or endpoint continuity uncertain")
-	ErrConflict        = errors.New("Docker resource ownership or configuration conflict")
-	ErrAbsent          = errors.New("Docker resource absent")
-	ErrStoragePressure = errors.New("Docker storage headroom unavailable")
+	ErrUnavailable              = errors.New("Docker unavailable or endpoint continuity uncertain")
+	ErrConflict                 = errors.New("Docker resource ownership or configuration conflict")
+	ErrAbsent                   = errors.New("Docker resource absent")
+	ErrStoragePressure          = errors.New("Docker storage headroom unavailable")
+	ErrRecoveryApprovalRequired = errors.New("Docker recovery is read-only; scoped operator approval required")
 )
 
 const LabelPrefix = "com.neticora.runnerd."
@@ -49,6 +50,7 @@ type Object struct {
 // Engine never starts discovered resources, prunes images, creates networks, or
 // reads DOCKER_HOST / DOCKER_API_VERSION. Every mutation targets an inspected ID.
 type Engine struct {
+	readOnly       bool // Immutable for the entire adapter lifetime.
 	api            *client.Client
 	stream         *client.Client
 	socket         string
@@ -65,11 +67,21 @@ type Engine struct {
 }
 
 func Open(endpoint, installation string, invalidated func()) (*Engine, error) {
+	return open(endpoint, installation, invalidated, false)
+}
+
+// OpenReadOnly observes a replacement peer without authorizing that peer to
+// create/start or mutate resources. It never converts into a normal adapter.
+func OpenReadOnly(endpoint, installation string, invalidated func()) (*Engine, error) {
+	return open(endpoint, installation, invalidated, true)
+}
+
+func open(endpoint, installation string, invalidated func(), readOnly bool) (*Engine, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil || u.Scheme != "unix" || u.Host != "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || !filepath.IsAbs(u.Path) || filepath.Clean(u.Path) != u.Path || installation == "" {
 		return nil, ErrUnavailable
 	}
-	e := &Engine{socket: u.Path, installation: installation, invalidated: invalidated}
+	e := &Engine{socket: u.Path, installation: installation, invalidated: invalidated, readOnly: readOnly}
 	api, err := client.New(client.WithHost(endpoint), client.WithDialContext(e.dialContext), client.WithTimeout(15*time.Second), client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, ErrUnavailable
@@ -200,6 +212,9 @@ func (e *Engine) CheckHeadroom(ctx context.Context, minimum uint64) error {
 // PrepareImage pulls only the immutable verified reference. It never obtains
 // authority/JIT or starts a container. Registry credentials are not inherited.
 func (e *Engine) PrepareImage(ctx context.Context, p Plan) error {
+	if e.readOnly {
+		return ErrRecoveryApprovalRequired
+	}
 	if err := e.check(ctx); err != nil {
 		return err
 	}
@@ -341,6 +356,9 @@ func resourceMatch(actual, want container.Resources) bool {
 // Ensure creates at most once only after the caller durably crosses its creation
 // fence. A lost create response returns uncertainty; it never retries creation.
 func (e *Engine) Ensure(ctx context.Context, p Plan, claim func() error) (Object, error) {
+	if e.readOnly {
+		return Object{}, ErrRecoveryApprovalRequired
+	}
 	if p.Config == nil || p.Config.Labels[LabelPrefix+"installation"] != e.installation || p.Name == "" {
 		return Object{}, ErrConflict
 	}
@@ -387,6 +405,9 @@ func labelsMatch(actual, want map[string]string) bool {
 }
 
 func (e *Engine) Start(ctx context.Context, id string, p Plan, authorize func() error) (Object, error) {
+	if e.readOnly {
+		return Object{}, ErrRecoveryApprovalRequired
+	}
 	o, err := e.Inspect(ctx, id, p)
 	if err != nil {
 		return o, err
@@ -410,6 +431,9 @@ func (e *Engine) Start(ctx context.Context, id string, p Plan, authorize func() 
 }
 
 func (e *Engine) Stop(ctx context.Context, id string, p Plan) error {
+	if e.readOnly {
+		return ErrRecoveryApprovalRequired
+	}
 	o, err := e.Inspect(ctx, id, p)
 	if errors.Is(err, ErrAbsent) {
 		return nil
@@ -427,6 +451,9 @@ func (e *Engine) Stop(ctx context.Context, id string, p Plan) error {
 	return nil
 }
 func (e *Engine) Remove(ctx context.Context, id string, p Plan) error {
+	if e.readOnly {
+		return ErrRecoveryApprovalRequired
+	}
 	o, err := e.Inspect(ctx, id, p)
 	if errors.Is(err, ErrAbsent) {
 		return nil

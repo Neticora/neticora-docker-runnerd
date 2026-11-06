@@ -342,8 +342,15 @@ func (s *SQLiteStore) record(ctx context.Context, scope agent.StoreScope, raw js
 		if err := s.requireScope(scope); err != nil {
 			return err
 		}
+		recovery, err := s.recoveryPermission(ctx, tx, doc.ExecutionID, doc.Generation)
+		if err != nil {
+			return err
+		}
+		if recovery != nil && (operation == "never" || recovery.Action == "replay-final-ack" || doc.Observation == nil || doc.Observation.State == "prepared" || doc.Observation.State == "running") {
+			return agent.ErrRecoveryRequired
+		}
 		var existingHash, existingID string
-		err := tx.QueryRowContext(ctx, "SELECT event_id,payload_hash FROM outbox_events WHERE execution_id=? AND generation=? AND sequence=?", doc.ExecutionID, doc.Generation, padded(doc.Sequence)).Scan(&existingID, &existingHash)
+		err = tx.QueryRowContext(ctx, "SELECT event_id,payload_hash FROM outbox_events WHERE execution_id=? AND generation=? AND sequence=?", doc.ExecutionID, doc.Generation, padded(doc.Sequence)).Scan(&existingID, &existingHash)
 		if err == nil {
 			if existingHash != doc.PayloadHash || existingID != doc.EventID {
 				return agent.ErrConflict
@@ -446,7 +453,7 @@ func (s *SQLiteStore) record(ctx context.Context, scope agent.StoreScope, raw js
 					return err
 				}
 				proofRef, e := protocol.CanonicalizeJSON(proof.RuntimeRef)
-				if e != nil || !bytes.Equal(proofRef, doc.Observation.RuntimeRef) || !known || !cleanup || endpoint != scope.EndpointIdentity || proof.EndpointIdentity != endpoint || !validCounter(proof.InventoryGeneration, false) || padded(proof.InventoryGeneration) < padded(inventory) || !fresh(proof.ObservedAt) || doc.Observation.ObservedAt.Before(proof.ObservedAt) {
+				if e != nil || !bytes.Equal(proofRef, doc.Observation.RuntimeRef) || !known || !cleanup || (recovery == nil && endpoint != scope.EndpointIdentity) || proof.EndpointIdentity != scope.EndpointIdentity || !validCounter(proof.InventoryGeneration, false) || padded(proof.InventoryGeneration) < padded(inventory) || !fresh(proof.ObservedAt) || doc.Observation.ObservedAt.Before(proof.ObservedAt) {
 					return agent.ErrRecoveryRequired
 				}
 				proofRaw, _ := json.Marshal(proof)

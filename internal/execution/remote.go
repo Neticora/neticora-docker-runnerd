@@ -215,3 +215,21 @@ func (r *HostRemote) Heartbeat(ctx context.Context, generation string) error {
 	_, e = r.Client.Post(ctx, "/me/heartbeat", t, m, "ConfigResponse")
 	return e
 }
+
+// PeerRecovery uses the same signed short-lived assertions/current host session
+// as every recovery request. There is no unauthenticated maintenance transport.
+func (r *HostRemote) PeerRecovery(ctx context.Context, id string, complete bool) ([]byte, error) {
+	token, err := r.credential(ctx)
+	if err != nil {
+		return nil, err
+	}
+	operation := "authorize"
+	if complete {
+		operation = "complete"
+	}
+	request, err := protocol.EncodeValidated("PeerRecoveryAccessRequest", map[string]any{"approvalId": id, "operation": operation})
+	if err != nil {
+		return nil, err
+	}
+	return r.Client.Post(ctx, "/me/recovery", token, request, "PeerRecoveryAuthorization")
+}

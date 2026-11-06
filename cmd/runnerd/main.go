@@ -23,6 +23,9 @@ func main() {
 func run() error {
 	version := flag.Bool("version", false, "print actual executable version")
 	file := flag.String("config", "/etc/neticora-runnerd/config.json", "protected configuration file")
+	recovery := flag.String("recovery", "", "operator recovery: diagnose, inspect or apply; daemon must be stopped")
+	recoveryInput := flag.String("recovery-input", "", "protected challenge or signed approval JSON")
+	recoveryPublicKey := flag.String("recovery-public-key", "", "protected independent operator public key PEM (apply only)")
 	socket := flag.String("socket", "/run/neticora-runnerd/control.sock", "local control socket")
 	flag.Parse()
 	if *version {
@@ -42,5 +45,13 @@ func run() error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if *recovery != "" {
+		result, err := execution.AdministrativePeerRecovery(ctx, c, *recovery, *recoveryInput, *recoveryPublicKey)
+		if err != nil {
+			return err
+		}
+		_, err = os.Stdout.Write(append(result, '\n'))
+		return err
+	}
 	return service.Run(ctx, c, *socket)
 }
