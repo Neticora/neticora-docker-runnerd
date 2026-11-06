@@ -24,15 +24,55 @@
         "responses": {
           "200": {
             "description": "Current host-bound recovery watermarks and cancellation state; no launch authority is implied.",
-            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/RecoveryState"}}}
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryState"
+                }
+              }
+            }
           }
         }
       },
       "post": {
         "operationId": "lookupRecoveryState",
-        "description": "Read-only authenticated reconciliation of active server obligations plus explicitly requested local execution generations, including cleaned executions with a lost final ACK. Lookup keys grant no admission or execution authority.",
-        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/RecoveryRequest"}}}},
-        "responses": {"200": {"description": "Complete bounded current obligations and requested authoritative watermarks; never a truncated snapshot.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/RecoveryState"}}}}}
+        "description": "Read-only authenticated reconciliation of active server obligations plus explicitly requested local execution generations, including cleaned executions with a lost final ACK. Lookup keys grant no admission or execution authority. A separately typed approvalId request fetches a committed operator peer-recovery approval for this authenticated current host/session; it grants no launch authority. Existing entries requests retain their original response shape.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/RecoveryRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PeerRecoveryAccessRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Complete bounded current obligations and requested authoritative watermarks; never a truncated snapshot.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/RecoveryState"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PeerRecoveryAuthorization"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/enroll": {
@@ -1752,87 +1792,107 @@
         ],
         "additionalProperties": false
       },
-    "RecoveryEntry": {
-      "type": "object",
-      "properties": {
-        "executionId": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 256
-        },
-        "generation": {
-          "$ref": "#/components/schemas/Generation"
-        },
-        "commandId": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 256
-        },
-        "specHash": {
-          "$ref": "#/components/schemas/Digest"
-        },
-        "contiguousSequence": {
-          "$ref": "#/components/schemas/UInt64String"
-        },
-        "cancelled": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "executionId",
-        "generation",
-        "commandId",
-        "specHash",
-        "contiguousSequence",
-        "cancelled"
-      ],
-      "additionalProperties": false
-    },
-    "RecoveryLookup": {
-      "type": "object",
-      "properties": {
-        "executionId": {"type": "string", "minLength": 1, "maxLength": 256},
-        "generation": {"$ref": "#/components/schemas/Generation"}
-      },
-      "required": ["executionId", "generation"],
-      "additionalProperties": false
-    },
-    "RecoveryRequest": {
-      "type": "object",
-      "properties": {"entries": {"type": "array", "maxItems": 1000, "uniqueItems": true, "items": {"$ref": "#/components/schemas/RecoveryLookup"}}},
-      "required": ["entries"],
-      "additionalProperties": false
-    },
-    "RecoveryState": {
-      "type": "object",
-      "properties": {
-        "identity": {
-          "$ref": "#/components/schemas/HostIdentity"
-        },
-        "endpointIdentity": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 256
-        },
-        "inventoryGeneration": {
-          "$ref": "#/components/schemas/UInt64String"
-        },
-        "entries": {
-          "type": "array",
-          "maxItems": 1000,
-          "items": {
-            "$ref": "#/components/schemas/RecoveryEntry"
+      "RecoveryEntry": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "generation": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "commandId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "specHash": {
+            "$ref": "#/components/schemas/Digest"
+          },
+          "contiguousSequence": {
+            "$ref": "#/components/schemas/UInt64String"
+          },
+          "cancelled": {
+            "type": "boolean"
           }
-        }
+        },
+        "required": [
+          "executionId",
+          "generation",
+          "commandId",
+          "specHash",
+          "contiguousSequence",
+          "cancelled"
+        ],
+        "additionalProperties": false
       },
-      "required": [
-        "identity",
-        "endpointIdentity",
-        "inventoryGeneration",
-        "entries"
-      ],
-      "additionalProperties": false
-    },
+      "RecoveryLookup": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "generation": {
+            "$ref": "#/components/schemas/Generation"
+          }
+        },
+        "required": [
+          "executionId",
+          "generation"
+        ],
+        "additionalProperties": false
+      },
+      "RecoveryRequest": {
+        "type": "object",
+        "properties": {
+          "entries": {
+            "type": "array",
+            "maxItems": 1000,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/RecoveryLookup"
+            }
+          }
+        },
+        "required": [
+          "entries"
+        ],
+        "additionalProperties": false
+      },
+      "RecoveryState": {
+        "type": "object",
+        "properties": {
+          "identity": {
+            "$ref": "#/components/schemas/HostIdentity"
+          },
+          "endpointIdentity": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "inventoryGeneration": {
+            "$ref": "#/components/schemas/UInt64String"
+          },
+          "entries": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {
+              "$ref": "#/components/schemas/RecoveryEntry"
+            }
+          }
+        },
+        "required": [
+          "identity",
+          "endpointIdentity",
+          "inventoryGeneration",
+          "entries"
+        ],
+        "additionalProperties": false
+      },
       "CustomerManagedPolicy": {
         "type": "object",
         "properties": {
@@ -2299,6 +2359,420 @@
           "fencedAt",
           "signature",
           "attestedAt"
+        ],
+        "additionalProperties": false
+      },
+      "PeerRecoveryEventReference": {
+        "type": "object",
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "sequence": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "payloadHash": {
+            "$ref": "#/components/schemas/Digest"
+          }
+        },
+        "required": [
+          "eventId",
+          "sequence",
+          "payloadHash"
+        ],
+        "additionalProperties": false
+      },
+      "PeerRecoveryChallenge": {
+        "type": "object",
+        "properties": {
+          "challengeId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "nonce": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$"
+          },
+          "tenantId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "identity": {
+            "$ref": "#/components/schemas/HostIdentity"
+          },
+          "serverSnapshotHash": {
+            "$ref": "#/components/schemas/Digest"
+          },
+          "expiresAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        },
+        "required": [
+          "challengeId",
+          "nonce",
+          "tenantId",
+          "identity",
+          "serverSnapshotHash",
+          "expiresAt"
+        ],
+        "additionalProperties": false
+      },
+      "PeerRecoveryExecutionPlan": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "generation": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "originalSessionEpoch": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "specHash": {
+            "$ref": "#/components/schemas/Digest"
+          },
+          "startCommandHash": {
+            "$ref": "#/components/schemas/Digest"
+          },
+          "originalRuntimeRef": {
+            "$ref": "#/components/schemas/RuntimeRef"
+          },
+          "observedResourceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "observedState": {
+            "enum": [
+              "prepared",
+              "running",
+              "exited",
+              "absent",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "inspectionHash": {
+            "$ref": "#/components/schemas/Digest"
+          },
+          "lastSequence": {
+            "$ref": "#/components/schemas/UInt64String"
+          },
+          "ackSequence": {
+            "$ref": "#/components/schemas/UInt64String"
+          },
+          "pendingEvents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PeerRecoveryEventReference"
+            },
+            "maxItems": 1000
+          },
+          "creationClaim": {
+            "type": "string",
+            "enum": [
+              "verified",
+              "not-claimed",
+              "ambiguous"
+            ]
+          },
+          "nativeState": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          }
+        },
+        "required": [
+          "executionId",
+          "generation",
+          "originalSessionEpoch",
+          "specHash",
+          "startCommandHash",
+          "observedState",
+          "inspectionHash",
+          "lastSequence",
+          "ackSequence",
+          "pendingEvents",
+          "creationClaim",
+          "nativeState"
+        ],
+        "additionalProperties": false
+      },
+      "PeerRecoveryPlan": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "const": "neticora-runnerd-peer-recovery-plan-v1",
+            "type": "string"
+          },
+          "challenge": {
+            "$ref": "#/components/schemas/PeerRecoveryChallenge"
+          },
+          "installationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "bootId": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 128
+          },
+          "sourceEndpointIdentity": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "targetEndpointIdentity": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "journalId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "journalRevision": {
+            "$ref": "#/components/schemas/UInt64String"
+          },
+          "inventoryGeneration": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "inventoryHash": {
+            "$ref": "#/components/schemas/Digest"
+          },
+          "observedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "executions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PeerRecoveryExecutionPlan"
+            },
+            "maxItems": 1000
+          },
+          "agentVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "domain",
+          "challenge",
+          "installationId",
+          "bootId",
+          "sourceEndpointIdentity",
+          "targetEndpointIdentity",
+          "journalId",
+          "journalRevision",
+          "inventoryGeneration",
+          "inventoryHash",
+          "observedAt",
+          "executions",
+          "agentVersion"
+        ],
+        "additionalProperties": false
+      },
+      "SignedPeerRecoveryPlan": {
+        "type": "object",
+        "properties": {
+          "plan": {
+            "$ref": "#/components/schemas/PeerRecoveryPlan"
+          },
+          "signature": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{86}$"
+          }
+        },
+        "required": [
+          "plan",
+          "signature"
+        ],
+        "additionalProperties": false
+      },
+      "PeerRecoveryAbsenceWitness": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "const": "neticora-runnerd-physical-absence-v1",
+            "type": "string"
+          },
+          "reference": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 1024
+          },
+          "sha256": {
+            "$ref": "#/components/schemas/Digest"
+          },
+          "observedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        },
+        "required": [
+          "domain",
+          "reference",
+          "sha256",
+          "observedAt"
+        ],
+        "additionalProperties": false
+      },
+      "PeerRecoveryDecision": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "generation": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "action": {
+            "enum": [
+              "observe-and-cleanup",
+              "cleanup",
+              "hold",
+              "verify-absent",
+              "replay-final-ack"
+            ],
+            "type": "string"
+          },
+          "absenceWitness": {
+            "$ref": "#/components/schemas/PeerRecoveryAbsenceWitness"
+          }
+        },
+        "required": [
+          "executionId",
+          "generation",
+          "action"
+        ],
+        "additionalProperties": false
+      },
+      "PeerRecoveryApprovalManifest": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "const": "neticora-runnerd-peer-recovery-approval-v1",
+            "type": "string"
+          },
+          "approvalId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "planHash": {
+            "$ref": "#/components/schemas/Digest"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PeerRecoveryPlan"
+          },
+          "decisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PeerRecoveryDecision"
+            },
+            "maxItems": 1000
+          },
+          "issuedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "expiresAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "auditReference": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 1024
+          }
+        },
+        "required": [
+          "domain",
+          "approvalId",
+          "planHash",
+          "plan",
+          "decisions",
+          "issuedAt",
+          "expiresAt",
+          "auditReference"
+        ],
+        "additionalProperties": false
+      },
+      "SignedPeerRecoveryApproval": {
+        "type": "object",
+        "properties": {
+          "manifest": {
+            "$ref": "#/components/schemas/PeerRecoveryApprovalManifest"
+          },
+          "signature": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{86}$"
+          }
+        },
+        "required": [
+          "manifest",
+          "signature"
+        ],
+        "additionalProperties": false
+      },
+      "PeerRecoveryAccessRequest": {
+        "type": "object",
+        "properties": {
+          "approvalId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "approvalId"
+        ],
+        "additionalProperties": false
+      },
+      "PeerRecoveryAuthorization": {
+        "type": "object",
+        "properties": {
+          "identity": {
+            "$ref": "#/components/schemas/HostIdentity"
+          },
+          "approval": {
+            "$ref": "#/components/schemas/SignedPeerRecoveryApproval"
+          },
+          "status": {
+            "enum": [
+              "APPROVED",
+              "APPLIED",
+              "COMPLETED",
+              "HOLD",
+              "REVOKED"
+            ],
+            "type": "string"
+          },
+          "serverWatermarks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventAck"
+            },
+            "maxItems": 1000
+          },
+          "verifiedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        },
+        "required": [
+          "identity",
+          "approval",
+          "status",
+          "serverWatermarks",
+          "verifiedAt"
         ],
         "additionalProperties": false
       }

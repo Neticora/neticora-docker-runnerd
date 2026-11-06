@@ -1644,5 +1644,303 @@
       "issuedAt": "2026-11-02T00:00:00.000Z"
     },
     "valid": false
+  },
+  {
+    "id": "peer-recovery-PeerRecoveryChallenge",
+    "schema": "PeerRecoveryChallenge",
+    "value": {
+      "challengeId": "recovery-challenge",
+      "nonce": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      "tenantId": "tenant-a",
+      "identity": {
+        "hostId": "host-a",
+        "keyId": "key-a",
+        "keyVersion": "1",
+        "sessionEpoch": "4"
+      },
+      "serverSnapshotHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expiresAt": "2026-11-05T12:15:00.000Z"
+    },
+    "valid": true
+  },
+  {
+    "id": "peer-recovery-PeerRecoveryExecutionPlan",
+    "schema": "PeerRecoveryExecutionPlan",
+    "value": {
+      "executionId": "execution-a",
+      "generation": "1",
+      "originalSessionEpoch": "3",
+      "specHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "startCommandHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "observedResourceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "observedState": "running",
+      "inspectionHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "lastSequence": "3",
+      "ackSequence": "3",
+      "pendingEvents": [],
+      "creationClaim": "verified",
+      "nativeState": "running"
+    },
+    "valid": true
+  },
+  {
+    "id": "peer-recovery-PeerRecoveryPlan",
+    "schema": "PeerRecoveryPlan",
+    "value": {
+      "domain": "neticora-runnerd-peer-recovery-plan-v1",
+      "challenge": {
+        "challengeId": "recovery-challenge",
+        "nonce": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+        "tenantId": "tenant-a",
+        "identity": {
+          "hostId": "host-a",
+          "keyId": "key-a",
+          "keyVersion": "1",
+          "sessionEpoch": "4"
+        },
+        "serverSnapshotHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "expiresAt": "2026-11-05T12:15:00.000Z"
+      },
+      "installationId": "install-a",
+      "bootId": "boot-identifier-current",
+      "sourceEndpointIdentity": "peer-old",
+      "targetEndpointIdentity": "peer-new",
+      "journalId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "journalRevision": "22",
+      "inventoryGeneration": "1",
+      "inventoryHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "observedAt": "2026-11-05T12:00:00.000Z",
+      "executions": [
+        {
+          "executionId": "execution-a",
+          "generation": "1",
+          "originalSessionEpoch": "3",
+          "specHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "startCommandHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "observedResourceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "observedState": "running",
+          "inspectionHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "lastSequence": "3",
+          "ackSequence": "3",
+          "pendingEvents": [],
+          "creationClaim": "verified",
+          "nativeState": "running"
+        }
+      ],
+      "agentVersion": "qualification-build-a"
+    },
+    "valid": true
+  },
+  {
+    "id": "peer-recovery-SignedPeerRecoveryPlan",
+    "schema": "SignedPeerRecoveryPlan",
+    "value": {
+      "plan": {
+        "domain": "neticora-runnerd-peer-recovery-plan-v1",
+        "challenge": {
+          "challengeId": "recovery-challenge",
+          "nonce": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          "tenantId": "tenant-a",
+          "identity": {
+            "hostId": "host-a",
+            "keyId": "key-a",
+            "keyVersion": "1",
+            "sessionEpoch": "4"
+          },
+          "serverSnapshotHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "expiresAt": "2026-11-05T12:15:00.000Z"
+        },
+        "installationId": "install-a",
+        "bootId": "boot-identifier-current",
+        "sourceEndpointIdentity": "peer-old",
+        "targetEndpointIdentity": "peer-new",
+        "journalId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "journalRevision": "22",
+        "inventoryGeneration": "1",
+        "inventoryHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "observedAt": "2026-11-05T12:00:00.000Z",
+        "executions": [
+          {
+            "executionId": "execution-a",
+            "generation": "1",
+            "originalSessionEpoch": "3",
+            "specHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "startCommandHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "observedResourceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "observedState": "running",
+            "inspectionHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "lastSequence": "3",
+            "ackSequence": "3",
+            "pendingEvents": [],
+            "creationClaim": "verified",
+            "nativeState": "running"
+          }
+        ],
+        "agentVersion": "qualification-build-a"
+      },
+      "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "valid": true
+  },
+  {
+    "id": "peer-recovery-SignedPeerRecoveryApproval",
+    "schema": "SignedPeerRecoveryApproval",
+    "value": {
+      "manifest": {
+        "domain": "neticora-runnerd-peer-recovery-approval-v1",
+        "approvalId": "approval-a",
+        "planHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "plan": {
+          "domain": "neticora-runnerd-peer-recovery-plan-v1",
+          "challenge": {
+            "challengeId": "recovery-challenge",
+            "nonce": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+            "tenantId": "tenant-a",
+            "identity": {
+              "hostId": "host-a",
+              "keyId": "key-a",
+              "keyVersion": "1",
+              "sessionEpoch": "4"
+            },
+            "serverSnapshotHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "expiresAt": "2026-11-05T12:15:00.000Z"
+          },
+          "installationId": "install-a",
+          "bootId": "boot-identifier-current",
+          "sourceEndpointIdentity": "peer-old",
+          "targetEndpointIdentity": "peer-new",
+          "journalId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "journalRevision": "22",
+          "inventoryGeneration": "1",
+          "inventoryHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "observedAt": "2026-11-05T12:00:00.000Z",
+          "executions": [
+            {
+              "executionId": "execution-a",
+              "generation": "1",
+              "originalSessionEpoch": "3",
+              "specHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "startCommandHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "observedResourceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "observedState": "running",
+              "inspectionHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+              "lastSequence": "3",
+              "ackSequence": "3",
+              "pendingEvents": [],
+              "creationClaim": "verified",
+              "nativeState": "running"
+            }
+          ],
+          "agentVersion": "qualification-build-a"
+        },
+        "decisions": [
+          {
+            "executionId": "execution-a",
+            "generation": "1",
+            "action": "observe-and-cleanup"
+          }
+        ],
+        "issuedAt": "2026-11-05T12:00:00.000Z",
+        "expiresAt": "2026-11-05T12:10:00.000Z",
+        "auditReference": "Reviewed host peer transition"
+      },
+      "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "valid": true
+  },
+  {
+    "id": "peer-recovery-PeerRecoveryAccessRequest",
+    "schema": "PeerRecoveryAccessRequest",
+    "value": {
+      "approvalId": "approval-a"
+    },
+    "valid": true
+  },
+  {
+    "id": "peer-recovery-PeerRecoveryAuthorization",
+    "schema": "PeerRecoveryAuthorization",
+    "value": {
+      "identity": {
+        "hostId": "host-a",
+        "keyId": "key-a",
+        "keyVersion": "1",
+        "sessionEpoch": "4"
+      },
+      "approval": {
+        "manifest": {
+          "domain": "neticora-runnerd-peer-recovery-approval-v1",
+          "approvalId": "approval-a",
+          "planHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "plan": {
+            "domain": "neticora-runnerd-peer-recovery-plan-v1",
+            "challenge": {
+              "challengeId": "recovery-challenge",
+              "nonce": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+              "tenantId": "tenant-a",
+              "identity": {
+                "hostId": "host-a",
+                "keyId": "key-a",
+                "keyVersion": "1",
+                "sessionEpoch": "4"
+              },
+              "serverSnapshotHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "expiresAt": "2026-11-05T12:15:00.000Z"
+            },
+            "installationId": "install-a",
+            "bootId": "boot-identifier-current",
+            "sourceEndpointIdentity": "peer-old",
+            "targetEndpointIdentity": "peer-new",
+            "journalId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "journalRevision": "22",
+            "inventoryGeneration": "1",
+            "inventoryHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "observedAt": "2026-11-05T12:00:00.000Z",
+            "executions": [
+              {
+                "executionId": "execution-a",
+                "generation": "1",
+                "originalSessionEpoch": "3",
+                "specHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "startCommandHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "observedResourceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                "observedState": "running",
+                "inspectionHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "lastSequence": "3",
+                "ackSequence": "3",
+                "pendingEvents": [],
+                "creationClaim": "verified",
+                "nativeState": "running"
+              }
+            ],
+            "agentVersion": "qualification-build-a"
+          },
+          "decisions": [
+            {
+              "executionId": "execution-a",
+              "generation": "1",
+              "action": "observe-and-cleanup"
+            }
+          ],
+          "issuedAt": "2026-11-05T12:00:00.000Z",
+          "expiresAt": "2026-11-05T12:10:00.000Z",
+          "auditReference": "Reviewed host peer transition"
+        },
+        "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "status": "APPROVED",
+      "serverWatermarks": [],
+      "verifiedAt": "2026-11-05T12:01:00.000Z"
+    },
+    "valid": true
+  },
+  {
+    "id": "peer-recovery-unknown-action",
+    "schema": "PeerRecoveryDecision",
+    "value": {
+      "executionId": "execution-a",
+      "generation": "1",
+      "action": "start"
+    },
+    "valid": false
   }
 ]
