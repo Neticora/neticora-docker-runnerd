@@ -27,7 +27,7 @@ var migrations embed.FS
 
 const databaseName = "journal.db"
 const anchorName = "recovery.anchor.json"
-const schemaVersion = 2
+const schemaVersion = 3
 
 type Options struct {
 	// Zero values select conservative defaults, never unlimited growth.
@@ -260,7 +260,7 @@ func (s *SQLiteStore) migrate(ctx context.Context, fresh bool) error {
 	}
 	defer tx.Rollback()
 	for next := version + 1; next <= schemaVersion; next++ {
-		name := map[int]string{1: "migrations/001_initial.sql", 2: "migrations/002_peer_recovery.sql"}[next]
+		name := map[int]string{1: "migrations/001_initial.sql", 2: "migrations/002_peer_recovery.sql", 3: "migrations/003_peer_recovery_completion.sql"}[next]
 		raw, e := migrations.ReadFile(name)
 		if e != nil {
 			return e

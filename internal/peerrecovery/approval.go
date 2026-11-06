@@ -156,8 +156,20 @@ func VerifyPlan(raw, hostPublicPEM []byte, challenge protocol.PeerRecoveryChalle
 }
 
 func VerifyApproval(raw, operatorPublicPEM []byte, expected protocol.PeerRecoveryPlan, now time.Time) (*OperatorApproval, error) {
+	return verifyApproval(raw, operatorPublicPEM, expected, now, true)
+}
+
+// VerifyRecordedApproval checks immutable signed evidence, including validity at
+// issuance, without extending its lifetime. Only a matching durable completion
+// intent and fresh authenticated platform completion may use expired evidence;
+// mutation authorization continues to require VerifyApproval and Current.
+func VerifyRecordedApproval(raw, operatorPublicPEM []byte, expected protocol.PeerRecoveryPlan, now time.Time) (*OperatorApproval, error) {
+	return verifyApproval(raw, operatorPublicPEM, expected, now, false)
+}
+
+func verifyApproval(raw, operatorPublicPEM []byte, expected protocol.PeerRecoveryPlan, now time.Time, requireFresh bool) (*OperatorApproval, error) {
 	signed, err := protocol.DecodeSignedPeerRecoveryApproval(raw)
-	if err != nil || ValidatePlan(signed.Manifest.Plan) != nil || ValidatePlan(expected) != nil || !freshPlan(expected, now) {
+	if err != nil || ValidatePlan(signed.Manifest.Plan) != nil || ValidatePlan(expected) != nil || (requireFresh && !freshPlan(expected, now)) {
 		return nil, ErrApproval
 	}
 	manifest := signed.Manifest
@@ -178,7 +190,7 @@ func VerifyApproval(raw, operatorPublicPEM []byte, expected protocol.PeerRecover
 		return nil, ErrApproval
 	}
 	challengeExpiry, err := time.Parse(time.RFC3339Nano, manifest.Plan.Challenge.ExpiresAt)
-	if err != nil || !expires.After(now) || !expires.After(issued) || issued.After(now.Add(5*time.Second)) || expires.Sub(issued) > 15*time.Minute || expires.After(challengeExpiry) || strings.TrimSpace(manifest.AuditReference) == "" {
+	if err != nil || (requireFresh && !expires.After(now)) || !freshPlan(expected, issued) || !expires.After(issued) || issued.After(now.Add(5*time.Second)) || expires.Sub(issued) > 15*time.Minute || expires.After(challengeExpiry) || strings.TrimSpace(manifest.AuditReference) == "" {
 		return nil, ErrApproval
 	}
 	if len(manifest.Decisions) != len(manifest.Plan.Executions) {

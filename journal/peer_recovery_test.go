@@ -3,10 +3,12 @@
 package journal
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
@@ -15,6 +17,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -30,6 +33,10 @@ func approvalForJournal(t *testing.T, s *SQLiteStore, start []byte, change func(
 }
 
 func approvalForJournalMaterial(t *testing.T, s *SQLiteStore, start []byte, change func(*protocol.PeerRecoveryPlan)) (*peerrecovery.Authorization, []byte) {
+	return approvalForJournalMaterialWithLifetime(t, s, start, change, 5*time.Minute)
+}
+
+func approvalForJournalMaterialWithLifetime(t *testing.T, s *SQLiteStore, start []byte, change func(*protocol.PeerRecoveryPlan), lifetime time.Duration) (*peerrecovery.Authorization, []byte) {
 	t.Helper()
 	ctx := context.Background()
 	h := s.Health(ctx)
@@ -54,7 +61,7 @@ func approvalForJournalMaterial(t *testing.T, s *SQLiteStore, start []byte, chan
 	if plan.Challenge.ChallengeId != "challenge-a" {
 		approvalID = "approval-" + plan.Challenge.ChallengeId
 	}
-	manifest := protocol.PeerRecoveryApprovalManifest{Domain: "neticora-runnerd-peer-recovery-approval-v1", ApprovalId: approvalID, AuditReference: "Operator reviewed exact peer transition", Plan: plan, PlanHash: hash, IssuedAt: now.Format(format), ExpiresAt: now.Add(5 * time.Minute).Format(format), Decisions: []protocol.PeerRecoveryDecision{{ExecutionId: plan.Executions[0].ExecutionId, Generation: plan.Executions[0].Generation, Action: "cleanup"}}}
+	manifest := protocol.PeerRecoveryApprovalManifest{Domain: "neticora-runnerd-peer-recovery-approval-v1", ApprovalId: approvalID, AuditReference: "Operator reviewed exact peer transition", Plan: plan, PlanHash: hash, IssuedAt: now.Format(format), ExpiresAt: now.Add(lifetime).Format(format), Decisions: []protocol.PeerRecoveryDecision{{ExecutionId: plan.Executions[0].ExecutionId, Generation: plan.Executions[0].Generation, Action: "cleanup"}}}
 	pub, key, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -69,6 +76,55 @@ func approvalForJournalMaterial(t *testing.T, s *SQLiteStore, start []byte, chan
 		t.Fatal(err)
 	}
 	return a, public
+}
+
+func readyPeerRecoveryCompletion(t *testing.T) (*SQLiteStore, *peerrecovery.Authorization, []byte, agent.RecoveryCheckpoint) {
+	t.Helper()
+	s, start := claimedRecovery(t)
+	a, public := approvalForJournalMaterial(t, s, start, nil)
+	ctx := context.Background()
+	if err := s.ApplyPeerRecovery(ctx, a); err != nil {
+		t.Fatal(err)
+	}
+	observed := time.Now().UTC().Truncate(time.Millisecond)
+	if _, err := s.db.Exec("UPDATE executions SET state='cleaned',cleanup_pending=0,last_sequence=ack_sequence"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec("UPDATE reservations SET released=1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec("UPDATE cleanup_tasks SET complete=1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec("UPDATE metadata SET runtime_known=1,inventory_generation='3',inventory_observed_at=?", observed.Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	h := s.Health(ctx)
+	checkpoint := agent.RecoveryCheckpoint{JournalID: h.JournalID, Revision: h.Revision, Scope: s.scope, InventoryGeneration: "3", ObservedAt: observed}
+	return s, a, public, checkpoint
+}
+
+func completionForJournal(t *testing.T, s *SQLiteStore, a *peerrecovery.Authorization, public []byte) *peerrecovery.Completion {
+	t.Helper()
+	value, err := a.Approval().Value()
+	if err != nil {
+		t.Fatal(err)
+	}
+	progress, err := s.PeerRecoveryProgress(context.Background(), value.Manifest.Plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	watermarks := make([]protocol.EventAck, 0, len(progress))
+	for _, p := range progress {
+		watermarks = append(watermarks, protocol.EventAck{ExecutionId: p.ExecutionID, Generation: p.Generation, ContiguousSequence: p.LastSequence})
+	}
+	reply := protocol.PeerRecoveryAuthorization{Approval: value, Identity: value.Manifest.Plan.Challenge.Identity, Status: "COMPLETED", VerifiedAt: time.Now().UTC().Format("2006-01-02T15:04:05.000Z"), ServerWatermarks: watermarks}
+	raw, _ := json.Marshal(reply)
+	completion, err := peerrecovery.VerifyCompletion(raw, public, value.Manifest.Plan, progress, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return completion
 }
 
 func claimedRecovery(t *testing.T) (*SQLiteStore, []byte) {
@@ -329,5 +385,217 @@ func TestPeerRecoveryRefusesCorruptSeparateCommandMetadata(t *testing.T) {
 	}
 	if count(t, s, "peer_recovery_approvals") != 0 || s.Health(ctx).Ready {
 		t.Fatal("corruption acquired authority")
+	}
+}
+
+func TestPeerRecoveryCompletionIntentFencesMutationAndPinsExactProgress(t *testing.T) {
+	s, authorization, public, checkpoint := readyPeerRecoveryCompletion(t)
+	ctx := context.Background()
+	approval := authorization.Approval()
+	if err := s.BeginPeerRecoveryCompletion(ctx, approval, checkpoint); err != nil {
+		t.Fatal(err)
+	}
+	checkpoint.Revision = s.Health(ctx).Revision
+	if err := s.BeginPeerRecoveryCompletion(ctx, approval, checkpoint); err != nil {
+		t.Fatal("identical completion intent was not idempotent", err)
+	}
+	checkpoint.Revision = s.Health(ctx).Revision
+	if count(t, s, "peer_recovery_completion_intents") != 1 {
+		t.Fatal("completion intent was not unique")
+	}
+	if _, err := s.recoveryPermission(ctx, s.db, "exec-a", "1"); !errors.Is(err, agent.ErrRecoveryRequired) {
+		t.Fatal("completion intent left mutation authority open", err)
+	}
+	completion := completionForJournal(t, s, authorization, public)
+	if err := s.CompletePeerRecovery(ctx, completion, checkpoint); err != nil {
+		t.Fatal(err)
+	}
+	completed, err := s.CompletedPeerRecovery(ctx, approval)
+	if err != nil || !completed {
+		t.Fatal("durable completion not recoverable", completed, err)
+	}
+	if _, err = s.recoveryPermission(ctx, s.db, "exec-a", "1"); err != nil {
+		t.Fatal("completed transition should expose no recovery mutation decision", err)
+	}
+}
+
+func TestPeerRecoveryCompletionIntentRejectsChangedProgress(t *testing.T) {
+	s, authorization, _, checkpoint := readyPeerRecoveryCompletion(t)
+	ctx := context.Background()
+	if err := s.BeginPeerRecoveryCompletion(ctx, authorization.Approval(), checkpoint); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec("UPDATE executions SET last_sequence=?", padded("1")); err != nil {
+		t.Fatal(err)
+	}
+	if ready, err := s.PeerRecoveryCompletionReady(ctx, authorization.Approval()); err == nil || ready {
+		t.Fatal("changed native progress matched immutable completion intent", ready, err)
+	}
+}
+
+func TestPeerRecoveryCompletionIntentCrashChild(t *testing.T) {
+	dir := os.Getenv("RUNNERD08_COMPLETION_CRASH_DIR")
+	if dir == "" {
+		t.Skip("subprocess only")
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "completion-approval.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var bundle struct {
+		Approval protocol.SignedPeerRecoveryApproval `json:"approval"`
+		Public   string                              `json:"public"`
+	}
+	if json.Unmarshal(raw, &bundle) != nil {
+		t.Fatal("invalid completion fixture")
+	}
+	encoded, _ := json.Marshal(bundle.Approval)
+	approved, err := peerrecovery.VerifyRecordedApproval(encoded, []byte(bundle.Public), bundle.Approval.Manifest.Plan, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := OpenRecovery(context.Background(), dir, testOptions(Options{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.fault = func(stage string) error {
+		if stage == os.Getenv("RUNNERD08_COMPLETION_CRASH_STAGE") {
+			_ = syscall.Kill(os.Getpid(), syscall.SIGKILL)
+		}
+		return nil
+	}
+	h := s.Health(context.Background())
+	checkpoint := agent.RecoveryCheckpoint{JournalID: h.JournalID, Revision: h.Revision, Scope: s.scope, InventoryGeneration: "3", ObservedAt: time.Now().UTC()}
+	if err = s.BeginPeerRecoveryCompletion(context.Background(), approved, checkpoint); err != nil {
+		t.Fatal(err)
+	}
+	t.Fatal("completion-intent crash barrier missed")
+}
+
+func TestPeerRecoveryCompletionIntentSurvivesAbruptCrash(t *testing.T) {
+	for _, stage := range []string{"before-commit", "after-commit", "after-anchor"} {
+		t.Run(stage, func(t *testing.T) {
+			s, authorization, public, _ := readyPeerRecoveryCompletion(t)
+			value, err := authorization.Approval().Value()
+			if err != nil {
+				t.Fatal(err)
+			}
+			bundle := struct {
+				Approval protocol.SignedPeerRecoveryApproval `json:"approval"`
+				Public   string                              `json:"public"`
+			}{value, string(public)}
+			raw, _ := json.Marshal(bundle)
+			if err = os.WriteFile(filepath.Join(s.dir, "completion-approval.json"), raw, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err = s.Close(); err != nil {
+				t.Fatal(err)
+			}
+			command := exec.Command(os.Args[0], "-test.run=^TestPeerRecoveryCompletionIntentCrashChild$", "-test.count=1")
+			command.Env = append(os.Environ(), "RUNNERD08_COMPLETION_CRASH_DIR="+s.dir, "RUNNERD08_COMPLETION_CRASH_STAGE="+stage)
+			out, err := command.CombinedOutput()
+			var exited *exec.ExitError
+			if !errors.As(err, &exited) || exited.ProcessState.Sys().(syscall.WaitStatus).Signal() != syscall.SIGKILL {
+				t.Fatalf("child not killed at completion boundary: %v\n%s", err, out)
+			}
+			reopened, err := OpenRecovery(context.Background(), s.dir, testOptions(Options{}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer reopened.Close()
+			expected := 1
+			if stage == "before-commit" {
+				expected = 0
+			}
+			if count(t, reopened, "peer_recovery_completion_intents") != expected {
+				t.Fatal("completion intent crossed wrong durability boundary")
+			}
+			encoded, _ := json.Marshal(value)
+			recorded, err := peerrecovery.VerifyRecordedApproval(encoded, public, value.Manifest.Plan, time.Now())
+			if err != nil {
+				t.Fatal(err)
+			}
+			ready, err := reopened.PeerRecoveryCompletionReady(context.Background(), recorded)
+			if err != nil || !ready {
+				t.Fatal("crash lost completion-only recovery path", ready, err)
+			}
+		})
+	}
+}
+
+func TestSchemaV2RecoveryUpgradePreservesApprovalAndObligations(t *testing.T) {
+	for _, state := range []string{"active", "expired", "partial-cleanup"} {
+		t.Run(state, func(t *testing.T) {
+			s, start := claimedRecovery(t)
+			var authorization *peerrecovery.Authorization
+			if state == "expired" {
+				a, _ := approvalForJournalMaterialWithLifetime(t, s, start, nil, 500*time.Millisecond)
+				authorization = a
+			} else {
+				authorization = approvalForJournal(t, s, start, nil)
+			}
+			if err := s.ApplyPeerRecovery(context.Background(), authorization); err != nil {
+				t.Fatal(err)
+			}
+			if state == "partial-cleanup" {
+				if _, err := s.db.Exec("UPDATE executions SET state='cleanup-pending',cleanup_pending=1"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if state == "expired" {
+				time.Sleep(600 * time.Millisecond)
+			}
+			var approvalBefore []byte
+			var releasedBefore, pendingBefore bool
+			if err := s.db.QueryRow("SELECT approval FROM peer_recovery_approvals").Scan(&approvalBefore); err != nil {
+				t.Fatal(err)
+			}
+			if err := s.db.QueryRow("SELECT released FROM reservations").Scan(&releasedBefore); err != nil {
+				t.Fatal(err)
+			}
+			if err := s.db.QueryRow("SELECT cleanup_pending FROM executions").Scan(&pendingBefore); err != nil {
+				t.Fatal(err)
+			}
+			dir := s.dir
+			if err := s.Close(); err != nil {
+				t.Fatal(err)
+			}
+			db, err := sql.Open("sqlite", filepath.Join(dir, databaseName))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = db.Exec("DROP TABLE peer_recovery_completion_intents"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = db.Exec("PRAGMA user_version=2"); err != nil {
+				t.Fatal(err)
+			}
+			if err = db.Close(); err != nil {
+				t.Fatal(err)
+			}
+			reopened, err := OpenRecovery(context.Background(), dir, testOptions(Options{}))
+			if err != nil {
+				t.Fatal("schema-v2 recovery journal did not upgrade", err)
+			}
+			defer reopened.Close()
+			var version, tableCount int
+			var approvalAfter []byte
+			var releasedAfter, pendingAfter bool
+			if err = reopened.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 3 {
+				t.Fatal("schema version not upgraded", version, err)
+			}
+			if err = reopened.db.QueryRow("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='peer_recovery_completion_intents'").Scan(&tableCount); err != nil || tableCount != 1 {
+				t.Fatal("completion intent table missing", err)
+			}
+			if err = reopened.db.QueryRow("SELECT approval FROM peer_recovery_approvals").Scan(&approvalAfter); err != nil || !bytes.Equal(approvalBefore, approvalAfter) {
+				t.Fatal("migration rewrote signed approval", err)
+			}
+			if err = reopened.db.QueryRow("SELECT released FROM reservations").Scan(&releasedAfter); err != nil || releasedAfter != releasedBefore {
+				t.Fatal("migration changed reservation obligation", err)
+			}
+			if err = reopened.db.QueryRow("SELECT cleanup_pending FROM executions").Scan(&pendingAfter); err != nil || pendingAfter != pendingBefore {
+				t.Fatal("migration changed cleanup obligation", err)
+			}
+		})
 	}
 }

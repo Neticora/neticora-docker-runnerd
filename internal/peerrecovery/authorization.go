@@ -36,8 +36,12 @@ func VerifyCommitted(raw, operatorPublicPEM []byte, expected protocol.PeerRecove
 // journal. The operator's immutable initial plan is not rewritten after cleanup
 // events commit. A platform watermark can never exceed this freshly read suffix.
 func VerifyContinuing(raw, operatorPublicPEM []byte, expected protocol.PeerRecoveryPlan, progress []NativeProgress, now time.Time) (*Authorization, error) {
+	return verifyAuthorization(raw, operatorPublicPEM, expected, progress, now, false)
+}
+
+func verifyAuthorization(raw, operatorPublicPEM []byte, expected protocol.PeerRecoveryPlan, progress []NativeProgress, now time.Time, completion bool) (*Authorization, error) {
 	reply, err := protocol.DecodePeerRecoveryAuthorization(raw)
-	if err != nil || (reply.Status != "APPROVED" && reply.Status != "APPLIED") {
+	if err != nil || (completion && reply.Status != "COMPLETED") || (!completion && reply.Status != "APPROVED" && reply.Status != "APPLIED") {
 		return nil, ErrApproval
 	}
 	actual, _ := Canonical(reply.Identity)
@@ -50,7 +54,12 @@ func VerifyContinuing(raw, operatorPublicPEM []byte, expected protocol.PeerRecov
 	if err != nil {
 		return nil, ErrApproval
 	}
-	approval, err := VerifyApproval(encoded, operatorPublicPEM, expected, now)
+	var approval *OperatorApproval
+	if completion {
+		approval, err = VerifyRecordedApproval(encoded, operatorPublicPEM, expected, now)
+	} else {
+		approval, err = VerifyApproval(encoded, operatorPublicPEM, expected, now)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +105,7 @@ func VerifyContinuing(raw, operatorPublicPEM []byte, expected protocol.PeerRecov
 			last, lastErr := strconv.ParseUint(bound.LastSequence, 10, 64)
 			originalAck, _ := strconv.ParseUint(e.AckSequence, 10, 64)
 			originalLast, _ := strconv.ParseUint(e.LastSequence, 10, 64)
-			if ackErr != nil || lastErr != nil || ack > last || ack < originalAck || last < originalLast {
+			if ackErr != nil || lastErr != nil || ack > last || ack < originalAck || last < originalLast || (completion && ack != last) {
 				return nil, ErrApproval
 			}
 			if seq < ack || seq > last {
@@ -131,46 +140,29 @@ func (a *Authorization) Current(now time.Time) bool {
 type Completion struct{ authorization *Authorization }
 
 func VerifyCompletion(raw, publicPEM []byte, expected protocol.PeerRecoveryPlan, progress []NativeProgress, now time.Time) (*Completion, error) {
-	reply, err := protocol.DecodePeerRecoveryAuthorization(raw)
-	if err != nil || reply.Status != "COMPLETED" {
-		return nil, ErrApproval
-	}
-	for _, p := range progress {
-		if p.AckSequence != p.LastSequence {
-			return nil, ErrApproval
-		}
-	}
-	for _, w := range reply.ServerWatermarks {
-		found := false
-		for _, p := range progress {
-			if p.ExecutionID == w.ExecutionId && p.Generation == w.Generation {
-				found = true
-				if w.ContiguousSequence != p.LastSequence {
-					return nil, ErrApproval
-				}
-			}
-		}
-		if !found {
-			return nil, ErrApproval
-		}
-	}
-	// All other identity/signature/freshness/snapshot rules are identical. This
-	// local conversion never escapes as an Authorization or changes wire bytes.
-	reply.Status = "APPLIED"
-	encoded, err := Canonical(reply)
-	if err != nil {
-		return nil, err
-	}
-	a, err := VerifyContinuing(encoded, publicPEM, expected, progress, now)
+	// Completion verifies historical approval, not renewed mutation permission.
+	// Its fresh server reply must agree exactly with the fully ACKed native facts.
+	a, err := verifyAuthorization(raw, publicPEM, expected, progress, now, true)
 	if err != nil {
 		return nil, err
 	}
 	return &Completion{authorization: a}, nil
 }
-func (c *Completion) Current(now time.Time) bool { return c != nil && c.authorization.Current(now) }
+func (c *Completion) Current(now time.Time) bool {
+	return c != nil && c.authorization != nil && c.authorization.approval != nil && !c.authorization.verifiedAt.After(now.Add(5*time.Second)) && now.Sub(c.authorization.verifiedAt) <= 10*time.Second
+}
 func (c *Completion) ApprovalHash() string {
 	if c == nil {
 		return ""
 	}
 	return c.authorization.approval.Hash()
+}
+
+// RecordedApproval is immutable evidence for the journal's finalization checks.
+// It does not expose an Authorization and cannot renew Docker mutation access.
+func (c *Completion) RecordedApproval() *OperatorApproval {
+	if c == nil || c.authorization == nil {
+		return nil
+	}
+	return c.authorization.approval
 }

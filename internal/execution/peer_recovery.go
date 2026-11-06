@@ -90,12 +90,22 @@ func (c *PeerRecoveryCoordinator) Propose(ctx context.Context, challenge protoco
 		return protocol.SignedPeerRecoveryPlan{}, ErrReconcile
 	}
 	endpoint, err := c.Runtime.Probe(ctx)
-	if err != nil || endpoint == scope.EndpointIdentity {
+	if err != nil {
 		return protocol.SignedPeerRecoveryPlan{}, ErrReconcile
 	}
 	rows, err := c.executions(ctx)
 	if err != nil {
 		return protocol.SignedPeerRecoveryPlan{}, err
+	}
+	if endpoint == scope.EndpointIdentity {
+		// An idle native journal may already have applied the peer without
+		// finalizing its grant. Renewal on that same peer retains the recorded
+		// transition; an actually newer peer starts from native committed scope.
+		prior, err := c.Store.CurrentPeerRecovery(ctx)
+		if err != nil || len(rows) != 0 || prior.Manifest.Plan.TargetEndpointIdentity != endpoint || prior.Manifest.Plan.SourceEndpointIdentity == endpoint {
+			return protocol.SignedPeerRecoveryPlan{}, ErrReconcile
+		}
+		scope.EndpointIdentity = prior.Manifest.Plan.SourceEndpointIdentity
 	}
 	lookups := make([]agent.ExecutionCursor, 0, len(rows))
 	for _, e := range rows {
@@ -417,7 +427,7 @@ func (c *PeerRecoveryCoordinator) Apply(ctx context.Context, approved protocol.S
 	if err != nil {
 		return err
 	}
-	checked, err := peerrecovery.VerifyApproval(raw, c.PublicKey, plan, time.Now())
+	checked, err := peerrecovery.VerifyRecordedApproval(raw, c.PublicKey, plan, time.Now())
 	if err != nil {
 		return err
 	}
@@ -430,22 +440,19 @@ func (c *PeerRecoveryCoordinator) Apply(ctx context.Context, approved protocol.S
 		return err
 	}
 	if completed {
-		if _, _, err = c.inventory(ctx, plan); err != nil {
-			return err
-		}
-		ids, err := c.Runtime.Inventory(ctx)
-		if err != nil || len(ids) != 0 {
-			return ErrReconcile
-		}
-		progress, err := c.Store.PeerRecoveryProgress(ctx, plan)
-		if err != nil {
-			return err
-		}
-		reply, err := c.Remote.PeerRecovery(ctx, approved.Manifest.ApprovalId, true)
-		if err != nil {
-			return err
-		}
-		_, err = peerrecovery.VerifyCompletion(reply, c.PublicKey, plan, progress, time.Now())
+		return c.finalize(ctx, approved, checked, true)
+	}
+	ready, err := c.Store.PeerRecoveryCompletionReady(ctx, checked)
+	if err != nil {
+		return err
+	}
+	if ready {
+		// A durable completion intent (or fully ACKed legacy cleanup) must not
+		// request ordinary authorization after the platform reached COMPLETED.
+		return c.finalize(ctx, approved, checked, false)
+	}
+	// Historical signature verification above is never mutation permission.
+	if _, err = peerrecovery.VerifyApproval(raw, c.PublicKey, plan, time.Now()); err != nil {
 		return err
 	}
 	prior, priorErr := c.Store.CurrentPeerRecovery(ctx)
@@ -623,6 +630,13 @@ func (c *PeerRecoveryCoordinator) Apply(ctx context.Context, approved protocol.S
 	if err = c.flush(ctx, plan); err != nil {
 		return err
 	}
+	return c.finalize(ctx, approved, checked, false)
+}
+
+// finalize has no mutation/command/event path. A fresh inventory and exact ACKed
+// suffix are required on every retry, including after signed approval expiry.
+func (c *PeerRecoveryCoordinator) finalize(ctx context.Context, approved protocol.SignedPeerRecoveryApproval, checked *peerrecovery.OperatorApproval, completed bool) error {
+	plan := approved.Manifest.Plan
 	finalGeneration, finalObserved, err := c.inventory(ctx, plan)
 	if err != nil {
 		return err
@@ -640,6 +654,12 @@ func (c *PeerRecoveryCoordinator) Apply(ctx context.Context, approved protocol.S
 			return ErrReconcile
 		}
 	}
+	if !completed {
+		h := c.Store.Health(ctx)
+		if err = c.Store.BeginPeerRecoveryCompletion(ctx, checked, agent.RecoveryCheckpoint{JournalID: h.JournalID, Revision: h.Revision, Scope: c.scope(plan), InventoryGeneration: finalGeneration, ObservedAt: finalObserved}); err != nil {
+			return err
+		}
+	}
 	reply, err := c.Remote.PeerRecovery(ctx, approved.Manifest.ApprovalId, true)
 	if err != nil {
 		return err
@@ -648,9 +668,15 @@ func (c *PeerRecoveryCoordinator) Apply(ctx context.Context, approved protocol.S
 	if err != nil {
 		return err
 	}
-	endpoint, err = c.Runtime.Probe(ctx)
+	if completion.ApprovalHash() != checked.Hash() {
+		return ErrReconcile
+	}
+	endpoint, err := c.Runtime.Probe(ctx)
 	if err != nil || endpoint != plan.TargetEndpointIdentity {
 		return ErrReconcile
+	}
+	if completed {
+		return nil
 	}
 	h := c.Store.Health(ctx)
 	return c.Store.CompletePeerRecovery(ctx, completion, agent.RecoveryCheckpoint{JournalID: h.JournalID, Revision: h.Revision, Scope: c.scope(plan), InventoryGeneration: finalGeneration, ObservedAt: finalObserved})

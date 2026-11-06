@@ -268,6 +268,13 @@ func (s *SQLiteStore) CheckPeerRecoveryMutation(ctx context.Context, a *peerreco
 	if digest != a.Approval().Hash() || !pending {
 		return agent.ErrRecoveryRequired
 	}
+	var finalizing int
+	if err = s.db.QueryRowContext(ctx, "SELECT count(*) FROM peer_recovery_completion_intents WHERE approval_hash=?", digest).Scan(&finalizing); err != nil {
+		return s.receiptReadFailure(ctx, err)
+	}
+	if finalizing != 0 {
+		return agent.ErrRecoveryRequired
+	}
 	allowed, err := s.recoveryPermission(ctx, s.db, executionID, generation)
 	if err != nil {
 		return err
@@ -293,6 +300,13 @@ func (s *SQLiteStore) recoveryPermission(ctx context.Context, reader recoveryRea
 	}
 	if err != nil {
 		return nil, err
+	}
+	var finalizing int
+	if err = reader.QueryRowContext(ctx, "SELECT count(*) FROM peer_recovery_completion_intents WHERE approval_hash=?", digest).Scan(&finalizing); err != nil {
+		return nil, err
+	}
+	if finalizing != 0 {
+		return nil, agent.ErrRecoveryRequired
 	}
 	approval, err := protocol.DecodeSignedPeerRecoveryApproval(raw)
 	if err != nil {
@@ -368,40 +382,22 @@ func (s *SQLiteStore) CompletePeerRecovery(ctx context.Context, c *peerrecovery.
 		if !known || generation != checkpoint.InventoryGeneration {
 			return agent.ErrRecoveryRequired
 		}
-		var digest string
-		if err := tx.QueryRowContext(ctx, "SELECT approval_hash FROM peer_recovery_approvals WHERE completed=0 AND superseded=0").Scan(&digest); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return agent.ErrNotFound
-			}
+		progress, completed, err := s.completionProgress(ctx, tx, c.RecordedApproval())
+		if err != nil {
 			return err
 		}
-		if digest != c.ApprovalHash() {
+		if completed {
 			return agent.ErrConflict
 		}
-		var unresolved, reserved int
-		if err := tx.QueryRowContext(ctx, "SELECT count(*) FROM executions WHERE state<>'cleaned' OR cleanup_pending=1 OR last_sequence<>ack_sequence").Scan(&unresolved); err != nil {
-			return err
-		}
-		if err := tx.QueryRowContext(ctx, "SELECT count(*) FROM reservations WHERE released=0").Scan(&reserved); err != nil {
-			return err
-		}
-		if unresolved != 0 || reserved != 0 {
+		var intentHash string
+		var intentProgress []byte
+		if err = tx.QueryRowContext(ctx, "SELECT approval_hash,progress FROM peer_recovery_completion_intents WHERE approval_hash=?", c.ApprovalHash()).Scan(&intentHash, &intentProgress); err != nil {
 			return agent.ErrRecoveryRequired
 		}
-		var raw []byte
-		if err := tx.QueryRowContext(ctx, "SELECT approval FROM peer_recovery_approvals WHERE completed=0 AND superseded=0").Scan(&raw); err != nil {
-			return err
-		}
-		a, err := protocol.DecodeSignedPeerRecoveryApproval(raw)
-		if err != nil {
+		if intentHash != c.ApprovalHash() || !bytes.Equal(intentProgress, progress) {
 			return agent.ErrRecoveryRequired
 		}
-		for _, d := range a.Manifest.Decisions {
-			if d.Action == "hold" {
-				return agent.ErrRecoveryRequired
-			}
-		}
-		_, err = tx.ExecContext(ctx, "UPDATE peer_recovery_approvals SET completed=1 WHERE completed=0 AND superseded=0")
+		_, err = tx.ExecContext(ctx, "UPDATE peer_recovery_approvals SET completed=1 WHERE approval_hash=? AND completed=0 AND superseded=0", c.ApprovalHash())
 		return err
 	})
 }
@@ -427,12 +423,21 @@ func (s *SQLiteStore) PeerRecoveryScope(ctx context.Context) (agent.StoreScope, 
 		return scope, agent.ErrRecoveryRequired
 	}
 	var approvedRaw []byte
-	err = s.db.QueryRowContext(ctx, "SELECT approval FROM peer_recovery_approvals WHERE completed=0 AND superseded=0").Scan(&approvedRaw)
+	var approvedHash string
+	err = s.db.QueryRowContext(ctx, "SELECT approval,approval_hash FROM peer_recovery_approvals WHERE completed=0 AND superseded=0").Scan(&approvedRaw, &approvedHash)
 	if err == nil {
 		a, e := protocol.DecodeSignedPeerRecoveryApproval(approvedRaw)
 		if e != nil {
 			return scope, agent.ErrRecoveryRequired
 		}
+		digest, e := peerrecovery.Hash(a)
+		p := a.Manifest.Plan
+		if e != nil || digest != approvedHash || p.InstallationId != scope.InstallationID || p.Challenge.TenantId != scope.TenantID || p.Challenge.Identity.HostId != scope.HostID || p.TargetEndpointIdentity != scope.EndpointIdentity {
+			return scope, agent.ErrRecoveryRequired
+		}
+		// Outstanding executions retain immutable creation authority. With no
+		// obligations, expose the natively committed peer; the coordinator can
+		// separately select the prior transition for same-peer idle renewal.
 		var outstanding int
 		if err = s.db.QueryRowContext(ctx, "SELECT count(*) FROM executions WHERE state<>'cleaned' OR cleanup_pending=1 OR last_sequence>ack_sequence").Scan(&outstanding); err != nil {
 			return scope, s.receiptReadFailure(ctx, err)
