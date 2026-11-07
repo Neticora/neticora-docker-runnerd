@@ -13,8 +13,9 @@ import (
 
 var ErrBlockStorageRequired = errors.New("qualified per-execution block storage with overlay2 is required")
 
-// BlockStorage binds one dedicated physical pool and one execution disk. Reserve
-// the WHOLE pool in the common journal; guest discard cannot enable overcommit.
+// BlockStorage binds one dedicated physical pool and one execution disk. V2
+// reserves the whole pool. V3 reserves independently backed per-execution slices
+// and limits their aggregate charge before any file or loop effect.
 // Host loop devices are private transport, never exposed as guest loop devices.
 // Kata translates the single OCI block mapping to a virtual virtio-blk disk.
 type BlockStorage struct {
@@ -24,24 +25,45 @@ type BlockStorage struct {
 	Pool                         Filesystem `json:"pool"`
 	Bytes                        uint64     `json:"bytes"`
 	HeadroomBytes                uint64     `json:"headroomBytes"`
+	MaxConcurrentAllocations     uint32     `json:"maxConcurrentAllocations,omitempty"`
+	PoolReservationBytes         uint64     `json:"poolReservationBytes,omitempty"`
 	DeviceDirectory              string     `json:"deviceDirectory"`
 	MkfsBinary                   string     `json:"mkfsBinary"`
 	AttachmentReference          string     `json:"attachmentReference"`
 	PhysicalReservationReference string     `json:"physicalReservationReference"`
 }
 type GuestBlockSettings struct {
-	Version string `json:"version"`
-	Device  string `json:"device"`
-	UUID    string `json:"uuid"`
-	Bytes   uint64 `json:"bytes"`
-	UID     int    `json:"uid"`
+	Version    string   `json:"version"`
+	Device     string   `json:"device"`
+	UUID       string   `json:"uuid"`
+	Bytes      uint64   `json:"bytes"`
+	UID        int      `json:"uid"`
+	DNSServers []string `json:"dnsServers,omitempty"`
 }
 
 func (p *Profile) template() string {
-	if p.Manifest.Version == BlockVersion {
+	if isBlockVersion(p.Manifest.Version) {
 		return BlockTemplate
 	}
 	return Template
+}
+
+func isBlockVersion(version string) bool {
+	return version == BlockVersion || version == MultiBlockVersion
+}
+
+func (p *Profile) MaxConcurrentAllocations() uint64 {
+	if p.Manifest.Version == MultiBlockVersion && p.Manifest.Storage.Block != nil {
+		return uint64(p.Manifest.Storage.Block.MaxConcurrentAllocations)
+	}
+	return 1
+}
+
+func (p *Profile) poolReservationBytes() uint64 {
+	if p.Manifest.Version == MultiBlockVersion {
+		return p.Manifest.Storage.Block.PoolReservationBytes
+	}
+	return p.Manifest.Storage.Block.Pool.Bytes
 }
 func (p *Profile) storageFilesystems() []Filesystem {
 	if p.Manifest.Storage.Block != nil {
@@ -79,6 +101,13 @@ func (p *Profile) validateBlockStorage() error {
 	if b == nil || b.Method != "preallocated-raw-loop-virtio-blk-v1" || b.Filesystem != "ext4" || b.Transport != "virtio-blk-pci" || b.Bytes > math.MaxInt64 || b.Pool.Bytes > math.MaxInt64 || b.Bytes < 1<<30 || b.Bytes%(1<<20) != 0 || b.HeadroomBytes < 256<<20 || b.Pool.Bytes < b.HeadroomBytes || b.Bytes > b.Pool.Bytes-b.HeadroomBytes || b.Pool.Device == 0 || len(b.AttachmentReference) < 20 || len(b.PhysicalReservationReference) < 20 || p.Manifest.Files[b.MkfsBinary] == "" || p.Manifest.Storage.Graph != (Filesystem{}) || p.Manifest.Storage.Workspace != (Filesystem{}) {
 		return ErrQualification
 	}
+	if p.Manifest.Version == MultiBlockVersion {
+		if b.MaxConcurrentAllocations < 2 || b.MaxConcurrentAllocations > 16 || b.PoolReservationBytes < b.Bytes+b.HeadroomBytes || b.PoolReservationBytes > b.Pool.Bytes/uint64(b.MaxConcurrentAllocations) {
+			return ErrQualification
+		}
+	} else if b.MaxConcurrentAllocations != 0 || b.PoolReservationBytes != 0 {
+		return ErrQualification
+	}
 	for _, path := range []string{b.DeviceDirectory, b.MkfsBinary, b.Pool.Root} {
 		if !filepath.IsAbs(path) || filepath.Clean(path) != path || path == "/" || strings.ContainsAny(path, " \t\r\n\\\x00") {
 			return ErrQualification
@@ -114,8 +143,11 @@ func (p *Profile) RequireLaunchStorage() error {
 			}
 		}
 	}
-	if p == nil || p.Manifest.Files["/etc/mke2fs.conf"] == "" || p.Manifest.Version != BlockVersion || p.Manifest.GuestStorageDriver != "overlay2" || p.validateBlockStorage() != nil {
+	if p == nil || p.Manifest.Files["/etc/mke2fs.conf"] == "" || !isBlockVersion(p.Manifest.Version) || p.Manifest.GuestStorageDriver != "overlay2" || p.validateBlockStorage() != nil {
 		return ErrBlockStorageRequired
+	}
+	if p.Manifest.Version == MultiBlockVersion && validateHostCgroup(p.Manifest) != nil {
+		return ErrQualification
 	}
 	return nil
 }

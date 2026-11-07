@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/netip"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -33,6 +34,7 @@ import (
 const Template = "linux-github-kata-v1"
 const Version = "runnerd09-kata-profile-v1"
 const BlockVersion = "runnerd09-kata-profile-v2"
+const MultiBlockVersion = "runnerd09-kata-profile-v3"
 const BlockTemplate = "linux-github-kata-v2"
 
 var ErrQualification = errors.New("Kata qualification or physical evidence unavailable")
@@ -96,6 +98,8 @@ type Manifest struct {
 	VMNamePrefix      string            `json:"vmNamePrefix"`
 	SandboxRoots      []string          `json:"sandboxRoots"`
 	GuestCapabilities []string          `json:"guestCapabilities"`
+	GuestDNSServers   []string          `json:"guestDnsServers,omitempty"`
+	HostCgroup        *HostCgroup       `json:"hostCgroup,omitempty"`
 	SecurityReview    string            `json:"securityReview"`
 	Budget            Budget            `json:"budget"`
 	Storage           Storage           `json:"storage"`
@@ -145,6 +149,9 @@ func ProfileID(m Manifest) (string, error) {
 	if m.Version == BlockVersion {
 		prefix = "docker-kata-rs-qemu-v2-"
 	}
+	if m.Version == MultiBlockVersion {
+		prefix = "docker-kata-rs-qemu-v3-"
+	}
 	return prefix + hex.EncodeToString(h[:]), nil
 }
 func Load(file, public, evidence, journal string, base standardlinux.Settings) (*Profile, error) {
@@ -153,6 +160,10 @@ func Load(file, public, evidence, journal string, base standardlinux.Settings) (
 		return nil, e
 	}
 	if _, e = protocol.CanonicalizeJSON(raw); e != nil {
+		return nil, ErrQualification
+	}
+	var parts map[string]json.RawMessage
+	if json.Unmarshal(raw, &parts) != nil || len(parts) != 2 || parts["manifest"] == nil || parts["signature"] == nil {
 		return nil, ErrQualification
 	}
 	var signed Signed
@@ -179,8 +190,9 @@ func Load(file, public, evidence, journal string, base standardlinux.Settings) (
 	}
 	b, _ := json.Marshal(signed.Manifest)
 	b, e = protocol.CanonicalizeJSON(b)
+	original, rawErr := protocol.CanonicalizeJSON(parts["manifest"])
 	sig, e2 := base64.RawURLEncoding.DecodeString(signed.Signature)
-	if e != nil || e2 != nil || base64.RawURLEncoding.EncodeToString(sig) != signed.Signature || !ed25519.Verify(key, b, sig) {
+	if e != nil || rawErr != nil || !bytes.Equal(original, b) || e2 != nil || base64.RawURLEncoding.EncodeToString(sig) != signed.Signature || !ed25519.Verify(key, original, sig) {
 		return nil, ErrQualification
 	}
 	id, e := ProfileID(signed.Manifest)
@@ -198,7 +210,29 @@ func Load(file, public, evidence, journal string, base standardlinux.Settings) (
 }
 func (p *Profile) validate() error {
 	m := p.Manifest
-	block := m.Version == BlockVersion
+	block := isBlockVersion(m.Version)
+	if m.Version == MultiBlockVersion {
+		if err := validateHostCgroup(m); err != nil {
+			return err
+		}
+		if len(m.GuestDNSServers) < 1 || len(m.GuestDNSServers) > 4 {
+			return ErrQualification
+		}
+		seen := map[string]bool{}
+		for _, value := range m.GuestDNSServers {
+			addr, err := netip.ParseAddr(value)
+			if err != nil || !addr.Is4() || addr.String() != value || seen[value] {
+				return ErrQualification
+			}
+			first := addr.As4()[0]
+			if first == 0 || first == 127 || first >= 224 {
+				return ErrQualification
+			}
+			seen[value] = true
+		}
+	} else if len(m.GuestDNSServers) != 0 || m.HostCgroup != nil {
+		return ErrQualification
+	}
 	if (!block && (m.GuestStorageDriver != "vfs" || m.Storage.Block != nil)) || (block && (m.GuestStorageDriver != "overlay2" || p.validateBlockStorage() != nil)) {
 		return ErrQualification
 	}
@@ -213,7 +247,7 @@ func (p *Profile) validate() error {
 			return ErrQualification
 		}
 	}
-	if (m.Version != Version && m.Version != BlockVersion) || !m.Qualified || !strings.HasPrefix(m.EndpointIdentity, "docker-") || m.ConfigurationGeneration == "" || m.HostKernel == "" || m.DockerVersion == "" || m.KataVersion == "" || m.QEMUVersion == "" || m.GuestKernelVersion == "" || m.GuestImageVersion == "" || m.RuntimeSelector == "" || m.RuntimeSelector == "runc" || m.RuntimeSelector == "default" || !validRuntimeSelector(m.RuntimeSelector) || len(m.Files) < 5 || m.Files[m.QEMUBinary] == "" || m.Files[m.ShimBinary] == "" || m.VMNamePrefix == "" || strings.ContainsAny(m.VMNamePrefix, "/ ,\x00") || len(m.SandboxRoots) == 0 || len(m.SecurityReview) < 20 {
+	if (m.Version != Version && !block) || !m.Qualified || !strings.HasPrefix(m.EndpointIdentity, "docker-") || m.ConfigurationGeneration == "" || m.HostKernel == "" || m.DockerVersion == "" || m.KataVersion == "" || m.QEMUVersion == "" || m.GuestKernelVersion == "" || m.GuestImageVersion == "" || m.RuntimeSelector == "" || m.RuntimeSelector == "runc" || m.RuntimeSelector == "default" || !validRuntimeSelector(m.RuntimeSelector) || len(m.Files) < 5 || m.Files[m.QEMUBinary] == "" || m.Files[m.ShimBinary] == "" || m.VMNamePrefix == "" || strings.ContainsAny(m.VMNamePrefix, "/ ,\x00") || len(m.SandboxRoots) == 0 || len(m.SecurityReview) < 20 {
 		return ErrQualification
 	}
 	if m.ImageRepository == "" || strings.ContainsAny(m.ImageRepository, "@ \t\r\n") || len(m.ImageDigest) != 71 || !strings.HasPrefix(m.ImageDigest, "sha256:") {
@@ -273,7 +307,7 @@ func (p *Profile) validate() error {
 		}
 	}
 	for _, cap := range m.GuestCapabilities {
-		if !slices.Contains([]string{"SETUID", "SETGID", "CHOWN", "DAC_OVERRIDE", "FOWNER", "NET_ADMIN", "SYS_ADMIN", "MKNOD", "SETPCAP", "NET_RAW", "SYS_CHROOT", "AUDIT_WRITE", "SETFCAP"}, cap) {
+		if !slices.Contains([]string{"SETUID", "SETGID", "CHOWN", "DAC_OVERRIDE", "FOWNER", "FSETID", "KILL", "NET_BIND_SERVICE", "NET_ADMIN", "SYS_ADMIN", "MKNOD", "SETPCAP", "NET_RAW", "SYS_CHROOT", "AUDIT_WRITE", "SETFCAP"}, cap) {
 			return ErrQualification
 		}
 	}
@@ -301,7 +335,7 @@ func (p *Profile) validate() error {
 	total := uint64(0)
 	physical := []uint64{m.Storage.Runtime.Bytes, m.Storage.OuterBytes, m.Storage.LogBytes}
 	if block {
-		physical = append(physical, m.Storage.Block.Pool.Bytes)
+		physical = append(physical, p.poolReservationBytes())
 	} else {
 		physical = append(physical, m.Storage.Graph.Bytes, m.Storage.Workspace.Bytes)
 	}
@@ -382,6 +416,14 @@ func (p *Profile) buildPlan(scope agent.StoreScope, s protocol.ExecutionSpec) (d
 	plan.HostConfig.Runtime = m.RuntimeSelector
 	guestCPU, _ := strconv.ParseUint(m.Budget.Guest.CpuMillis, 10, 64)
 	guestMemory, _ := strconv.ParseUint(m.Budget.Guest.MemoryBytes, 10, 64)
+	if m.Version == MultiBlockVersion {
+		// OCI limits describe the guest workload. The independently prepared
+		// host slice constrains the VMM/runtime to the larger Effective budget.
+		plan.HostConfig.NanoCPUs = int64(guestCPU * 1_000_000)
+		plan.HostConfig.Memory = int64(guestMemory)
+		plan.HostConfig.MemorySwap = int64(guestMemory)
+		plan.HostConfig.CgroupParent = hostCgroupUnit(plan.Name)
+	}
 	plan.HostConfig.Annotations = map[string]string{
 		"io.katacontainers.config.hypervisor.default_vcpus":  strconv.FormatUint(guestCPU/1000, 10),
 		"io.katacontainers.config.hypervisor.default_memory": strconv.FormatUint(guestMemory/(1<<20), 10),
@@ -391,6 +433,9 @@ func (p *Profile) buildPlan(scope agent.StoreScope, s protocol.ExecutionSpec) (d
 	plan.HostConfig.Tmpfs = map[string]string{"/run": "rw,nosuid,nodev,size=134217728", "/tmp": "rw,nosuid,nodev,size=67108864"}
 	if m.Storage.Block != nil {
 		settings, _ := json.Marshal(GuestBlockSettings{Version: "runnerd09-guest-block-v1", Device: "/dev/neticora-execution", UUID: p.blockUUID(plan.Name), Bytes: m.Storage.Block.Bytes, UID: p.Base.RunnerUID})
+		if m.Version == MultiBlockVersion {
+			settings, _ = json.Marshal(GuestBlockSettings{Version: "runnerd09-guest-block-v2", Device: "/dev/neticora-execution", UUID: p.blockUUID(plan.Name), Bytes: m.Storage.Block.Bytes, UID: p.Base.RunnerUID, DNSServers: append([]string{}, m.GuestDNSServers...)})
+		}
 		plan.Config.Cmd = []string{"--block-storage", string(settings)}
 		plan.HostConfig.Devices = []container.DeviceMapping{{PathOnHost: p.blockNode(plan.Name), PathInContainer: "/dev/neticora-execution", CgroupPermissions: "rw"}}
 		delete(plan.HostConfig.Tmpfs, "/tmp")
@@ -413,6 +458,11 @@ func (p *Profile) Probe(ctx context.Context, e *dockerengine.Engine) error {
 	if p.Check(time.Now()) != nil {
 		return ErrQualification
 	}
+	if p.Manifest.Version == MultiBlockVersion {
+		if err := e.CheckKataHostCgroupDriver(ctx); err != nil {
+			return err
+		}
+	}
 	return e.CheckKataTuple(ctx, p.Manifest.RuntimeSelector, p.Manifest.DockerVersion, p.Manifest.Storage.DockerRoot, p.Manifest.ShimBinary, p.Manifest.RuntimeConfig, p.Manifest.DockerConfig, p.Manifest.Files[p.Manifest.DockerConfig])
 }
 
@@ -423,6 +473,11 @@ func (p *Profile) RecoverProbe(ctx context.Context, e *dockerengine.Engine) erro
 	}
 	if p.layout() != nil {
 		return ErrQualification
+	}
+	if p.Manifest.Version == MultiBlockVersion {
+		if err := e.CheckKataHostCgroupDriver(ctx); err != nil {
+			return err
+		}
 	}
 	return e.CheckKataTuple(ctx, p.Manifest.RuntimeSelector, p.Manifest.DockerVersion, p.Manifest.Storage.DockerRoot, p.Manifest.ShimBinary, p.Manifest.RuntimeConfig, p.Manifest.DockerConfig, p.Manifest.Files[p.Manifest.DockerConfig])
 }

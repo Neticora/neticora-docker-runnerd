@@ -439,6 +439,10 @@ func (p *Profile) Capture(ctx context.Context, id string, plan dockerengine.Plan
 	}
 	defer root.Close()
 	record := Evidence{Version: "runnerd09-physical-v1", Profile: p.ID, Container: id, SpecHash: plan.Config.Labels[dockerengine.LabelPrefix+"spec"], Generation: plan.Config.Labels[dockerengine.LabelPrefix+"generation"], ObservedAt: time.Now().UTC().Format(time.RFC3339Nano), Processes: processes}
+	record.Cgroup, e = p.verifyHostCgroup(ctx, plan, processes)
+	if e != nil {
+		return e
+	}
 	if p.Manifest.Storage.Block != nil {
 		block, err := p.blockRecord(plan)
 		if err != nil || p.verifyBlock(plan) != nil || verifyVMMBlock(processes, block, p.Manifest.QEMUBinary) != nil {
@@ -454,7 +458,7 @@ func (p *Profile) Capture(ctx context.Context, id string, plan dockerengine.Plan
 			return ErrQualification
 		}
 		if !previous.Prepared {
-			if !slices.Equal(previous.Processes, processes) {
+			if !slices.Equal(previous.Processes, processes) || !sameHostCgroup(previous.Cgroup, record.Cgroup) {
 				return ErrQualification
 			}
 			return nil
@@ -525,13 +529,17 @@ func (p *Profile) CapturePrepared(id string, plan dockerengine.Plan) error {
 	if e != nil {
 		return e
 	}
+	group, e := p.verifyHostCgroup(context.Background(), plan, processes)
+	if e != nil {
+		return e
+	}
 	file := plan.Name + ".json"
 	if raw, e := root.ReadFile(file); e == nil {
 		var old Evidence
 		if readEvidence(raw, &old) != nil || old.Profile != p.ID || old.Container != id || old.SpecHash != plan.Config.Labels[dockerengine.LabelPrefix+"spec"] || old.Generation != plan.Config.Labels[dockerengine.LabelPrefix+"generation"] {
 			return ErrQualification
 		}
-		if !old.Prepared {
+		if !old.Prepared || !sameHostCgroup(old.Cgroup, group) {
 			return ErrQualification
 		}
 		for _, prior := range old.Processes {
@@ -544,6 +552,7 @@ func (p *Profile) CapturePrepared(id string, plan dockerengine.Plan) error {
 		return e
 	}
 	record := Evidence{Version: "runnerd09-physical-v1", Profile: p.ID, Container: id, SpecHash: plan.Config.Labels[dockerengine.LabelPrefix+"spec"], Generation: plan.Config.Labels[dockerengine.LabelPrefix+"generation"], ObservedAt: time.Now().UTC().Format(time.RFC3339Nano), Prepared: true, Processes: processes}
+	record.Cgroup = group
 	if p.Manifest.Storage.Block != nil {
 		block, err := p.blockRecord(plan)
 		if err != nil || p.verifyBlock(plan) != nil {
@@ -612,6 +621,12 @@ func (p *Profile) VerifyAbsent(ctx context.Context, id string, plan dockerengine
 	if err := verifyOwners(); err != nil {
 		return err
 	}
+	if p.Manifest.Version == MultiBlockVersion {
+		current, err := p.cgroupRecord(plan)
+		if err != nil || record.Cgroup == nil || !sameHostCgroup(record.Cgroup, &current) {
+			return ErrQualification
+		}
+	}
 	if p.Manifest.Storage.Block != nil {
 		block, err := p.blockRecord(plan)
 		if err != nil {
@@ -659,9 +674,14 @@ func (p *Profile) VerifyAbsent(ctx context.Context, id string, plan dockerengine
 		}
 	}
 
+	record.Cgroup, e = p.releaseHostCgroup(ctx, plan)
+	if e != nil {
+		return e
+	}
 	// Called only after the host observer's continuous Docker inspection and
 	// bridge-endpoint verification; every retry repeats all physical checks.
 	record.Absence = &PhysicalAbsence{DeviceDetached: p.Manifest.Storage.Block != nil, MountsRemoved: p.Manifest.Storage.Block != nil, ContainerAbsent: true, SandboxAbsent: true, VMAbsent: true, NetworkRemoved: true, StorageRemoved: true, VerifiedAt: time.Now().UTC().Format(time.RFC3339Nano), ObservationSource: "qualified-host-procfs-runtime-state-v1"}
+	record.Absence.CgroupRemoved = p.Manifest.Version == MultiBlockVersion
 	root, e := hostfs.OpenState(p.EvidenceDirectory)
 	if e != nil {
 		return e

@@ -140,6 +140,40 @@ func TestOwnershipAndRestartDriftPreventMutation(t *testing.T) {
 	}
 }
 
+func TestCgroupParentDriftFences(t *testing.T) {
+	for _, example := range []struct{ name, parent string }{{"missing", ""}, {"foreign", "system.slice"}} {
+		t.Run(example.name, func(t *testing.T) {
+			e, p, exists, _, _, _ := fakeEngine(t)
+			*exists = true
+			actual := p.HostConfig
+			expected := *actual
+			p.HostConfig = &expected
+			p.HostConfig.CgroupParent = "neticora-runnerd-e" + strings.Repeat("a", 64) + ".slice"
+			actual.CgroupParent = example.parent
+			if _, err := e.Inspect(t.Context(), p.Name, p); !errors.Is(err, ErrConflict) {
+				t.Fatal("foreign or missing host boundary adopted", err)
+			}
+			called := false
+			if _, err := e.Start(t.Context(), p.Name, p, func() error { called = true; return nil }); !errors.Is(err, ErrConflict) {
+				t.Fatal("foreign boundary allowed launch", err)
+			}
+			if called {
+				t.Fatal("drift reached launch authorization")
+			}
+			if err := e.Remove(t.Context(), p.Name, p); !errors.Is(err, ErrConflict) {
+				t.Fatal("foreign boundary allowed destructive mutation", err)
+			}
+		})
+	}
+}
+
+func TestMissingHostCgroupDriverCannotFallBackForKata(t *testing.T) {
+	e, _, _, _, _, _ := fakeEngine(t)
+	if err := e.CheckKataHostCgroupDriver(t.Context()); !errors.Is(err, ErrConflict) {
+		t.Fatal("missing systemd/cgroup-v2 evidence accepted", err)
+	}
+}
+
 func TestEndpointChangeInvalidatesContinuity(t *testing.T) {
 	e, _, _, _, _, daemon := fakeEngine(t)
 	lost := 0

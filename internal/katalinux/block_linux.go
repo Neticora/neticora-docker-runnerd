@@ -28,7 +28,7 @@ import (
 
 // A root-only durable slot is written BEFORE any backing file or loop effect.
 // Released per-execution tombstones prevent recreating an old attempt. The common
-// journal independently retains the entire physical pool reservation until CLEANED.
+// journal retains the signed physical reservation until CLEANED.
 
 const blockSlot = "block-active.json"
 
@@ -144,12 +144,28 @@ func ext4UUID(f *os.File) (string, error) {
 	return v[:8] + "-" + v[8:12] + "-" + v[12:16] + "-" + v[16:20] + "-" + v[20:], nil
 }
 func (p *Profile) blockInventory(allowed string) error {
+	root, err := hostfs.OpenState(p.EvidenceDirectory)
+	if err != nil {
+		return err
+	}
+	index, err := p.readBlockSlots(root)
+	root.Close()
+	if err != nil {
+		return err
+	}
+	known := map[string]bool{}
+	for name := range index.Active {
+		known[name] = true
+	}
+	if allowed != "" && !known[allowed] {
+		return ErrQualification
+	}
 	entries, err := os.ReadDir(p.Manifest.Storage.Block.Pool.Root)
 	if err != nil {
 		return err
 	}
 	for _, entry := range entries {
-		if entry.Name() != "lost+found" && entry.Name() != ".runnerd.lock" && entry.Name() != allowed+".raw" {
+		if entry.Name() != "lost+found" && entry.Name() != ".runnerd.lock" && entry.Name() != blockPoolOwnerFile && (!strings.HasSuffix(entry.Name(), ".raw") || !known[strings.TrimSuffix(entry.Name(), ".raw")]) {
 			return ErrQualification
 		}
 	}
@@ -158,7 +174,7 @@ func (p *Profile) blockInventory(allowed string) error {
 		return err
 	}
 	for _, node := range nodes {
-		if node.Name() != allowed {
+		if !known[node.Name()] {
 			return ErrQualification
 		}
 	}
@@ -176,7 +192,7 @@ func (p *Profile) blockInventory(allowed string) error {
 			return err
 		}
 		path := strings.TrimSpace(string(raw))
-		if strings.HasPrefix(path, p.Manifest.Storage.Block.Pool.Root+"/") && (allowed == "" || path != p.rawPath(allowed)) {
+		if strings.HasPrefix(path, p.Manifest.Storage.Block.Pool.Root+"/") && (!known[strings.TrimSuffix(filepath.Base(path), ".raw")] || !strings.HasSuffix(path, ".raw")) {
 			return ErrQualification
 		}
 	}
@@ -221,23 +237,26 @@ func (p *Profile) prepareBlock(ctx context.Context, plan dockerengine.Plan) erro
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	r, err := readBlockState(root, blockSlot)
-	if err == nil && r.Phase == "released" {
-		final, e := readBlockState(root, r.Name+".block.json")
-		if e != nil || final.Phase != "released" || !sameAllocation(r, final) {
-			return ErrQualification
-		}
+	if err = p.blockInventory(""); err != nil {
+		return err
 	}
-	if errors.Is(err, os.ErrNotExist) || (err == nil && r.Phase == "released") {
-		if p.blockInventory("") != nil {
-			return ErrQualification
-		}
+	ownerPool, err := hostfs.OpenState(p.Manifest.Storage.Block.Pool.Root)
+	if err != nil {
+		return err
+	}
+	err = p.ensureBlockPoolOwner(ownerPool, root)
+	ownerPool.Close()
+	if err != nil {
+		return err
+	}
+	r, err := p.readActiveBlock(root, plan.Name)
+	if errors.Is(err, os.ErrNotExist) {
 		boot, err := os.ReadFile("/proc/sys/kernel/random/boot_id")
 		if err != nil {
 			return err
 		}
 		r = BlockRecord{Version: "runnerd09-block-allocation-v1", Profile: p.ID, Name: plan.Name, Labels: plan.Config.Labels, Phase: "claiming", UUID: p.blockUUID(plan.Name), Bytes: p.Manifest.Storage.Block.Bytes, BootID: strings.TrimSpace(string(boot))}
-		if err = writeBlockState(root, blockSlot, r); err != nil {
+		if err = p.writeActiveBlock(root, r); err != nil {
 			return err
 		}
 	} else if err != nil {
@@ -277,7 +296,7 @@ func (p *Profile) prepareBlock(ctx context.Context, plan dockerengine.Plan) erro
 		r.FileDevice = uint64(st.Dev)
 		r.FileInode = st.Ino
 		r.Phase = "allocating"
-		if err = writeBlockState(root, blockSlot, r); err != nil {
+		if err = p.writeActiveBlock(root, r); err != nil {
 			return err
 		}
 	}
@@ -311,7 +330,7 @@ func (p *Profile) prepareBlock(ctx context.Context, plan dockerengine.Plan) erro
 			return ErrQualification
 		}
 		r.Phase = "allocated"
-		if err = writeBlockState(root, blockSlot, r); err != nil {
+		if err = p.writeActiveBlock(root, r); err != nil {
 			return err
 		}
 	}
@@ -340,7 +359,7 @@ func (p *Profile) prepareBlock(ctx context.Context, plan dockerengine.Plan) erro
 			return ErrQualification
 		}
 		r.Phase = "formatted"
-		if err = writeBlockState(root, blockSlot, r); err != nil {
+		if err = p.writeActiveBlock(root, r); err != nil {
 			return err
 		}
 	}
@@ -361,11 +380,14 @@ func (p *Profile) prepareBlock(ctx context.Context, plan dockerengine.Plan) erro
 			return err
 		}
 		r.Phase = "ready"
-		if err = writeBlockState(root, blockSlot, r); err != nil {
+		if err = p.writeActiveBlock(root, r); err != nil {
 			return err
 		}
 	}
-	return p.verifyBlock(plan)
+	if err := p.verifyBlock(plan); err != nil {
+		return err
+	}
+	return p.prepareHostCgroup(ctx, plan)
 }
 func (p *Profile) verifyBlock(plan dockerengine.Plan) error {
 	if p.ObserverSocket != "" {
@@ -383,6 +405,15 @@ func (p *Profile) verifyBlock(plan dockerengine.Plan) error {
 		return err
 	}
 	defer pool.Close()
+	evidence, err := hostfs.OpenState(p.EvidenceDirectory)
+	if err != nil {
+		return err
+	}
+	err = p.ensureBlockPoolOwner(pool, evidence)
+	evidence.Close()
+	if err != nil {
+		return err
+	}
 	f, st, err := blockFile(pool, plan.Name+".raw")
 	if err != nil {
 		return err
@@ -407,7 +438,11 @@ func (p *Profile) VerifyStorage(ctx context.Context, plan dockerengine.Plan) err
 	if p.ObserverSocket != "" {
 		return p.remote(ctx, "verify-block", "", plan)
 	}
-	return p.verifyBlock(plan)
+	if err := p.verifyBlock(plan); err != nil {
+		return err
+	}
+	_, err := p.verifyHostCgroup(ctx, plan, nil)
+	return err
 }
 func (p *Profile) blockRecord(plan dockerengine.Plan) (BlockRecord, error) {
 	root, err := hostfs.OpenState(p.EvidenceDirectory)
@@ -415,15 +450,15 @@ func (p *Profile) blockRecord(plan dockerengine.Plan) (BlockRecord, error) {
 		return BlockRecord{}, err
 	}
 	defer root.Close()
-	r, err := readBlockState(root, blockSlot)
-	if err == nil && p.matchBlock(r, plan) {
-		if r.Phase == "released" {
-			final, e := readBlockState(root, plan.Name+".block.json")
-			if e != nil || final.Phase != "released" || !sameAllocation(r, final) {
-				return BlockRecord{}, ErrQualification
-			}
+	r, err := p.readActiveBlock(root, plan.Name)
+	if err == nil {
+		if !p.matchBlock(r, plan) {
+			return BlockRecord{}, ErrQualification
 		}
 		return r, nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return BlockRecord{}, err
 	}
 	final, e := readBlockState(root, plan.Name+".block.json")
 	if e != nil || !p.matchBlock(final, plan) || final.Phase != "released" {
@@ -494,7 +529,7 @@ func (p *Profile) releaseBlock(ctx context.Context, plan dockerengine.Plan, guar
 	if err != nil {
 		return err
 	}
-	if err = writeBlockState(root, blockSlot, r); err != nil {
+	if err = p.writeActiveBlock(root, r); err != nil {
 		return err
 	}
 	physical, err = p.recoveryBlockIdentity(r)
@@ -510,7 +545,7 @@ func (p *Profile) releaseBlock(ctx context.Context, plan dockerengine.Plan, guar
 	if len(loops) == 1 && r.LoopDevice == 0 {
 		r.LoopDevice = loops[0]
 		physical.LoopDevice = loops[0]
-		if err = writeBlockState(root, blockSlot, r); err != nil {
+		if err = p.writeActiveBlock(root, r); err != nil {
 			return err
 		}
 	}
@@ -569,7 +604,7 @@ func (p *Profile) releaseBlock(ctx context.Context, plan dockerengine.Plan, guar
 	if err = writeBlockState(root, plan.Name+".block.json", r); err != nil {
 		return err
 	}
-	return writeBlockState(root, blockSlot, r)
+	return p.writeActiveBlock(root, r)
 }
 func (p *Profile) blockReleased(plan dockerengine.Plan, r BlockRecord) error {
 	if r.Phase != "released" {

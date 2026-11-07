@@ -106,7 +106,7 @@ func TestRunnerd09LiveBlockLifecycle(t *testing.T) {
 	m.Storage.Block.Bytes = 4 << 30
 	m.Storage.Block.MkfsBinary = formatter
 	m.Storage.Block.DeviceDirectory = "/run/neticora-runnerd09-lab/devices"
-	m.GuestCapabilities = []string{"SYS_ADMIN", "NET_ADMIN", "MKNOD", "DAC_OVERRIDE", "CHOWN", "FOWNER", "FSETID", "SETUID", "SETGID", "SETPCAP", "SYS_CHROOT", "NET_RAW", "SETFCAP", "KILL", "AUDIT_WRITE"}
+	m.GuestCapabilities = []string{"SYS_ADMIN", "NET_ADMIN", "MKNOD", "DAC_OVERRIDE", "CHOWN", "FOWNER", "FSETID", "SETUID", "SETGID", "SETPCAP", "SYS_CHROOT", "NET_RAW", "NET_BIND_SERVICE", "SETFCAP", "KILL", "AUDIT_WRITE"}
 	m.Budget.Guest.MemoryBytes = "2147483648"
 	m.Budget.Effective.MemoryBytes = "2684354560"
 	m.Budget.Overhead.MemoryBytes = "536870912"

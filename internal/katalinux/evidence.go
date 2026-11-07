@@ -6,6 +6,7 @@ type Process struct {
 	Executable string `json:"executable"`
 }
 type Evidence struct {
+	Cgroup     *CgroupRecord    `json:"cgroup,omitempty"`
 	Block      *BlockRecord     `json:"block,omitempty"`
 	Version    string           `json:"version"`
 	Profile    string           `json:"profile"`
@@ -19,6 +20,7 @@ type Evidence struct {
 }
 
 type PhysicalAbsence struct {
+	CgroupRemoved     bool   `json:"cgroupRemoved,omitempty"`
 	DeviceDetached    bool   `json:"deviceDetached,omitempty"`
 	MountsRemoved     bool   `json:"mountsRemoved,omitempty"`
 	ContainerAbsent   bool   `json:"containerAbsent"`

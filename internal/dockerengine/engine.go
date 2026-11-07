@@ -329,7 +329,7 @@ func (e *Engine) Inspect(ctx context.Context, id string, p Plan) (Object, error)
 	if !reflect.DeepEqual(h.StorageOpt, want.StorageOpt) || !reflect.DeepEqual(h.Annotations, want.Annotations) || c.RestartCount != 0 {
 		return Object{}, ErrConflict
 	}
-	if (want.Runtime != "" && h.Runtime != want.Runtime) || (want.CgroupnsMode != "" && h.CgroupnsMode != want.CgroupnsMode) || h.PublishAllPorts || len(h.GroupAdd) != 0 || len(h.Links) != 0 || h.UsernsMode != want.UsernsMode {
+	if h.CgroupParent != want.CgroupParent || (want.Runtime != "" && h.Runtime != want.Runtime) || (want.CgroupnsMode != "" && h.CgroupnsMode != want.CgroupnsMode) || h.PublishAllPorts || len(h.GroupAdd) != 0 || len(h.Links) != 0 || h.UsernsMode != want.UsernsMode {
 		return Object{}, ErrConflict
 	}
 	if h.Privileged || h.AutoRemove || h.RestartPolicy.Name != "no" || h.NetworkMode != want.NetworkMode || h.PidMode != "" || h.IpcMode != "private" || h.UTSMode != "" || !reflect.DeepEqual(h.CapAdd, want.CapAdd) || !reflect.DeepEqual(h.CapDrop, want.CapDrop) || !reflect.DeepEqual(h.SecurityOpt, want.SecurityOpt) || !slices.Equal(h.Devices, want.Devices) || len(h.DeviceRequests) != 0 || len(h.VolumesFrom) != 0 || len(h.Binds) != 0 || len(h.PortBindings) != 0 || h.ReadonlyRootfs != want.ReadonlyRootfs || !resourceMatch(h.Resources, want.Resources) || !reflect.DeepEqual(h.Mounts, want.Mounts) || !reflect.DeepEqual(h.Tmpfs, want.Tmpfs) || !reflect.DeepEqual(h.LogConfig, want.LogConfig) {

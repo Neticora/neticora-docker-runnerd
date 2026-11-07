@@ -180,7 +180,7 @@ func Open(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drain
 			cleanup()
 			return nil, nil, err
 		}
-		controller.HostLimits.Slots = 1
+		controller.HostLimits.Slots = min(controller.HostLimits.Slots, controller.Kata.MaxConcurrentAllocations())
 	}
 	capacity := capabilities.Capacity
 	ceilings := []*uint64{&controller.HostLimits.CPUMillis, &controller.HostLimits.MemoryBytes, &controller.HostLimits.StorageBytes, &controller.HostLimits.Slots}

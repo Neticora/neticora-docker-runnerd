@@ -34,6 +34,20 @@ func (e *Engine) CheckKataTuple(ctx context.Context, selector, version, root, sh
 	return e.check(ctx)
 }
 
+func (e *Engine) CheckKataHostCgroupDriver(ctx context.Context) error {
+	if err := e.check(ctx); err != nil {
+		return err
+	}
+	info, err := e.api.Info(ctx, client.InfoOptions{})
+	if err != nil {
+		return e.lost()
+	}
+	if info.Info.CgroupDriver != "systemd" || info.Info.CgroupVersion != "2" {
+		return ErrConflict
+	}
+	return e.check(ctx)
+}
+
 // The customer bridge is retained. Only this execution's network endpoint must
 // disappear; a name or missing outer container alone is insufficient.
 func (e *Engine) VerifyNetworkDetached(ctx context.Context, id, network string) error {

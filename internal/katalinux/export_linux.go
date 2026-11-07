@@ -43,10 +43,24 @@ func (p *Profile) PhysicalEvidence(ctx context.Context, id string, plan dockeren
 	if record.Version != "runnerd09-physical-v1" || record.Profile != p.ID || record.Container != id || record.SpecHash != plan.Config.Labels[dockerengine.LabelPrefix+"spec"] || record.Generation != plan.Config.Labels[dockerengine.LabelPrefix+"generation"] || record.Prepared || len(record.Processes) != 2 || a == nil || !a.ContainerAbsent || !a.SandboxAbsent || !a.VMAbsent || !a.NetworkRemoved || !a.StorageRemoved || a.VerifiedAt == "" || a.ObservationSource != "qualified-host-procfs-runtime-state-v1" {
 		return record, ErrQualification
 	}
+	if p.Manifest.Version == MultiBlockVersion {
+		group := record.Cgroup
+		if group == nil || !a.CgroupRemoved || group.Phase != "released" || group.Profile != p.ID || group.Name != plan.Name || group.Unit != hostCgroupUnit(plan.Name) || group.Path != hostCgroupPath(plan.Name) || group.Inode == 0 || group.Device == 0 {
+			return record, ErrQualification
+		}
+		// The unprivileged agent receives this proof from the authenticated
+		// root observer; only that observer can inspect protected host state.
+		if p.ObserverSocket == "" && p.checkReleasedHostCgroup(ctx, plan, group) != nil {
+			return record, ErrQualification
+		}
+	}
 	return record, nil
 }
 
 func (p *Profile) CheckReadOnlyAbsence(ctx context.Context, id string, plan dockerengine.Plan, record Evidence) error {
+	if err := p.checkReleasedHostCgroup(ctx, plan, record.Cgroup); err != nil {
+		return err
+	}
 	if p.layout() != nil {
 		return ErrQualification
 	}

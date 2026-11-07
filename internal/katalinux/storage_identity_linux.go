@@ -239,10 +239,10 @@ func persistStorageGrant(root *os.Root, name string, raw []byte) error {
 // signed operator artifact. Stop the observer first. Each grant is boot-bound,
 // expires within one hour and is incapable of admitting or starting work.
 func InstallStorageReconciliation(config, profileID, artifact string) error {
-	if os.Geteuid() != 0 || !strings.HasPrefix(profileID, "docker-kata-rs-qemu-v2-") || len(profileID) != len("docker-kata-rs-qemu-v2-")+64 {
+	if os.Geteuid() != 0 || (!strings.HasPrefix(profileID, "docker-kata-rs-qemu-v2-") && !strings.HasPrefix(profileID, "docker-kata-rs-qemu-v3-")) || len(profileID) != len("docker-kata-rs-qemu-v2-")+64 {
 		return ErrQualification
 	}
-	if _, err := hex.DecodeString(strings.TrimPrefix(profileID, "docker-kata-rs-qemu-v2-")); err != nil {
+	if _, err := hex.DecodeString(profileID[len("docker-kata-rs-qemu-v2-"):]); err != nil {
 		return ErrQualification
 	}
 	raw, err := hostfs.ReadPrivate(config, 65536)

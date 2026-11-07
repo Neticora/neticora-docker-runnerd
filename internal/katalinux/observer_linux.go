@@ -231,7 +231,7 @@ func ServeObserver(ctx context.Context, file string) error {
 		var req observerRequest
 		d := json.NewDecoder(bytes.NewReader(body))
 		d.DisallowUnknownFields()
-		if d.Decode(&req) != nil || len(req.Profile) != len("docker-kata-rs-qemu-v1-")+64 || (!strings.HasPrefix(req.Profile, "docker-kata-rs-qemu-v1-") && !strings.HasPrefix(req.Profile, "docker-kata-rs-qemu-v2-")) {
+		if d.Decode(&req) != nil || len(req.Profile) != len("docker-kata-rs-qemu-v1-")+64 || (!strings.HasPrefix(req.Profile, "docker-kata-rs-qemu-v1-") && !strings.HasPrefix(req.Profile, "docker-kata-rs-qemu-v2-") && !strings.HasPrefix(req.Profile, "docker-kata-rs-qemu-v3-")) {
 			http.Error(w, "rejected", 400)
 			return
 		}
@@ -289,11 +289,11 @@ func ServeObserver(ctx context.Context, file string) error {
 				return err
 			}
 			if op == "verify-block" {
-				return p.verifyBlock(plan)
+				return p.VerifyStorage(r.Context(), plan)
 			}
 			if op == "prepare" {
 				if _, inspectErr := engine.Inspect(r.Context(), plan.Name, plan); inspectErr == nil {
-					return p.verifyBlock(plan)
+					return p.VerifyStorage(r.Context(), plan)
 				} else if !errors.Is(inspectErr, dockerengine.ErrAbsent) {
 					return ErrQualification
 				}
@@ -373,7 +373,11 @@ func ServeObserver(ctx context.Context, file string) error {
 						}
 						return ErrQualification
 					}
-					return p.releaseBlock(r.Context(), plan)
+					if err := p.releaseBlock(r.Context(), plan); err != nil {
+						return err
+					}
+					_, err := p.releaseHostCgroup(r.Context(), plan)
+					return err
 				}
 				for _, fs := range []Filesystem{p.Manifest.Storage.Graph, p.Manifest.Storage.Workspace} {
 					root, err := hostfs.OpenState(fs.Root)
