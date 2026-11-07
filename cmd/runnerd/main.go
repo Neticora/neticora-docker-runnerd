@@ -23,6 +23,7 @@ func main() {
 func run() error {
 	version := flag.Bool("version", false, "print actual executable version")
 	file := flag.String("config", "/etc/neticora-runnerd/config.json", "protected configuration file")
+	kataCheck := flag.Bool("kata-check", false, "read-only check of an independently qualified Kata tuple; never grants admission")
 	recovery := flag.String("recovery", "", "operator recovery: diagnose, inspect or apply; daemon must be stopped")
 	recoveryInput := flag.String("recovery-input", "", "protected challenge or signed approval JSON")
 	recoveryPublicKey := flag.String("recovery-public-key", "", "protected independent operator public key PEM (apply only)")
@@ -45,6 +46,17 @@ func run() error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if *kataCheck {
+		if *recovery != "" {
+			return fmt.Errorf("select one administrative operation")
+		}
+		result, err := execution.CheckKata(ctx, c)
+		if err != nil {
+			return err
+		}
+		_, err = os.Stdout.Write(append(result, '\n'))
+		return err
+	}
 	if *recovery != "" {
 		result, err := execution.AdministrativePeerRecovery(ctx, c, *recovery, *recoveryInput, *recoveryPublicKey)
 		if err != nil {

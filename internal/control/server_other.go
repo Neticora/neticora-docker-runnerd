@@ -20,7 +20,8 @@ type Server struct{}
 
 func (*Server) SetDurableDrain(func() error) {}
 
-func (*Server) ExposeExecutions(func(context.Context, string, string) (any, error)) {}
+func (*Server) ExposeExecutions(func(context.Context, string, string) (any, error))   {}
+func (*Server) ExposeKataEvidence(func(context.Context, string, string) (any, error)) {}
 
 func Listen(string, func() Snapshot, func(), func(string)) (*Server, error) {
 	return nil, errors.New("local control supports Linux only")

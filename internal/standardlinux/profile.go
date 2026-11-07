@@ -72,6 +72,16 @@ func number(v string) uint64 { n, _ := strconv.ParseUint(v, 10, 64); return n }
 // Admit only grants preparation eligibility. Fresh authority, policy/session
 // checks and the store creation fence are still required immediately at launch.
 func (p *Policy) Admit(scope agent.StoreScope, s protocol.ExecutionSpec, now time.Time) error {
+	return p.admit(scope, s, now, false)
+}
+
+// AdmitIsolated shares policy/resource/session checks but never grants a runtime
+// on its own. The Kata strategy additionally requires its signed physical tuple.
+func (p *Policy) AdmitIsolated(scope agent.StoreScope, s protocol.ExecutionSpec, now time.Time) error {
+	return p.admit(scope, s, now, true)
+}
+
+func (p *Policy) admit(scope agent.StoreScope, s protocol.ExecutionSpec, now time.Time, isolated bool) error {
 	b, err := json.Marshal(s)
 	if err != nil || protocol.ValidateInboundJSON("ExecutionSpec", b) != nil {
 		return ErrAdmission
@@ -90,7 +100,11 @@ func (p *Policy) Admit(scope agent.StoreScope, s protocol.ExecutionSpec, now tim
 			trusted = true
 		}
 	}
-	if !trusted || s.TrustClass != "trusted" || s.Provider != "github" || s.ExecutionBackend != "customer-host" || s.RuntimeEngine != "docker" || s.IsolationProfile != "standard" || s.TemplateVersion != TemplateVersion || s.DockerBuild || s.RunnerPlatform.Os != "linux" || s.HostPlatform.Os != "linux" || s.RunnerPlatform.Architecture != s.HostPlatform.Architecture || s.RunnerPlatform.Architecture != "amd64" {
+	profileOK := s.IsolationProfile == "standard" && s.TemplateVersion == TemplateVersion && !s.DockerBuild
+	if isolated {
+		profileOK = s.IsolationProfile == "isolated" && (s.TemplateVersion == "linux-github-kata-v1" || s.TemplateVersion == "linux-github-kata-v2") && s.DockerBuild
+	}
+	if !trusted || s.TrustClass != "trusted" || s.Provider != "github" || s.ExecutionBackend != "customer-host" || s.RuntimeEngine != "docker" || !profileOK || s.RunnerPlatform.Os != "linux" || s.HostPlatform.Os != "linux" || s.RunnerPlatform.Architecture != s.HostPlatform.Architecture || s.RunnerPlatform.Architecture != "amd64" {
 		return ErrAdmission
 	}
 	for _, pair := range [][2]string{{s.Resources.CpuMillis, w.Limits.CpuMillis}, {s.Resources.MemoryBytes, w.Limits.MemoryBytes}, {s.Resources.StorageBytes, w.Limits.StorageBytes}, {s.Resources.Slots, w.Limits.Slots}} {

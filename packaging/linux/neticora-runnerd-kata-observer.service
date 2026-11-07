@@ -1,0 +1,45 @@
+# Opt-in local evidence/storage helper; never enable automatically.
+[Unit]
+Description=Neticora qualified Kata host evidence helper
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/bin/runnerd-kata-observer --config /etc/neticora-runnerd-kata-observer/config.json
+Restart=on-failure
+RestartSec=5s
+# A start refused during administrative maintenance needs an explicit start.
+RestartPreventExitStatus=75
+RuntimeDirectory=neticora-kata-observer
+RuntimeDirectoryMode=0755
+StateDirectory=neticora-kata-observer
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX
+CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_FOWNER CAP_CHOWN CAP_SYS_PTRACE CAP_SYS_ADMIN CAP_MKNOD
+# SYS_ADMIN is used for owned loop ioctls, not host filesystem mounts. Guest
+# device mapping and the daemon retain their separate, unprivileged boundaries.
+SystemCallFilter=~mount umount2 pivot_root reboot swapon swapoff
+DevicePolicy=closed
+# Stable filesystem probes open only read-only physical block descriptors.
+DeviceAllow=block-* r
+DeviceAllow=/dev/loop-control rw
+DeviceAllow=block-loop rwm
+ReadWritePaths=-/var/lib/neticora-runnerd-kata-block
+ReadWritePaths=-/var/lib/neticora-runnerd-kata-graph
+ReadWritePaths=-/var/lib/neticora-runnerd-kata-workspace
+TimeoutStopSec=130s
+
+[Install]
+WantedBy=multi-user.target

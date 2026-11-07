@@ -23,6 +23,7 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
 	"github.com/Neticora/neticora-docker-runnerd/internal/dockerengine"
 	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
+	"github.com/Neticora/neticora-docker-runnerd/internal/katalinux"
 	"github.com/Neticora/neticora-docker-runnerd/internal/standardlinux"
 	"github.com/Neticora/neticora-docker-runnerd/journal"
 	"github.com/Neticora/neticora-docker-runnerd/transport"
@@ -59,6 +60,7 @@ type Remote interface {
 }
 
 type Controller struct {
+	Kata                *katalinux.Profile
 	Store               *journal.SQLiteStore
 	Runtime             Runtime
 	Remote              Remote
@@ -227,7 +229,7 @@ func (c *Controller) accept(ctx context.Context, raw json.RawMessage) (agent.Rec
 	if json.Unmarshal(raw, &command) != nil {
 		return agent.Receipt{}, ErrReconcile
 	}
-	if command.Kind == "start" && (command.Spec.PoolId != c.Pool || c.Drained() || c.Policy().Admit(c.Scope, command.Spec, time.Now()) != nil || c.Remote.Admission(ctx, command.Spec) != nil) {
+	if command.Kind == "start" && (command.Spec.PoolId != c.Pool || c.Drained() || c.admit(command.Spec, time.Now()) != nil || c.Remote.Admission(ctx, command.Spec) != nil) {
 		return agent.Receipt{}, standardlinux.ErrAdmission
 	}
 	if err = c.activateLimits(ctx); err != nil {
@@ -318,7 +320,7 @@ func (c *Controller) refresh(ctx context.Context) ([]agent.Execution, error) {
 		if json.Unmarshal(e.Command, &start) != nil {
 			return nil, ErrReconcile
 		}
-		plan, err := c.Profile.Plan(c.Scope, start.Spec)
+		plan, err := c.resolveRecoveryPlan(c.Scope, start.Spec)
 		if err != nil {
 			return nil, err
 		}
@@ -512,7 +514,7 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 	if start.Spec.PoolId != c.Pool {
 		return standardlinux.ErrAdmission
 	}
-	p, err := c.Profile.Plan(c.Scope, start.Spec)
+	p, err := c.resolveRecoveryPlan(c.Scope, start.Spec)
 	if err != nil {
 		return err
 	}
@@ -560,6 +562,14 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 			return c.cleanup(ctx, e, p, o)
 		}
 		if o.State == "running" {
+			if c.Kata != nil && !c.Kata.Healthy(p, o.StartedAt, time.Now()) {
+				return c.cleanup(ctx, e, p, o)
+			}
+			if c.Kata != nil {
+				if err = c.Kata.Capture(ctx, o.ID, p); err != nil {
+					return err
+				}
+			}
 			if e.State != "running" {
 				event, err := c.event(e, c.observation(e, o), nil)
 				if err != nil {
@@ -579,6 +589,11 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 		proof, e2 := c.Store.FenceNeverStarted(ctx, e.Command, fence, c.Authority, c.SigningKey, time.Now())
 		if e2 != nil {
 			return e2
+		}
+		if c.Kata != nil {
+			if e2 = c.Kata.DiscardPrepared(ctx, p); e2 != nil {
+				return e2
+			}
 		}
 		event, e2 := c.event(e, nil, nil, proof)
 		if e2 != nil {
@@ -602,17 +617,30 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 	if policy.UID() != c.Profile.RunnerUID {
 		return standardlinux.ErrAdmission
 	}
-	if err = policy.Admit(c.Scope, start.Spec, time.Now()); err != nil {
+	if err = c.admit(start.Spec, time.Now()); err != nil {
+		return err
+	}
+	p, err = c.resolvePlan(c.Scope, start.Spec)
+	if err != nil {
 		return err
 	}
 	if err = c.Remote.Admission(ctx, start.Spec); err != nil {
 		return err
 	}
-	if err = c.VerifyImage(ctx, policy, c.Profile.ImageRepository, start.Spec.ImageDigest, time.Now()); err != nil {
+	imageRepository := strings.Split(p.Config.Image, "@")[0]
+	if err = c.VerifyImage(ctx, policy, imageRepository, start.Spec.ImageDigest, time.Now()); err != nil {
 		return err
 	}
 	if err = c.Runtime.PrepareImage(ctx, p); err != nil {
 		return err
+	}
+	if c.Kata != nil {
+		if err = c.Kata.PrepareHealth(p); err != nil {
+			return err
+		}
+		if err = c.Kata.Prepare(p); err != nil {
+			return err
+		}
 	}
 	request, key, err := c.startIntent(ctx, e, start)
 	if err != nil {
@@ -642,10 +670,15 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 		return err
 	}
 	authorize := func() error {
+		if c.Kata != nil {
+			if err := c.Kata.VerifyStorage(ctx, p); err != nil {
+				return err
+			}
+		}
 		if c.Drained() || c.cancelled[executionKey(e)] || c.Policy().UID() != c.Profile.RunnerUID {
 			return ErrReconcile
 		}
-		if err := c.Policy().Admit(c.Scope, start.Spec, time.Now()); err != nil {
+		if err := c.admit(start.Spec, time.Now()); err != nil {
 			return err
 		}
 		if err := c.Remote.Admission(ctx, start.Spec); err != nil {
@@ -657,7 +690,7 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 		if err := c.runtimeHeadroom(ctx); err != nil {
 			return err
 		}
-		if err := c.VerifyImage(ctx, c.Policy(), c.Profile.ImageRepository, start.Spec.ImageDigest, time.Now()); err != nil {
+		if err := c.VerifyImage(ctx, c.Policy(), imageRepository, start.Spec.ImageDigest, time.Now()); err != nil {
 			return err
 		}
 		fresh, err := c.Remote.Start(ctx, request)
@@ -697,6 +730,12 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 	// accepted/ACKed until the bounded Docker start/inspection returns. Unknown
 	// start replies remain the same attempt; accepted cancellation wakes cleanup.
 	c.launchMu.Lock()
+	if c.Kata != nil {
+		if err = c.Kata.CapturePrepared(o.ID, p); err != nil {
+			c.launchMu.Unlock()
+			return err
+		}
+	}
 	o, err = c.Runtime.Start(ctx, o.ID, p, func() error {
 		if err := c.Store.VerifyCreationClaim(ctx, c.Scope, e.Command); err != nil {
 			return err
@@ -706,6 +745,11 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 	c.launchMu.Unlock()
 	if err != nil {
 		return err
+	}
+	if c.Kata != nil {
+		if err = c.Kata.Capture(ctx, o.ID, p); err != nil {
+			return err
+		}
 	}
 	event, err := c.event(e, c.observation(e, o), nil)
 	if err != nil {
@@ -833,6 +877,11 @@ func (c *Controller) registration(ctx context.Context, e agent.Execution, p dock
 }
 
 func (c *Controller) cleanup(ctx context.Context, e agent.Execution, p dockerengine.Plan, o dockerengine.Object) error {
+	if c.Kata != nil && o.State == "prepared" {
+		if err := c.Kata.CapturePrepared(o.ID, p); err != nil {
+			return err
+		}
+	}
 	if !e.CleanupPending {
 		obs := c.observation(e, o)
 		obs["state"] = "cleanup-pending"
@@ -886,6 +935,9 @@ func (c *Controller) cleanup(ctx context.Context, e agent.Execution, p dockereng
 	if _, err := c.refresh(ctx); err != nil {
 		return err
 	}
+	if err := verifyKataAbsence(ctx, c.Kata, c.Runtime, ref.ResourceId, p); err != nil {
+		return err
+	}
 	observed := c.inventoryObservedAt
 	o.ID = ref.ResourceId
 	o.State = "cleaned"
@@ -915,7 +967,7 @@ func (c *Controller) plan(e agent.Execution) (dockerengine.Plan, error) {
 	if e.Identity.InstallationID != c.Scope.InstallationID || e.Identity.TenantID != c.Scope.TenantID || e.Identity.HostID != c.Scope.HostID || start.CommandId != e.CommandID || start.Spec.ExecutionId != e.Identity.ExecutionID || start.Generation != e.Identity.Generation || start.Spec.Generation != e.Identity.Generation || start.Spec.AttemptId != e.Identity.AttemptID || start.Spec.SpecHash != e.Identity.SpecHash {
 		return dockerengine.Plan{}, ErrReconcile
 	}
-	return c.Profile.Plan(c.Scope, start.Spec)
+	return c.resolveRecoveryPlan(c.Scope, start.Spec)
 }
 
 func (c *Controller) cleanSecrets(e agent.Execution, p dockerengine.Plan) {
@@ -929,6 +981,9 @@ func (c *Controller) cleanSecrets(e agent.Execution, p dockerengine.Plan) {
 		_ = root.Close()
 		// rmdir only: unexpected files are preserved, never recursively pruned.
 		_ = os.Remove(dir)
+	}
+	if c.Kata != nil {
+		c.Kata.CleanHealth(p)
 	}
 	keys, err := hostfs.OpenState(c.KeysDirectory)
 	if err == nil {

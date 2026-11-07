@@ -15,6 +15,7 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/agent"
 	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
 	"github.com/Neticora/neticora-docker-runnerd/internal/dockerengine"
+	"github.com/Neticora/neticora-docker-runnerd/internal/katalinux"
 	"github.com/Neticora/neticora-docker-runnerd/internal/peerrecovery"
 	"github.com/Neticora/neticora-docker-runnerd/internal/standardlinux"
 	"github.com/Neticora/neticora-docker-runnerd/journal"
@@ -39,6 +40,7 @@ type RecoveryRuntime interface {
 }
 
 type PeerRecoveryCoordinator struct {
+	Kata                                           *katalinux.Profile
 	Store                                          *journal.SQLiteStore
 	Runtime                                        RecoveryRuntime // Production wiring uses OpenReadOnly.
 	Remote                                         PeerRecoveryRemote
@@ -73,7 +75,14 @@ func (c *PeerRecoveryCoordinator) originPlan(e agent.Execution, source string) (
 	if err != nil || protocol.ValidateInboundJSON("StartCommand", e.Command) != nil || start.CommandId != e.CommandID || start.Spec.ExecutionId != e.Identity.ExecutionID || start.Spec.SpecHash != e.Identity.SpecHash || start.Spec.Generation != e.Identity.Generation || start.Spec.AttemptId != e.Identity.AttemptID || e.Identity.InstallationID != c.InstallationID || e.Identity.TenantID != c.TenantID || e.Identity.HostID != c.Identity.HostId {
 		return dockerengine.Plan{}, ErrReconcile
 	}
-	return c.Profile.Plan(agent.StoreScope{InstallationID: c.InstallationID, TenantID: c.TenantID, HostID: c.Identity.HostId, EndpointIdentity: source, SessionEpoch: c.Identity.SessionEpoch}, start.Spec)
+	scope := agent.StoreScope{InstallationID: c.InstallationID, TenantID: c.TenantID, HostID: c.Identity.HostId, EndpointIdentity: source, SessionEpoch: c.Identity.SessionEpoch}
+	if start.Spec.IsolationProfile == "isolated" {
+		if c.Kata == nil {
+			return dockerengine.Plan{}, ErrReconcile
+		}
+		return c.Kata.RecoveryPlan(scope, start.Spec)
+	}
+	return c.Profile.Plan(scope, start.Spec)
 }
 
 // Propose collects read-only evidence against an already fenced, authenticated
@@ -596,6 +605,9 @@ func (c *PeerRecoveryCoordinator) Apply(ctx context.Context, approved protocol.S
 		}
 		if _, err = c.Runtime.Inspect(ctx, id, p); !errors.Is(err, dockerengine.ErrAbsent) {
 			return ErrReconcile
+		}
+		if err = verifyKataAbsence(ctx, c.Kata, c.Runtime, id, p); err != nil {
+			return err
 		}
 		if _, err = authorize(ctx); err != nil {
 			return err

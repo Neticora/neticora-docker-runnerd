@@ -28,6 +28,7 @@ var (
 	ErrAbsent                   = errors.New("Docker resource absent")
 	ErrStoragePressure          = errors.New("Docker storage headroom unavailable")
 	ErrRecoveryApprovalRequired = errors.New("Docker recovery is read-only; scoped operator approval required")
+	ErrRecoveryPlan             = errors.New("historical Docker plan cannot prepare images, create or start containers")
 )
 
 const LabelPrefix = "com.neticora.runnerd."
@@ -38,9 +39,13 @@ type Plan struct {
 	Name       string
 	Config     *container.Config
 	HostConfig *container.HostConfig
+	// RecoveryOnly preserves an old configuration for inspection and teardown
+	// without making it eligible for fresh runtime effects.
+	RecoveryOnly bool
 }
 
 type Object struct {
+	StartedAt string `json:"startedAt,omitempty"`
 	ID        string
 	State     string
 	ExitCode  int
@@ -212,6 +217,9 @@ func (e *Engine) CheckHeadroom(ctx context.Context, minimum uint64) error {
 // PrepareImage pulls only the immutable verified reference. It never obtains
 // authority/JIT or starts a container. Registry credentials are not inherited.
 func (e *Engine) PrepareImage(ctx context.Context, p Plan) error {
+	if p.RecoveryOnly {
+		return ErrRecoveryPlan
+	}
 	if e.readOnly {
 		return ErrRecoveryApprovalRequired
 	}
@@ -246,7 +254,7 @@ func (e *Engine) PrepareImage(ctx context.Context, p Plan) error {
 	if i.Os != "linux" || i.Architecture != "amd64" || !slices.Contains(i.RepoDigests, p.Config.Image) {
 		return ErrConflict
 	}
-	if i.Config == nil || len(i.Config.Volumes) != 0 || i.Config.Labels[LabelPrefix+"template"] != "linux-github-process-v1" || i.Config.Labels[LabelPrefix+"docker-build"] != "false" {
+	if i.Config == nil || len(i.Config.Volumes) != 0 || p.Config.Labels[LabelPrefix+"template"] == "" || i.Config.Labels[LabelPrefix+"template"] != p.Config.Labels[LabelPrefix+"template"] || i.Config.Labels[LabelPrefix+"docker-build"] != p.Config.Labels[LabelPrefix+"docker-build"] || i.Config.Labels[LabelPrefix+"hard-storage-limit"] != p.Config.Labels[LabelPrefix+"hard-storage-limit"] {
 		return ErrConflict
 	}
 	for _, v := range i.Config.Env {
@@ -318,10 +326,13 @@ func (e *Engine) Inspect(ctx context.Context, id string, p Plan) (Object, error)
 		}
 	}
 	h, want := c.HostConfig, p.HostConfig
+	if !reflect.DeepEqual(h.StorageOpt, want.StorageOpt) || !reflect.DeepEqual(h.Annotations, want.Annotations) || c.RestartCount != 0 {
+		return Object{}, ErrConflict
+	}
 	if (want.Runtime != "" && h.Runtime != want.Runtime) || (want.CgroupnsMode != "" && h.CgroupnsMode != want.CgroupnsMode) || h.PublishAllPorts || len(h.GroupAdd) != 0 || len(h.Links) != 0 || h.UsernsMode != want.UsernsMode {
 		return Object{}, ErrConflict
 	}
-	if h.Privileged || h.AutoRemove || h.RestartPolicy.Name != "no" || h.NetworkMode != want.NetworkMode || h.PidMode != "" || h.IpcMode != "private" || h.UTSMode != "" || len(h.CapAdd) != 0 || !reflect.DeepEqual(h.CapDrop, want.CapDrop) || !reflect.DeepEqual(h.SecurityOpt, want.SecurityOpt) || len(h.Devices) != 0 || len(h.DeviceRequests) != 0 || len(h.VolumesFrom) != 0 || len(h.Binds) != 0 || len(h.PortBindings) != 0 || h.ReadonlyRootfs != want.ReadonlyRootfs || !resourceMatch(h.Resources, want.Resources) || !reflect.DeepEqual(h.Mounts, want.Mounts) || !reflect.DeepEqual(h.Tmpfs, want.Tmpfs) || !reflect.DeepEqual(h.LogConfig, want.LogConfig) {
+	if h.Privileged || h.AutoRemove || h.RestartPolicy.Name != "no" || h.NetworkMode != want.NetworkMode || h.PidMode != "" || h.IpcMode != "private" || h.UTSMode != "" || !reflect.DeepEqual(h.CapAdd, want.CapAdd) || !reflect.DeepEqual(h.CapDrop, want.CapDrop) || !reflect.DeepEqual(h.SecurityOpt, want.SecurityOpt) || !slices.Equal(h.Devices, want.Devices) || len(h.DeviceRequests) != 0 || len(h.VolumesFrom) != 0 || len(h.Binds) != 0 || len(h.PortBindings) != 0 || h.ReadonlyRootfs != want.ReadonlyRootfs || !resourceMatch(h.Resources, want.Resources) || !reflect.DeepEqual(h.Mounts, want.Mounts) || !reflect.DeepEqual(h.Tmpfs, want.Tmpfs) || !reflect.DeepEqual(h.LogConfig, want.LogConfig) {
 		return Object{}, ErrConflict
 	}
 	state := "unknown"
@@ -336,7 +347,11 @@ func (e *Engine) Inspect(ctx context.Context, id string, p Plan) (Object, error)
 	if err := e.check(ctx); err != nil {
 		return Object{}, err
 	}
-	return Object{ID: c.ID, State: state, ExitCode: c.State.ExitCode, OOMKilled: c.State.OOMKilled}, nil
+	object := Object{ID: c.ID, State: state, ExitCode: c.State.ExitCode, OOMKilled: c.State.OOMKilled}
+	if p.Config.Labels[LabelPrefix+"template"] == "linux-github-kata-v1" || p.Config.Labels[LabelPrefix+"template"] == "linux-github-kata-v2" {
+		object.StartedAt = c.State.StartedAt
+	}
+	return object, nil
 }
 
 func resourceMatch(actual, want container.Resources) bool {
@@ -356,6 +371,9 @@ func resourceMatch(actual, want container.Resources) bool {
 // Ensure creates at most once only after the caller durably crosses its creation
 // fence. A lost create response returns uncertainty; it never retries creation.
 func (e *Engine) Ensure(ctx context.Context, p Plan, claim func() error) (Object, error) {
+	if p.RecoveryOnly {
+		return Object{}, ErrRecoveryPlan
+	}
 	if e.readOnly {
 		return Object{}, ErrRecoveryApprovalRequired
 	}
@@ -405,6 +423,9 @@ func labelsMatch(actual, want map[string]string) bool {
 }
 
 func (e *Engine) Start(ctx context.Context, id string, p Plan, authorize func() error) (Object, error) {
+	if p.RecoveryOnly {
+		return Object{}, ErrRecoveryPlan
+	}
 	if e.readOnly {
 		return Object{}, ErrRecoveryApprovalRequired
 	}

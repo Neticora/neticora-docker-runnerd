@@ -11,6 +11,9 @@ for architecture in amd64 arm64; do
   mkdir -p "$stage/bin" "$stage/packaging"
   GOOS=linux GOARCH="$architecture" CGO_ENABLED=0 go build -mod=readonly -trimpath -buildvcs=true -o "$stage/bin/" ./cmd/...
   cp packaging/linux/neticora-runnerd.service packaging/linux/config.example.json packaging/linux/neticora-runnerd.sysusers.conf packaging/linux/neticora-runnerd.tmpfiles.conf packaging/linux/artifact-scope.json "$stage/packaging/"
+  cp packaging/linux/neticora-runnerd-kata.conf "$stage/packaging/"
+  cp packaging/linux/neticora-runnerd-kata-observer.service "$stage/packaging/"
+  cp packaging/linux/neticora-runnerd-kata.tmpfiles.conf "$stage/packaging/"
   tar --sort=name --mtime="@$source_epoch" --owner=0 --group=0 --numeric-owner \
     -czf "$output_dir/runnerd-linux-$architecture.tar.gz" -C "$stage" .
   rm -rf -- "$stage"

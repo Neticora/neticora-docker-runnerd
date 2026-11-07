@@ -26,6 +26,7 @@ type Config struct {
 // Execution is an explicit operator opt-in. Old foundation configurations remain
 // drained and never open Docker or contact the platform.
 type Execution struct {
+	Kata                *Kata  `json:"kata,omitempty"`
 	Repository          string `json:"repository"`
 	CustomCAFile        string `json:"customCaFile,omitempty"`
 	Enabled             bool   `json:"enabled"`
@@ -42,6 +43,15 @@ type Execution struct {
 	Pool                string `json:"pool"`
 	PidsLimit           int64  `json:"pidsLimit"`
 	MinRuntimeFreeBytes uint64 `json:"minRuntimeFreeBytes,omitempty"`
+}
+
+// Kata is a dedicated-host opt-in; no default runtime or unqualified tuple is
+// inferred. The descriptor is independently signed, private and immutable.
+type Kata struct {
+	ObserverSocket    string `json:"observerSocket"`
+	ProfileFile       string `json:"profileFile"`
+	PublicKeyFile     string `json:"publicKeyFile"`
+	EvidenceDirectory string `json:"evidenceDirectory"`
 }
 
 func Parse(data []byte) (Config, error) {
@@ -79,6 +89,19 @@ func Parse(data []byte) (Config, error) {
 		return Config{}, errors.New("request timeout must be between 1 and 60 seconds")
 	}
 	if x := c.Execution; x != nil && x.Enabled {
+		if x.Kata != nil {
+			for _, path := range []string{x.Kata.ProfileFile, x.Kata.PublicKeyFile, x.Kata.EvidenceDirectory, x.Kata.ObserverSocket} {
+				if !filepath.IsAbs(path) || filepath.Clean(path) != path {
+					return Config{}, errors.New("Kata paths must be protected absolute paths")
+				}
+				for _, exposed := range []string{c.StateDir, x.BootstrapRoot} {
+					rel, e := filepath.Rel(exposed, path)
+					if e != nil || rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))) {
+						return Config{}, errors.New("Kata trust/evidence must remain outside journal and guest handoff")
+					}
+				}
+			}
+		}
 		if x.MinRuntimeFreeBytes != 0 && x.MinRuntimeFreeBytes < 64<<20 {
 			return Config{}, errors.New("runtime storage headroom must be at least 64 MiB")
 		}
@@ -89,6 +112,14 @@ func Parse(data []byte) (Config, error) {
 			rel, e := filepath.Rel(x.BootstrapRoot, private)
 			if e != nil || rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))) {
 				return Config{}, errors.New("host credentials, policy and trust must remain outside bootstrap mounts")
+			}
+		}
+		if x.Kata != nil {
+			healthRoot := x.BootstrapRoot + "-health"
+			for _, private := range []string{c.StateDir, c.CredentialFile, x.BootstrapRoot, x.KeysDirectory, x.PolicyFile, x.CapabilitiesFile, x.TrustRoots, x.ImageBundles, x.CustomCAFile, x.Kata.ProfileFile, x.Kata.PublicKeyFile, x.Kata.EvidenceDirectory, x.Kata.ObserverSocket} {
+				if private != "" && (private == healthRoot || strings.HasPrefix(private, healthRoot+string(filepath.Separator)) || strings.HasPrefix(healthRoot, private+string(filepath.Separator))) {
+					return Config{}, errors.New("private state and trust must remain separate from guest health output")
+				}
 			}
 		}
 		repo := strings.Split(x.Repository, "/")

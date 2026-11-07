@@ -99,6 +99,30 @@ func TestLostCreateReplyAdoptsWithoutCreatingOrStartingAgain(t *testing.T) {
 	}
 }
 
+func TestHistoricalPlanCanInspectButCannotPrepareCreateOrStart(t *testing.T) {
+	requests := 0
+	e, p, exists, running, creates, _ := fakeEngineWithHook(t, func(string) { requests++ })
+	p.RecoveryOnly = true
+	*exists = true
+	called := false
+	authorize := func() error { called = true; return nil }
+	if err := e.PrepareImage(t.Context(), p); !errors.Is(err, ErrRecoveryPlan) {
+		t.Fatal("historical image preparation accepted", err)
+	}
+	if _, err := e.Ensure(t.Context(), p, authorize); !errors.Is(err, ErrRecoveryPlan) {
+		t.Fatal("historical create accepted", err)
+	}
+	if _, err := e.Start(t.Context(), p.Name, p, authorize); !errors.Is(err, ErrRecoveryPlan) {
+		t.Fatal("historical start accepted", err)
+	}
+	if requests != 0 || called || *running || *creates != 0 {
+		t.Fatal("historical launch touched the runtime or creation authority")
+	}
+	if object, err := e.Inspect(t.Context(), p.Name, p); err != nil || object.State != "prepared" {
+		t.Fatal("historical inspection blocked", object, err)
+	}
+}
+
 func TestOwnershipAndRestartDriftPreventMutation(t *testing.T) {
 	e, p, exists, _, _, _ := fakeEngine(t)
 	*exists = true
