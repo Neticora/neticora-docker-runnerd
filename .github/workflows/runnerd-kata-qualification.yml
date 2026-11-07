@@ -1,5 +1,6 @@
 name: Runnerd09 Native Qualification
 on:
+  workflow_call:
   workflow_dispatch:
 permissions:
   contents: read
