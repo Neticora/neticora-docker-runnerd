@@ -39,6 +39,8 @@ DeviceAllow=block-loop rwm
 ReadWritePaths=-/var/lib/neticora-runnerd-kata-block
 ReadWritePaths=-/var/lib/neticora-runnerd-kata-graph
 ReadWritePaths=-/var/lib/neticora-runnerd-kata-workspace
+# Scoped removal of captured stale sandbox metadata after verified VM absence.
+ReadWritePaths=-/var/lib/neticora-runnerd-kata-runtime
 TimeoutStopSec=130s
 
 [Install]
