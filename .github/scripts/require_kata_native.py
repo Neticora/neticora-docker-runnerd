@@ -12,6 +12,7 @@ REQUIRED = frozenset({
     "TestNativeSandboxHiddenWorkerMountRetainsDirectory",
     "TestNativeSandboxUnlinkedDirectoryRetainsReference",
     "TestNativeSandboxForeignEntriesRemainFenced",
+    "TestNativeSandboxPrivateAnchorControlsRuntimeModes",
     "TestProcessTasksFailClosed",
     "TestProcessTaskEnumerationCancellation",
     "TestBothScannersFenceObservableGroupWithoutTasks",

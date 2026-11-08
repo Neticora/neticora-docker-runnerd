@@ -17,16 +17,52 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func sandboxStamp(root, id string) (SandboxDirectory, error) {
-	if _, err := hex.DecodeString(id); len(id) != 64 || err != nil || hostfs.CheckAncestors(root) != nil {
+func openSandboxParent(anchor, path string) (*os.Root, error) {
+	if !filepath.IsAbs(path) || filepath.Clean(path) != path || (path != anchor && !strings.HasPrefix(path, anchor+"/")) {
+		return nil, ErrQualification
+	}
+	base, err := hostfs.OpenState(anchor)
+	if err != nil {
+		return nil, ErrQualification
+	}
+	defer base.Close()
+	relative, err := filepath.Rel(anchor, path)
+	if err != nil {
+		return nil, ErrQualification
+	}
+	current := "."
+	for _, part := range strings.Split(relative, string(filepath.Separator)) {
+		current = filepath.Join(current, part)
+		info, err := base.Lstat(current)
+		if err != nil {
+			return nil, err
+		}
+		st, ok := info.Sys().(*syscall.Stat_t)
+		// Kata creates shared runtime subdirectories as 0777. They remain
+		// behind this root-owned 0700 filesystem anchor. Never repair their
+		// permissions or follow an alternate symlink path.
+		if !ok || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || st.Uid != 0 {
+			return nil, ErrQualification
+		}
+	}
+	return base.OpenRoot(relative)
+}
+
+func sandboxStamp(anchor, root, id string) (SandboxDirectory, error) {
+	if _, err := hex.DecodeString(id); len(id) != 64 || err != nil {
 		return SandboxDirectory{}, ErrQualification
 	}
-	info, err := os.Lstat(filepath.Join(root, id))
+	parent, err := openSandboxParent(anchor, root)
+	if err != nil {
+		return SandboxDirectory{}, err
+	}
+	defer parent.Close()
+	info, err := parent.Lstat(id)
 	if err != nil {
 		return SandboxDirectory{}, err
 	}
 	st, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || st.Uid != 0 || info.Mode().Perm()&0022 != 0 {
+	if !ok || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || st.Uid != 0 {
 		return SandboxDirectory{}, ErrQualification
 	}
 	return SandboxDirectory{Root: root, Device: uint64(st.Dev), Inode: st.Ino}, nil
@@ -43,7 +79,7 @@ func (p *Profile) captureSandboxDirectories(id string) ([]SandboxDirectory, erro
 			continue
 		}
 		seen[root] = true
-		stamp, err := sandboxStamp(root, id)
+		stamp, err := sandboxStamp(p.Manifest.Storage.Runtime.Root, root, id)
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
@@ -76,7 +112,7 @@ func (p *Profile) removeSandboxResidue(ctx context.Context, id string, directori
 		if err := guard(); err != nil {
 			return err
 		}
-		actual, err := sandboxStamp(expected.Root, id)
+		actual, err := sandboxStamp(p.Manifest.Storage.Runtime.Root, expected.Root, id)
 		if errors.Is(err, os.ErrNotExist) {
 			filesystemPath, e := sandboxFilesystemPath(filepath.Join(expected.Root, id), expected.Device)
 			if e != nil || noBlockUsers(ctx, BlockRecord{FileDevice: expected.Device, FileInode: expected.Inode}) != nil || noSandboxNamespaceReferences(ctx, expected.Device, expected.Inode, filesystemPath) != nil {
@@ -84,7 +120,7 @@ func (p *Profile) removeSandboxResidue(ctx context.Context, id string, directori
 			}
 			// Retry after a lost removal response must also make directory
 			// absence durable before allowing the CLEANED event to commit.
-			root, e := os.OpenRoot(expected.Root)
+			root, e := openSandboxParent(p.Manifest.Storage.Runtime.Root, expected.Root)
 			if e != nil {
 				return ErrQualification
 			}
@@ -98,7 +134,7 @@ func (p *Profile) removeSandboxResidue(ctx context.Context, id string, directori
 		if err != nil || actual != expected {
 			return ErrQualification
 		}
-		root, err := os.OpenRoot(expected.Root)
+		root, err := openSandboxParent(p.Manifest.Storage.Runtime.Root, expected.Root)
 		if err != nil {
 			return ErrQualification
 		}
@@ -125,7 +161,7 @@ func removeSandboxTree(ctx context.Context, root *os.Root, name string, device, 
 		return ErrQualification
 	}
 	st, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || uint64(st.Dev) != device || inode != 0 && st.Ino != inode || st.Uid != 0 || info.Mode().Perm()&0022 != 0 || info.Mode()&os.ModeSymlink != 0 || (!info.IsDir() && !info.Mode().IsRegular()) {
+	if !ok || uint64(st.Dev) != device || inode != 0 && st.Ino != inode || st.Uid != 0 || (!info.IsDir() && info.Mode().Perm()&0022 != 0) || info.Mode()&os.ModeSymlink != 0 || (!info.IsDir() && !info.Mode().IsRegular()) {
 		return ErrQualification
 	}
 	if info.IsDir() {
