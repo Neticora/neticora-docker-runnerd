@@ -71,7 +71,7 @@ func startSurvivingWorker(t *testing.T, mode, target string) (string, string) {
 			select {
 			case err := <-done:
 				done <- err
-				if mode == "namespace" {
+				if strings.HasPrefix(mode, "namespace") {
 					if exit, ok := err.(*exec.ExitError); ok && exit.ExitCode() == 77 {
 						nativeUnavailable(t, "kernel/sandbox disallows disposable user/mount namespaces")
 					}

@@ -25,8 +25,9 @@ static int write_file(const char *path, const char *data) {
 static void *worker(void *unused) {
     (void)unused;
     if (namespace_case) {
-        if (unshare(CLONE_NEWNS) || mount(NULL, "/", NULL, MS_REC|MS_PRIVATE, NULL) ||
-            mount("tmpfs", target, "tmpfs", MS_NOSUID|MS_NODEV, "size=1048576")) _exit(77);
+        if (unshare(CLONE_NEWNS) || mount(NULL, "/", NULL, MS_REC|MS_PRIVATE, NULL)) _exit(77);
+        if (namespace_case == 2 && mount(target, target, NULL, MS_BIND, NULL)) _exit(77);
+        if (mount("tmpfs", target, "tmpfs", MS_NOSUID|MS_NODEV, "size=1048576")) _exit(77);
     } else {
         int fd = open(target, O_RDWR);
         if (fd < 0) _exit(2);
@@ -55,7 +56,8 @@ static void *worker(void *unused) {
 }
 int main(int argc, char **argv) {
     if (argc!=3) return 2;
-    target=argv[2];namespace_case=!strcmp(argv[1],"namespace");
+    target=argv[2];namespace_case=!strcmp(argv[1],"namespace") ? 1 :
+        (!strcmp(argv[1],"namespace-hidden-bind") ? 2 : 0);
     if (namespace_case) {
         uid_t uid=getuid();gid_t gid=getgid();
         if (unshare(CLONE_NEWUSER)) return 77;

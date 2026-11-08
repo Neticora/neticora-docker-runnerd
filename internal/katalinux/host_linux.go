@@ -443,6 +443,10 @@ func (p *Profile) Capture(ctx context.Context, id string, plan dockerengine.Plan
 	if e != nil {
 		return e
 	}
+	record.Sandboxes, e = p.captureSandboxDirectories(id)
+	if e != nil {
+		return e
+	}
 	if p.Manifest.Storage.Block != nil {
 		block, err := p.blockRecord(plan)
 		if err != nil || p.verifyBlock(plan) != nil || verifyVMMBlock(processes, block, p.Manifest.QEMUBinary) != nil {
@@ -458,7 +462,7 @@ func (p *Profile) Capture(ctx context.Context, id string, plan dockerengine.Plan
 			return ErrQualification
 		}
 		if !previous.Prepared {
-			if !slices.Equal(previous.Processes, processes) || !sameHostCgroup(previous.Cgroup, record.Cgroup) {
+			if !slices.Equal(previous.Processes, processes) || !slices.Equal(previous.Sandboxes, record.Sandboxes) || !sameHostCgroup(previous.Cgroup, record.Cgroup) {
 				return ErrQualification
 			}
 			return nil
@@ -577,7 +581,7 @@ func (p *Profile) VerifyAbsent(ctx context.Context, id string, plan dockerengine
 	if readEvidence(raw, &record) != nil || record.Version != "runnerd09-physical-v1" || record.Profile != p.ID || record.Container != id || record.SpecHash != plan.Config.Labels[dockerengine.LabelPrefix+"spec"] || record.Generation != plan.Config.Labels[dockerengine.LabelPrefix+"generation"] || (!record.Prepared && len(record.Processes) < 2) {
 		return ErrQualification
 	}
-	verifyOwners := func() error {
+	verifyProcesses := func() error {
 		for _, guard := range guards {
 			if err := guard(); err != nil {
 				return err
@@ -610,6 +614,12 @@ func (p *Profile) VerifyAbsent(ctx context.Context, id string, plan dockerengine
 		if e != nil || len(processes) != 0 {
 			return ErrQualification
 		}
+		return nil
+	}
+	verifyOwners := func() error {
+		if err := verifyProcesses(); err != nil {
+			return err
+		}
 		for _, root := range p.Manifest.SandboxRoots {
 			if _, e := os.Lstat(filepath.Join(root, id)); !errors.Is(e, os.ErrNotExist) {
 				return ErrQualification
@@ -617,6 +627,28 @@ func (p *Profile) VerifyAbsent(ctx context.Context, id string, plan dockerengine
 		}
 
 		return nil
+	}
+	if p.Manifest.Version == MultiBlockVersion && len(record.Sandboxes) > 0 {
+		guard := func() error {
+			if err := verifyProcesses(); err != nil {
+				return err
+			}
+			current, err := p.cgroupRecord(plan)
+			if err != nil || record.Cgroup == nil || !sameHostCgroup(record.Cgroup, &current) {
+				return ErrQualification
+			}
+			if _, err := os.Lstat(filepath.Join("/sys/fs/cgroup", current.Path)); errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
+			_, populated, err := inspectCgroup(current)
+			if err != nil || populated {
+				return ErrQualification
+			}
+			return nil
+		}
+		if err := p.removeSandboxResidue(ctx, id, record.Sandboxes, guard); err != nil {
+			return err
+		}
 	}
 	if err := verifyOwners(); err != nil {
 		return err

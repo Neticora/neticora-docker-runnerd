@@ -6,17 +6,26 @@ type Process struct {
 	Executable string `json:"executable"`
 }
 type Evidence struct {
-	Cgroup     *CgroupRecord    `json:"cgroup,omitempty"`
-	Block      *BlockRecord     `json:"block,omitempty"`
-	Version    string           `json:"version"`
-	Profile    string           `json:"profile"`
-	Container  string           `json:"container"`
-	SpecHash   string           `json:"specHash"`
-	Generation string           `json:"generation"`
-	ObservedAt string           `json:"observedAt"`
-	Processes  []Process        `json:"processes"`
-	Prepared   bool             `json:"prepared"`
-	Absence    *PhysicalAbsence `json:"absence"`
+	Sandboxes  []SandboxDirectory `json:"sandboxes,omitempty"`
+	Cgroup     *CgroupRecord      `json:"cgroup,omitempty"`
+	Block      *BlockRecord       `json:"block,omitempty"`
+	Version    string             `json:"version"`
+	Profile    string             `json:"profile"`
+	Container  string             `json:"container"`
+	SpecHash   string             `json:"specHash"`
+	Generation string             `json:"generation"`
+	ObservedAt string             `json:"observedAt"`
+	Processes  []Process          `json:"processes"`
+	Prepared   bool               `json:"prepared"`
+	Absence    *PhysicalAbsence   `json:"absence"`
+}
+
+// Host-owned runtime directory identity captured while its original VM lives.
+// A directory discovered only after a crash is never authority for deletion.
+type SandboxDirectory struct {
+	Root   string `json:"root"`
+	Device uint64 `json:"device"`
+	Inode  uint64 `json:"inode"`
 }
 
 type PhysicalAbsence struct {
