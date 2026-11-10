@@ -3,6 +3,7 @@ package katalinux
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -41,6 +42,11 @@ func TestBlockV2PlanOnlyMapsItsOwnedExecutionDisk(t *testing.T) {
 	}
 	if plan.RecoveryOnly || plan.HostConfig.Privileged || len(plan.HostConfig.Devices) != 1 || len(plan.HostConfig.Mounts) != 2 {
 		t.Fatal("unsafe block plan")
+	}
+	// Actual Docker 29 inspection returns these canonical names/order, even
+	// when create receives the unprefixed manifest capabilities in another order.
+	if !slices.Equal(plan.HostConfig.CapAdd, []string{"CAP_CHOWN", "CAP_DAC_OVERRIDE", "CAP_SETGID", "CAP_SETUID", "CAP_SYS_ADMIN"}) || !slices.Equal(p.Manifest.GuestCapabilities, []string{"SETUID", "SETGID", "CHOWN", "SYS_ADMIN", "DAC_OVERRIDE"}) {
+		t.Fatal("plan differs from Docker capability normalization or mutated signed manifest")
 	}
 	d := plan.HostConfig.Devices[0]
 	if d.PathOnHost != p.blockNode(plan.Name) || d.PathInContainer != "/dev/neticora-execution" || d.CgroupPermissions != "rw" {

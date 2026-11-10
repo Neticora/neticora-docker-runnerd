@@ -142,6 +142,10 @@ type callerKey struct{}
 // host evidence and manages only signed-profile execution storage roots. It is
 // deliberately separate from provider authority and customer network settings.
 func ServeObserver(ctx context.Context, file string) error {
+	return serveObserver(ctx, file, Load)
+}
+
+func serveObserver(ctx context.Context, file string, load func(string, string, string, string, standardlinux.Settings) (*Profile, error)) error {
 	if os.Geteuid() != 0 {
 		return ErrQualification
 	}
@@ -242,7 +246,7 @@ func ServeObserver(ctx context.Context, file string) error {
 		owner.Lock()
 		defer owner.Unlock()
 		base := standardlinux.Settings{ImageRepository: "qualified-profile", NetworkID: c.NetworkID, BootstrapRoot: c.BootstrapRoot, RunnerUID: c.ServiceUID, PidsLimit: c.PidsLimit}
-		p, e := Load(filepath.Join(c.ProfileDirectory, req.Profile+".json"), c.PublicKeyFile, c.EvidenceDirectory, c.JournalDirectory, base)
+		p, e := load(filepath.Join(c.ProfileDirectory, req.Profile+".json"), c.PublicKeyFile, c.EvidenceDirectory, c.JournalDirectory, base)
 		if e != nil || p.ID != req.Profile || p.Manifest.ObserverConfig != file || req.Binding != observerBinding(base, c.EvidenceDirectory, c.JournalDirectory) {
 			http.Error(w, "unverified", 409)
 			return

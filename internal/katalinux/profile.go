@@ -118,6 +118,8 @@ type Signed struct {
 	Signature string   `json:"signature"`
 }
 type Profile struct {
+	// Set only by the separately tagged lab loader, never by normal Load.
+	qualificationApproval func() error
 	// Profiles and cleanup-only reconciliation intentionally share the offline
 	// Kata authority. Host authentication has a separate key and cannot grant either.
 	storageAuthority      string
@@ -247,7 +249,7 @@ func (p *Profile) validate() error {
 			return ErrQualification
 		}
 	}
-	if (m.Version != Version && !block) || !m.Qualified || !strings.HasPrefix(m.EndpointIdentity, "docker-") || m.ConfigurationGeneration == "" || m.HostKernel == "" || m.DockerVersion == "" || m.KataVersion == "" || m.QEMUVersion == "" || m.GuestKernelVersion == "" || m.GuestImageVersion == "" || m.RuntimeSelector == "" || m.RuntimeSelector == "runc" || m.RuntimeSelector == "default" || !validRuntimeSelector(m.RuntimeSelector) || len(m.Files) < 5 || m.Files[m.QEMUBinary] == "" || m.Files[m.ShimBinary] == "" || m.VMNamePrefix == "" || strings.ContainsAny(m.VMNamePrefix, "/ ,\x00") || len(m.SandboxRoots) == 0 || len(m.SecurityReview) < 20 {
+	if (m.Version != Version && !block) || (!m.Qualified && p.qualificationApproval == nil) || !strings.HasPrefix(m.EndpointIdentity, "docker-") || m.ConfigurationGeneration == "" || m.HostKernel == "" || m.DockerVersion == "" || m.KataVersion == "" || m.QEMUVersion == "" || m.GuestKernelVersion == "" || m.GuestImageVersion == "" || m.RuntimeSelector == "" || m.RuntimeSelector == "runc" || m.RuntimeSelector == "default" || !validRuntimeSelector(m.RuntimeSelector) || len(m.Files) < 5 || m.Files[m.QEMUBinary] == "" || m.Files[m.ShimBinary] == "" || m.VMNamePrefix == "" || strings.ContainsAny(m.VMNamePrefix, "/ ,\x00") || len(m.SandboxRoots) == 0 || len(m.SecurityReview) < 20 {
 		return ErrQualification
 	}
 	if m.ImageRepository == "" || strings.ContainsAny(m.ImageRepository, "@ \t\r\n") || len(m.ImageDigest) != 71 || !strings.HasPrefix(m.ImageDigest, "sha256:") {
@@ -262,7 +264,11 @@ func (p *Profile) validate() error {
 	if block {
 		expectedCases = 48
 	}
-	if len(m.Acceptance) != expectedCases {
+	if p.qualificationApproval != nil {
+		if m.Qualified || len(m.Acceptance) != 0 || p.qualificationApproval() != nil {
+			return ErrQualification
+		}
+	} else if len(m.Acceptance) != expectedCases {
 		return ErrQualification
 	}
 	if _, err := hex.DecodeString(strings.TrimPrefix(m.ImageDigest, "sha256:")); err != nil {
@@ -296,13 +302,15 @@ func (p *Profile) validate() error {
 	if p.ProtectPaths(protected...) != nil {
 		return ErrQualification
 	}
-	for _, group := range []struct {
-		prefix string
-		n      int
-	}{{"original-", 14}, {"review-", 24}, {"storage-", expectedCases - 38}} {
-		for i := 1; i <= group.n; i++ {
-			if len(m.Acceptance[fmt.Sprintf("%s%02d", group.prefix, i)]) < 20 {
-				return ErrQualification
+	if p.qualificationApproval == nil {
+		for _, group := range []struct {
+			prefix string
+			n      int
+		}{{"original-", 14}, {"review-", 24}, {"storage-", expectedCases - 38}} {
+			for i := 1; i <= group.n; i++ {
+				if len(m.Acceptance[fmt.Sprintf("%s%02d", group.prefix, i)]) < 20 {
+					return ErrQualification
+				}
 			}
 		}
 	}
@@ -435,6 +443,12 @@ func (p *Profile) buildPlan(scope agent.StoreScope, s protocol.ExecutionSpec) (d
 		"io.katacontainers.config.hypervisor.default_memory": strconv.FormatUint(guestMemory/(1<<20), 10),
 	}
 	plan.HostConfig.CapAdd = append([]string{}, m.GuestCapabilities...)
+	// Docker persists capability names with CAP_ and sorts them. Construct that
+	// exact representation so strict adoption does not reject its own container.
+	for i, capability := range plan.HostConfig.CapAdd {
+		plan.HostConfig.CapAdd[i] = "CAP_" + strings.TrimPrefix(capability, "CAP_")
+	}
+	slices.Sort(plan.HostConfig.CapAdd)
 	plan.HostConfig.StorageOpt = map[string]string{"size": strconv.FormatUint(m.Storage.OuterBytes, 10)}
 	plan.HostConfig.Tmpfs = map[string]string{"/run": "rw,nosuid,nodev,size=134217728", "/tmp": "rw,nosuid,nodev,size=67108864"}
 	if m.Storage.Block != nil {

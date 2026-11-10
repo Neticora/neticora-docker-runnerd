@@ -54,6 +54,14 @@ func (p *PolicyFile) Get() *standardlinux.Policy {
 }
 
 func Open(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drained func() bool) (*Controller, func(), error) {
+	return openWithKataLoader(c, store, policy, drained, katalinux.Load)
+}
+
+type kataLoader func(string, string, string, string, standardlinux.Settings) (*katalinux.Profile, error)
+
+// The public constructor always supplies the strict production loader. The
+// separately tagged lab constructor supplies its independently scoped authority.
+func openWithKataLoader(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drained func() bool, load kataLoader) (*Controller, func(), error) {
 	x := c.Execution
 	if x == nil || !x.Enabled || goruntime.GOOS != "linux" || goruntime.GOARCH != "amd64" || os.Geteuid() == 0 || policy.Get().UID() != os.Geteuid() {
 		return nil, nil, ErrReconcile
@@ -144,7 +152,7 @@ func Open(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drain
 	controller := &Controller{Store: store, Runtime: runtime, Remote: remote, SigningKey: key, Scope: agent.StoreScope{InstallationID: credentials.InstallationID, TenantID: credentials.TenantID, HostID: credentials.Identity.HostId, SessionEpoch: credentials.Identity.SessionEpoch, EndpointIdentity: credentials.EndpointIdentity}, Authority: journal.Authority{TenantID: credentials.TenantID, HostID: credentials.Identity.HostId, SessionEpoch: credentials.Identity.SessionEpoch, EndpointIdentity: credentials.EndpointIdentity, KeyID: credentials.Identity.KeyId}, Profile: standardlinux.Settings{ImageRepository: x.ImageRepository, NetworkID: x.NetworkID, BootstrapRoot: x.BootstrapRoot, RunnerUID: os.Geteuid(), PidsLimit: x.PidsLimit}, Policy: policy.Get, VerifyImage: verifier.Verify, KeysDirectory: x.KeysDirectory, Organization: x.Organization, Pool: x.Pool, Drained: drained}
 	controller.HostLimits = policy.Get().Limits()
 	if x.Kata != nil {
-		controller.Kata, err = katalinux.Load(x.Kata.ProfileFile, x.Kata.PublicKeyFile, x.Kata.EvidenceDirectory, c.StateDir, controller.Profile)
+		controller.Kata, err = load(x.Kata.ProfileFile, x.Kata.PublicKeyFile, x.Kata.EvidenceDirectory, c.StateDir, controller.Profile)
 		if err != nil {
 			cleanup()
 			return nil, nil, err

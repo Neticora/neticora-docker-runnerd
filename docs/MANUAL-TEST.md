@@ -1,5 +1,8 @@
 # Manual UI-token registration and pool execution
 
+For paired configuration provisioning and the separate unqualified Runnerd09
+lab authority/controller harness, see [QUALIFICATION-HARNESS.md](QUALIFICATION-HARNESS.md).
+
 Use `runnerd-linux-amd64.tar.gz` on x86-64 Linux. The arm64 archive supports
 registration; current execution controller remains Linux amd64 only. These are
 foundation candidates, not production-qualified releases.

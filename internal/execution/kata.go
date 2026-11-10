@@ -42,8 +42,8 @@ func (c *Controller) admit(s protocol.ExecutionSpec, now time.Time) error {
 		if err := c.Kata.Admit(c.Scope, s, c.Policy(), now); err != nil {
 			return err
 		}
-		runtime, ok := c.Runtime.(*dockerengine.Engine)
-		if !ok {
+		runtime := kataRuntimeEngine(c.Runtime)
+		if runtime == nil {
 			return katalinux.ErrQualification
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

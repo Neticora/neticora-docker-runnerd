@@ -308,7 +308,7 @@ func (e *Engine) Inspect(ctx context.Context, id string, p Plan) (Object, error)
 	if c.Config == nil || c.HostConfig == nil || c.State == nil || c.ID == "" || p.Config == nil || p.HostConfig == nil {
 		return Object{}, ErrConflict
 	}
-	if c.Config.Image != p.Config.Image || c.Config.User != p.Config.User || !labelsMatch(c.Config.Labels, p.Config.Labels) || !reflect.DeepEqual([]string(c.Config.Entrypoint), []string(p.Config.Entrypoint)) || !reflect.DeepEqual([]string(c.Config.Cmd), []string(p.Config.Cmd)) || c.Config.WorkingDir != p.Config.WorkingDir || c.Config.Tty || c.Config.OpenStdin {
+	if c.Config.Image != p.Config.Image || c.Config.User != p.Config.User || !reflect.DeepEqual([]string(c.Config.Entrypoint), []string(p.Config.Entrypoint)) || !reflect.DeepEqual([]string(c.Config.Cmd), []string(p.Config.Cmd)) || c.Config.WorkingDir != p.Config.WorkingDir || c.Config.Tty || c.Config.OpenStdin {
 		return Object{}, ErrConflict
 	}
 	// Image-defined ENV is part of the independently verified image. Runtime ENV
@@ -316,7 +316,7 @@ func (e *Engine) Inspect(ctx context.Context, id string, p Plan) (Object, error)
 	if err != nil {
 		return Object{}, e.lost()
 	}
-	if image.Config == nil || c.Image != image.ID || !reflect.DeepEqual(c.Config.Env, image.Config.Env) {
+	if image.Config == nil || c.Image != image.ID || !reflect.DeepEqual(c.Config.Env, image.Config.Env) || !labelsMatchImage(c.Config.Labels, p.Config.Labels, image.Config.Labels) {
 		return Object{}, ErrConflict
 	}
 	// overrides are forbidden by the Standard profile; inspection rejects secrets.
@@ -407,6 +407,10 @@ func (e *Engine) Ensure(ctx context.Context, p Plan, claim func() error) (Object
 }
 
 func labelsMatch(actual, want map[string]string) bool {
+	return labelsMatchImage(actual, want, nil)
+}
+
+func labelsMatchImage(actual, want, image map[string]string) bool {
 	for k, v := range want {
 		if actual[k] != v {
 			return false
@@ -415,6 +419,14 @@ func labelsMatch(actual, want map[string]string) bool {
 	for k := range actual {
 		if strings.HasPrefix(k, LabelPrefix) {
 			if _, ok := want[k]; !ok {
+				// The independently pinned block guest image ships three
+				// descriptive labels. Accept only their exact known values,
+				// inherited unchanged from that actual image. They never
+				// substitute for execution ownership labels or qualification.
+				expected := map[string]string{LabelPrefix + "guest-storage-driver": "overlay2", LabelPrefix + "storage-backing": "guest-local-block-ext4-required", LabelPrefix + "qualification": "required"}
+				if want[LabelPrefix+"template"] == "linux-github-kata-v2" && expected[k] != "" && actual[k] == expected[k] && image[k] == actual[k] {
+					continue
+				}
 				return false
 			}
 		}
