@@ -955,19 +955,45 @@ func (c *Controller) cleanup(ctx context.Context, e agent.Execution, p dockereng
 }
 
 func (c *Controller) plan(e agent.Execution) (dockerengine.Plan, error) {
+	start, err := c.storedStart(e)
+	if err != nil {
+		return dockerengine.Plan{}, err
+	}
+	return c.resolveRecoveryPlan(c.Scope, start.Spec)
+}
+
+func (c *Controller) storedStart(e agent.Execution) (protocol.StartCommand, error) {
 	// Retired housekeeping must not map inconsistent stored metadata to another
 	// attempt's private files, even before current-session reconciliation.
 	if err := protocol.ValidateInboundJSON("StartCommand", e.Command); err != nil {
-		return dockerengine.Plan{}, ErrReconcile
+		return protocol.StartCommand{}, ErrReconcile
 	}
 	var start protocol.StartCommand
 	if json.Unmarshal(e.Command, &start) != nil {
-		return dockerengine.Plan{}, ErrReconcile
+		return protocol.StartCommand{}, ErrReconcile
 	}
 	if e.Identity.InstallationID != c.Scope.InstallationID || e.Identity.TenantID != c.Scope.TenantID || e.Identity.HostID != c.Scope.HostID || start.CommandId != e.CommandID || start.Spec.ExecutionId != e.Identity.ExecutionID || start.Generation != e.Identity.Generation || start.Spec.Generation != e.Identity.Generation || start.Spec.AttemptId != e.Identity.AttemptID || start.Spec.SpecHash != e.Identity.SpecHash {
+		return protocol.StartCommand{}, ErrReconcile
+	}
+	return start, nil
+}
+
+// Final-ACKed history needs only its immutable private namespace, not an active
+// runtime profile. This deliberately returns no runnable Docker configuration.
+// Unresolved work still uses plan() and the exact historical runtime contract.
+func (c *Controller) retiredPrivatePlan(e agent.Execution) (dockerengine.Plan, error) {
+	if e.State != "cleaned" || e.CleanupPending || e.AckSequence != e.LastSequence {
 		return dockerengine.Plan{}, ErrReconcile
 	}
-	return c.resolveRecoveryPlan(c.Scope, start.Spec)
+	start, err := c.storedStart(e)
+	if err != nil {
+		return dockerengine.Plan{}, err
+	}
+	p, err := c.Profile.Plan(c.Scope, start.Spec)
+	if err != nil {
+		return dockerengine.Plan{}, err
+	}
+	return dockerengine.Plan{Name: p.Name, RecoveryOnly: true}, nil
 }
 
 func (c *Controller) cleanSecrets(e agent.Execution, p dockerengine.Plan) {
@@ -1002,6 +1028,9 @@ func (c *Controller) retiredSecrets(ctx context.Context) error {
 		for _, e := range rows {
 			if e.State == "cleaned" && !e.CleanupPending {
 				p, err := c.plan(e)
+				if e.AckSequence == e.LastSequence {
+					p, err = c.retiredPrivatePlan(e)
+				}
 				if err != nil {
 					return err
 				}
