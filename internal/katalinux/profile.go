@@ -307,6 +307,12 @@ func (p *Profile) validate() error {
 		}
 	}
 	for _, cap := range m.GuestCapabilities {
+		// Non-root nested containers require dockerd to resolve their proc
+		// namespace handles. This is explicit signed guest authority only;
+		// it grants no host process access and is not added to any default.
+		if block && cap == "SYS_PTRACE" {
+			continue
+		}
 		if !slices.Contains([]string{"SETUID", "SETGID", "CHOWN", "DAC_OVERRIDE", "FOWNER", "FSETID", "KILL", "NET_BIND_SERVICE", "NET_ADMIN", "SYS_ADMIN", "MKNOD", "SETPCAP", "NET_RAW", "SYS_CHROOT", "AUDIT_WRITE", "SETFCAP"}, cap) {
 			return ErrQualification
 		}

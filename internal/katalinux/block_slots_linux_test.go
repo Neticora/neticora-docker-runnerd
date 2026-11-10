@@ -104,6 +104,24 @@ func TestMultiBlockProfileRequiresExplicitReviewedNestedDockerCapabilities(t *te
 	}
 }
 
+func TestGuestPtraceRequiresAnExplicitBlockProfile(t *testing.T) {
+	m := multiBlockFixture()
+	before := profile(m).ID
+	m.GuestCapabilities = append(m.GuestCapabilities, "SYS_PTRACE")
+	p := profile(m)
+	if err := p.validate(); err != nil {
+		t.Fatal("explicit guest ptrace for non-root nested containers rejected", err)
+	}
+	if p.ID == before {
+		t.Fatal("guest capability change reused the old immutable profile identity")
+	}
+	legacy := fixture()
+	legacy.GuestCapabilities = append(legacy.GuestCapabilities, "SYS_PTRACE")
+	if profile(legacy).validate() == nil {
+		t.Fatal("legacy shared-filesystem capability vocabulary widened")
+	}
+}
+
 func TestMultiBlockClaimsSurviveReopenAndEnforceCountAndBytes(t *testing.T) {
 	p, root, _ := multiBlockState(t)
 	a, b, c := slotClaim(p, "a"), slotClaim(p, "b"), slotClaim(p, "c")

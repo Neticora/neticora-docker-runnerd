@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"syscall"
 	"testing"
 	"time"
 
@@ -37,6 +38,10 @@ func TestRunnerd09LiveHostCgroupLifecycle(t *testing.T) {
 	fault := os.Getenv("RUNNERD09_CGROUP_LAB_FAULT")
 	if fault != "" && fault != "lost-create-reply" && fault != "lost-stop-reply" {
 		t.Fatal("unsupported empty-unit lab fault")
+	}
+	recoverOnly := os.Getenv("RUNNERD09_CGROUP_LAB_RECOVER_ONLY")
+	if recoverOnly != "" && recoverOnly != "1" {
+		t.Fatal("unsupported empty-unit recovery mode")
 	}
 	m := multiBlockFixture()
 	m.Qualified = false
@@ -95,6 +100,22 @@ func TestRunnerd09LiveHostCgroupLifecycle(t *testing.T) {
 	plan := dockerengine.Plan{Name: name, HostConfig: &container.HostConfig{Resources: container.Resources{CgroupParent: hostCgroupUnit(name)}}}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
+	if recoverOnly == "1" {
+		// Reconcile only an existing exact attempt through production cleanup.
+		// Never call preparation: cleanup recovery cannot create another unit.
+		if _, err := p.cgroupRecord(plan); err != nil {
+			t.Fatal("existing scoped cleanup intent required", err)
+		}
+		settleSandboxTest(t, func() error {
+			released, err := p.releaseHostCgroup(ctx, plan)
+			if err != nil {
+				return err
+			}
+			return p.checkReleasedHostCgroup(ctx, plan, released)
+		})
+		t.Log("Existing empty-unit intent physically reconciled; cleanup-only recovery is not a fault-test pass")
+		return
+	}
 	err := p.prepareHostCgroup(ctx, plan)
 	if fault == "lost-create-reply" {
 		if err == nil {
@@ -104,10 +125,25 @@ func TestRunnerd09LiveHostCgroupLifecycle(t *testing.T) {
 		if e != nil || record.Phase != "creating" {
 			t.Fatal("lost response discarded creation intent", e)
 		}
-		before, populated, e := inspectCgroup(record)
-		if e != nil || populated {
-			t.Fatal("lost response did not leave exact bounded empty unit", e)
-		}
+		// StartTransientUnit returns a queued job before the kernel cgroup
+		// necessarily exists. Observe that exact unit becoming ready before
+		// testing retry identity; never issue another create to satisfy the wait.
+		var before syscall.Stat_t
+		settleSandboxTest(t, func() error {
+			status, e := p.cgroupUnitStatus(ctx, plan.Name)
+			if e != nil {
+				return e
+			}
+			if status["ActiveState"] != "active" || status["Transient"] != "yes" || status["ControlGroup"] != record.Path || status["Description"] != cgroupDescription(record) {
+				return ErrQualification
+			}
+			var populated bool
+			before, populated, e = inspectCgroup(record)
+			if populated {
+				return ErrQualification
+			}
+			return e
+		})
 		if err = p.prepareHostCgroup(ctx, plan); err != nil {
 			t.Fatal("lost response retry did not reconcile same unit", err)
 		}
