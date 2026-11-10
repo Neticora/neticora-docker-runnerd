@@ -192,6 +192,9 @@ func serveObserver(ctx context.Context, file string, load func(string, string, s
 		return ErrQualification
 	}
 	// Parent is root-owned/private: clients cannot replace the listener pathname.
+	if e = removeStaleObserverSocket(ctx, c.Socket, c.ServiceUID); e != nil {
+		return e
+	}
 	listener, e := net.ListenUnix("unix", &net.UnixAddr{Name: c.Socket, Net: "unix"})
 	if e != nil {
 		return e
