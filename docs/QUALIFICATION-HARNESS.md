@@ -104,6 +104,16 @@ The installer prepares `/run/neticora-runnerd09-qualification/CASE/` and separat
 client/root trust paths. It never changes the existing pool owner/index, journal,
 real enrolled identity, production units, GitOps configuration or admission.
 
+Expired lab grants require a fresh plan, not timestamp edits. The tagged
+`--role audit-journal --config /private/controller-config.json` takes the native
+exclusive journal lock as the service UID and refuses unresolved/unacknowledged
+executions, wrong identity/session or a missing database. The infra helper
+`renew-runnerd09-lab.py` additionally checks old/new manifest and authority pins,
+stopped roles, an empty allocation/container/VM inventory and unchanged VM/boot/
+scope/runtime/storage. Use its `--check-only` first. It archives old role artifacts
+before anchored atomic replacement, retains the existing identity and journal,
+and leaves services stopped. Partial renewal requires explicit reconciliation.
+
 ## Run repeatable trials
 
 Use `--role prepare-trial --config /private/plan/operator/fixture.json --trial

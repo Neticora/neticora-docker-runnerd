@@ -58,6 +58,13 @@ func run() error {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+	if *role == "audit-journal" {
+		result, err := execution.AuditClosedQualificationJournal(ctx, *file)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(result)
+	}
 	if *role == "prepare-trial" {
 		raw, err := hostfs.ReadPrivate(*file, 131072)
 		if err != nil {
