@@ -17,6 +17,13 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// A request budget, not a lifetime size limit. Durable filesystem progress and
+// the original captured directory identity allow the next cleanup-only retry.
+var errSandboxCleanupPending = errors.New("sandbox cleanup request budget exhausted; retain allocation and retry")
+var errSandboxReferenceHeld = errors.New("sandbox inode or device still referenced")
+
+func sandboxReferenceHeld() error { return errors.Join(ErrQualification, errSandboxReferenceHeld) }
+
 func openSandboxParent(anchor, path string) (*os.Root, error) {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path || (path != anchor && !strings.HasPrefix(path, anchor+"/")) {
 		return nil, ErrQualification
@@ -99,6 +106,7 @@ func (p *Profile) captureSandboxDirectories(id string) ([]SandboxDirectory, erro
 // Every destructive step rechecks the VM/peer guards and rejects references,
 // mount points, symlinks, foreign ownership and filesystem crossings.
 func (p *Profile) removeSandboxResidue(ctx context.Context, id string, directories []SandboxDirectory, guard func() error) error {
+	ctx = context.WithValue(ctx, procDecodeKey{}, &procDecoder{})
 	allowed := map[string]bool{}
 	for _, root := range p.Manifest.SandboxRoots {
 		allowed[root] = true
@@ -109,7 +117,7 @@ func (p *Profile) removeSandboxResidue(ctx context.Context, id string, directori
 			return ErrQualification
 		}
 		seen[expected.Root] = true
-		if err := guard(); err != nil {
+		if err := sandboxTimed(ctx, "guard", guard); err != nil {
 			return err
 		}
 		actual, err := sandboxStamp(p.Manifest.Storage.Runtime.Root, expected.Root, id)
@@ -152,11 +160,17 @@ func removeSandboxTree(ctx context.Context, root *os.Root, name string, device, 
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	if depth > 32 || *left <= 0 {
+	sandboxVisit(ctx, depth)
+	if depth > 32 {
 		return ErrQualification
 	}
+	if *left <= 0 {
+		return errors.Join(ErrQualification, errSandboxCleanupPending)
+	}
 	*left--
+	metadataDone := sandboxMetadata(ctx)
 	info, err := root.Lstat(name)
+	metadataDone()
 	if err != nil {
 		return ErrQualification
 	}
@@ -165,37 +179,73 @@ func removeSandboxTree(ctx context.Context, root *os.Root, name string, device, 
 		return ErrQualification
 	}
 	if info.IsDir() {
+		metadataDone = sandboxMetadata(ctx)
 		f, err := root.Open(name)
+		metadataDone()
 		if err != nil {
 			return ErrQualification
 		}
-		children, err := f.Readdirnames(4097)
-		f.Close()
-		if err != nil && !errors.Is(err, io.EOF) || len(children) > 4096 {
-			return ErrQualification
-		}
-		for _, child := range children {
-			if err := removeSandboxTree(ctx, root, filepath.Join(name, child), device, 0, depth+1, left, guard); err != nil {
-				return err
+		defer f.Close()
+		for {
+			metadataDone = sandboxMetadata(ctx)
+			children, readErr := f.Readdirnames(64)
+			metadataDone()
+			if readErr != nil && !errors.Is(readErr, io.EOF) {
+				return ErrQualification
+			}
+			for _, child := range children {
+				if err := removeSandboxTree(ctx, root, filepath.Join(name, child), device, 0, depth+1, left, guard); err != nil {
+					return err
+				}
+			}
+			if errors.Is(readErr, io.EOF) {
+				break
 			}
 		}
+		// Our own directory enumeration descriptor must not manufacture a held
+		// reference when this directory's fresh reference checks run below.
+		if err := f.Close(); err != nil {
+			return err
+		}
 	}
-	if err := guard(); err != nil {
+	if err := sandboxTimed(ctx, "guard", guard); err != nil {
 		return err
 	}
 	path := filepath.Join(root.Name(), name)
-	filesystemPath, err := sandboxFilesystemPath(path, device)
-	if err != nil || noNestedMounts(path) != nil || noBlockUsers(ctx, BlockRecord{FileDevice: device, FileInode: st.Ino}) != nil || noSandboxNamespaceReferences(ctx, device, st.Ino, filesystemPath) != nil {
-		return ErrQualification
+	var filesystemPath string
+	err = sandboxTimed(ctx, "filesystemPath", func() error {
+		var e error
+		filesystemPath, e = sandboxFilesystemPath(path, device)
+		return e
+	})
+	if err != nil {
+		return err
 	}
+	for _, check := range []struct {
+		name string
+		run  func() error
+	}{
+		{"nestedMounts", func() error { return noNestedMounts(path) }},
+		{"blockUsers", func() error { return noBlockUsers(ctx, BlockRecord{FileDevice: device, FileInode: st.Ino}) }},
+		{"namespaceReferences", func() error { return noSandboxNamespaceReferences(ctx, device, st.Ino, filesystemPath) }},
+	} {
+		if err := sandboxTimed(ctx, check.name, check.run); err != nil {
+			return err
+		}
+	}
+	metadataDone = sandboxMetadata(ctx)
 	current, err := root.Lstat(name)
+	metadataDone()
 	if err != nil || !os.SameFile(info, current) {
 		return ErrQualification
 	}
-	if err := root.Remove(name); err != nil {
+	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return syncSandboxParent(root, name, device)
+	if err := sandboxTimed(ctx, "remove", func() error { return root.Remove(name) }); err != nil {
+		return err
+	}
+	return sandboxTimed(ctx, "fsync", func() error { return syncSandboxParent(root, name, device) })
 }
 
 func syncSandboxParent(root *os.Root, name string, device uint64) error {
@@ -218,6 +268,7 @@ func syncSandboxParent(root *os.Root, name string, device uint64) error {
 // A surviving thread may retain an independent mount namespace or cwd/root
 // after its leader exits. Inspect every task, as with block reference checks.
 func noSandboxNamespaceReferences(ctx context.Context, device, inode uint64, filesystemPath string) error {
+	sandboxCount(ctx, "namespaceProcEnumeration")
 	processes, err := os.ReadDir("/proc")
 	if err != nil {
 		return ErrQualification
@@ -231,6 +282,7 @@ func noSandboxNamespaceReferences(ctx context.Context, device, inode uint64, fil
 			return err
 		}
 		for _, task := range tasks {
+			sandboxCount(ctx, "namespaceTask")
 			base := filepath.Join("/proc", process.Name(), "task", task.Name())
 			state, stateErr := os.ReadFile(filepath.Join(base, "stat"))
 			if errors.Is(stateErr, os.ErrNotExist) {
@@ -240,8 +292,8 @@ func noSandboxNamespaceReferences(ctx context.Context, device, inode uint64, fil
 			if stateErr != nil || close < 0 {
 				return ErrQualification
 			}
-			status := strings.Fields(string(state[close+1:]))
-			if len(status) < 1 {
+			var status [1]string
+			if procPrefixFields(string(state[close+1:]), status[:]) < len(status) {
 				return ErrQualification
 			}
 			// A dead task has dropped its fs/nsproxy references. Surviving
@@ -255,8 +307,11 @@ func noSandboxNamespaceReferences(ctx context.Context, device, inode uint64, fil
 				if errors.Is(err, os.ErrNotExist) {
 					return nil
 				}
-				if err != nil || uint64(st.Dev) == device && st.Ino == inode {
+				if err != nil {
 					return ErrQualification
+				}
+				if uint64(st.Dev) == device && st.Ino == inode {
+					return sandboxReferenceHeld()
 				}
 				return nil
 			}
@@ -265,37 +320,35 @@ func noSandboxNamespaceReferences(ctx context.Context, device, inode uint64, fil
 					return err
 				}
 			}
-			raw, err := os.ReadFile(filepath.Join(base, "mountinfo"))
+			sandboxCount(ctx, "mountinfoRead")
+			raw, release, err := readProcCurrent(ctx, filepath.Join(base, "mountinfo"), 0)
 			if errors.Is(err, os.ErrNotExist) {
 				if _, e := os.Stat(base); errors.Is(e, os.ErrNotExist) {
+					release()
 					continue
 				}
 			}
 			if err != nil {
+				release()
 				return ErrQualification
 			}
-			for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+			mounts, err := decodedMounts(ctx, raw)
+			release()
+			if err != nil {
+				return err
+			}
+			for _, mount := range mounts {
 				if ctx.Err() != nil {
 					return ctx.Err()
 				}
-				fields := strings.Fields(line)
-				if len(fields) < 6 {
-					return ErrQualification
-				}
-				mountDevice, err := sandboxMountDevice(fields[2])
-				if err != nil {
-					return err
-				}
-				mountRoot := decodeSandboxMountPath(fields[3])
+				mountDevice, mountRoot := mount.Device, mount.Root
 				// Inspect mount roots as well as visible mountpoints: a later
 				// overmount can hide an earlier bind that still holds the inode.
 				if filesystemPath != "" && mountDevice == device && (mountRoot == filesystemPath || strings.HasPrefix(mountRoot, filesystemPath+"/")) {
-					return ErrQualification
+					return sandboxReferenceHeld()
 				}
-				point := decodeSandboxMountPath(fields[4])
-				if !filepath.IsAbs(point) || strings.Contains(point, "..") {
-					return ErrQualification
-				}
+				point := mount.Point
+				sandboxCount(ctx, "mountPointStat")
 				if err := check(filepath.Join(base, "root", point)); err != nil {
 					return err
 				}
@@ -306,16 +359,19 @@ func noSandboxNamespaceReferences(ctx context.Context, device, inode uint64, fil
 }
 
 func decodeSandboxMountPath(path string) string {
-	return strings.NewReplacer(`\040`, " ", `\011`, "\t", `\012`, "\n", `\134`, "\\").Replace(path)
+	if !strings.ContainsRune(path, '\\') {
+		return path
+	}
+	return sandboxMountEscapes.Replace(path)
 }
 
 func sandboxMountDevice(value string) (uint64, error) {
-	parts := strings.Split(value, ":")
-	if len(parts) != 2 {
+	majorText, minorText, ok := strings.Cut(value, ":")
+	if !ok {
 		return 0, ErrQualification
 	}
-	major, e1 := strconv.ParseUint(parts[0], 10, 32)
-	minor, e2 := strconv.ParseUint(parts[1], 10, 32)
+	major, e1 := strconv.ParseUint(majorText, 10, 32)
+	minor, e2 := strconv.ParseUint(minorText, 10, 32)
 	if e1 != nil || e2 != nil {
 		return 0, ErrQualification
 	}
@@ -328,9 +384,9 @@ func sandboxFilesystemPath(path string, device uint64) (string, error) {
 		return "", ErrQualification
 	}
 	longest, result := "", ""
-	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) < 6 {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(raw)), "\n") {
+		var fields [6]string
+		if procPrefixFields(line, fields[:]) < len(fields) {
 			return "", ErrQualification
 		}
 		dev, err := sandboxMountDevice(fields[2])

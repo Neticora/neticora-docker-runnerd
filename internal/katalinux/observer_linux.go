@@ -212,6 +212,9 @@ func serveObserver(ctx context.Context, file string, load func(string, string, s
 	var handlers sync.WaitGroup
 	closing := false
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Peer credentials authenticate the trusted host controller. A caller
+		// with a rootful Docker socket remains host-root-equivalent; this API
+		// separation does not sandbox a compromised Docker-authorized caller.
 		gate.Lock()
 		if closing {
 			gate.Unlock()
@@ -351,20 +354,7 @@ func serveObserver(ctx context.Context, file string, load func(string, string, s
 				if err = engine.VerifyNetworkDetached(r.Context(), req.Container, c.NetworkID); err != nil {
 					return err
 				}
-				if err = p.VerifyAbsent(r.Context(), req.Container, plan, func() error {
-					_, err := engine.Inspect(r.Context(), req.Container, plan)
-					if !errors.Is(err, dockerengine.ErrAbsent) {
-						return ErrQualification
-					}
-					if err := engine.VerifyNetworkDetached(r.Context(), req.Container, c.NetworkID); err != nil {
-						return err
-					}
-					endpoint, err := engine.Probe(r.Context())
-					if err != nil || endpoint != p.Manifest.EndpointIdentity {
-						return ErrQualification
-					}
-					return nil
-				}); err != nil {
+				if err = p.VerifyAbsent(r.Context(), req.Container, plan, runtimeCleanupGuard(r.Context(), engine, req.Container, plan, c.NetworkID, p.Manifest.EndpointIdentity)); err != nil {
 					return err
 				}
 				_, err = engine.Probe(r.Context())

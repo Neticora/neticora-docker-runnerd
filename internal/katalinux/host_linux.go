@@ -566,22 +566,8 @@ func (p *Profile) CapturePrepared(id string, plan dockerengine.Plan) error {
 	}
 	return persist(root, file, record)
 }
-func (p *Profile) VerifyAbsent(ctx context.Context, id string, plan dockerengine.Plan, guards ...func() error) error {
-	if p.ObserverSocket != "" {
-		return p.remote(ctx, "absent", id, plan)
-	}
-	if p.layout() != nil || !ownedName(plan.Name) {
-		return ErrQualification
-	}
-	raw, e := hostfs.ReadPrivate(filepath.Join(p.EvidenceDirectory, plan.Name+".json"), 32768)
-	if e != nil {
-		return ErrQualification
-	}
-	var record Evidence
-	if readEvidence(raw, &record) != nil || record.Version != "runnerd09-physical-v1" || record.Profile != p.ID || record.Container != id || record.SpecHash != plan.Config.Labels[dockerengine.LabelPrefix+"spec"] || record.Generation != plan.Config.Labels[dockerengine.LabelPrefix+"generation"] || (!record.Prepared && len(record.Processes) < 2) {
-		return ErrQualification
-	}
-	verifyProcesses := func() error {
+func (p *Profile) cleanupProcessGuard(ctx context.Context, id string, record Evidence, guards ...func() error) func() error {
+	return func() error {
 		for _, guard := range guards {
 			if err := guard(); err != nil {
 				return err
@@ -616,6 +602,44 @@ func (p *Profile) VerifyAbsent(ctx context.Context, id string, plan dockerengine
 		}
 		return nil
 	}
+}
+
+func (p *Profile) cleanupSandboxGuard(ctx context.Context, plan dockerengine.Plan, record Evidence, verifyProcesses func() error) func() error {
+	return func() error {
+		if err := verifyProcesses(); err != nil {
+			return err
+		}
+		current, err := p.cgroupRecord(plan)
+		if err != nil || record.Cgroup == nil || !sameHostCgroup(record.Cgroup, &current) {
+			return ErrQualification
+		}
+		if _, err := os.Lstat(filepath.Join("/sys/fs/cgroup", current.Path)); errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		_, populated, err := inspectCgroup(current)
+		if err != nil || populated {
+			return ErrQualification
+		}
+		return nil
+	}
+}
+
+func (p *Profile) VerifyAbsent(ctx context.Context, id string, plan dockerengine.Plan, guards ...func() error) error {
+	if p.ObserverSocket != "" {
+		return p.remote(ctx, "absent", id, plan)
+	}
+	if p.layout() != nil || !ownedName(plan.Name) {
+		return ErrQualification
+	}
+	raw, e := hostfs.ReadPrivate(filepath.Join(p.EvidenceDirectory, plan.Name+".json"), 32768)
+	if e != nil {
+		return ErrQualification
+	}
+	var record Evidence
+	if readEvidence(raw, &record) != nil || record.Version != "runnerd09-physical-v1" || record.Profile != p.ID || record.Container != id || record.SpecHash != plan.Config.Labels[dockerengine.LabelPrefix+"spec"] || record.Generation != plan.Config.Labels[dockerengine.LabelPrefix+"generation"] || (!record.Prepared && len(record.Processes) < 2) {
+		return ErrQualification
+	}
+	verifyProcesses := p.cleanupProcessGuard(ctx, id, record, guards...)
 	verifyOwners := func() error {
 		if err := verifyProcesses(); err != nil {
 			return err
@@ -629,23 +653,7 @@ func (p *Profile) VerifyAbsent(ctx context.Context, id string, plan dockerengine
 		return nil
 	}
 	if p.Manifest.Version == MultiBlockVersion && len(record.Sandboxes) > 0 {
-		guard := func() error {
-			if err := verifyProcesses(); err != nil {
-				return err
-			}
-			current, err := p.cgroupRecord(plan)
-			if err != nil || record.Cgroup == nil || !sameHostCgroup(record.Cgroup, &current) {
-				return ErrQualification
-			}
-			if _, err := os.Lstat(filepath.Join("/sys/fs/cgroup", current.Path)); errors.Is(err, os.ErrNotExist) {
-				return nil
-			}
-			_, populated, err := inspectCgroup(current)
-			if err != nil || populated {
-				return ErrQualification
-			}
-			return nil
-		}
+		guard := p.cleanupSandboxGuard(ctx, plan, record, verifyProcesses)
 		if err := p.removeSandboxResidue(ctx, id, record.Sandboxes, guard); err != nil {
 			return err
 		}
@@ -727,13 +735,12 @@ func noNestedMounts(path string) error {
 	if e != nil {
 		return e
 	}
-	decode := strings.NewReplacer(`\040`, " ", `\011`, "\t", `\012`, "\n", `\134`, "\\")
-	for _, line := range strings.Split(string(raw), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) < 6 {
+	for line := range strings.SplitSeq(string(raw), "\n") {
+		var fields [6]string
+		if procPrefixFields(line, fields[:]) < len(fields) {
 			continue
 		}
-		point := decode.Replace(fields[4])
+		point := decodeSandboxMountPath(fields[4])
 		if point == path || strings.HasPrefix(point, path+string(filepath.Separator)) {
 			return ErrQualification
 		}

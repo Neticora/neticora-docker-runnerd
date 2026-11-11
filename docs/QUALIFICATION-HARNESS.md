@@ -198,3 +198,78 @@ checks. Remove a test registry only by its recorded ID/label; never prune Docker
 All 48 Runnerd09 acceptance cases, independent security approval and production
 host qualification remain explicit. A lab proof is useful evidence, not closure
 of the epic or permission to enable customer execution.
+
+## Native metadata cleanup stress
+
+For operation timings, bounded retry behavior, large-directory coverage and the
+remaining reference-fence design requirements, see [SANDBOX-CLEANUP.md](SANDBOX-CLEANUP.md).
+
+Run the repository's native gate from a protected frozen source snapshot on the
+marked disposable VM. The exact source tree and binary hashes must accompany
+results; never transfer operator/signing/enrollment credentials with the source.
+An isolated offline module cache may contain the existing public pinned
+dependencies; VCS/authentication caches are not inputs.
+
+```sh
+export RUNNERD09_SANDBOX_STRESS=1
+export RUNNERD09_SANDBOX_STRESS_FILES=4093
+export RUNNERD09_SANDBOX_STRESS_WORKERS=32
+export RUNNERD09_SANDBOX_STRESS_GUARDS=production-readonly
+export RUNNERD09_STRESS_DOCKER_ENDPOINT=unix:///run/runnerd09-docker.sock
+export RUNNERD09_STRESS_NETWORK_ID=VERIFIED_FULL_EXISTING_BRIDGE_ID
+bash .github/scripts/qualify-kata-native.sh /private/fresh-native-results
+```
+
+The native selector includes all required parser/fresh-input regressions as well
+as the native reference/recovery cases. Full stress runs include actual guards,
+all 32 workers and both 4,096-entry scenarios; the retained case also retries
+after explicitly releasing its owned reference. Repeat full invocations against
+the same final source/binary and record min/median/max; do not infer P95 from a
+tiny sample. Keep the 110-second deadline and report the 80-second engineering
+target separately. Report complete worker/metadata/guard setup and request
+latency, self CPU and allocations; overlapping exploratory worker timings are
+aggregate time, not additive wall time. Preserve all failed intermediates.
+
+Normal regression/race tests and the separately documented qualification-tagged
+suite remain required. The built-release/SBOM gate is separate and cannot be
+claimed without its inputs. Rerunning real Docker/Kata guest teardown also needs
+an unexpired reviewed candidate/profile binding; no expired lab artifact or
+native component result can replace that prerequisite or grant qualification.
+
+`TestNativeSandboxBusyHostCleanupBudget` is an explicit disposable-host stress
+test, not a production authorization envelope. Build the Linux test binary with
+`go test -race -c -tags runnerd_kata ./internal/katalinux`; stage it with
+`internal/katalinux/testdata/surviving_worker.c` as `testdata/surviving_worker.c`.
+Run as root only on a marked lab VM under a transient systemd unit with
+`RuntimeMaxSec=360s`, `TimeoutStopSec=5s`, `KillMode=control-group`,
+`CPUQuota=200%`, `MemoryMax=1G`, `TasksMax=256` and a private working directory.
+Set `RUNNERD09_SANDBOX_STRESS=1`,
+`RUNNERD09_SANDBOX_STRESS_FILES=4093` and
+`RUNNERD09_SANDBOX_STRESS_WORKERS=32`; run only this test with a 330-second test
+timeout. All workers, namespaces and metadata belong to this test.
+
+Each cleanup call has a 110-second deadline inside the observer's 120-second
+client deadline. The two cases exercise 4,096 metadata entries with 32 surviving
+worker processes, including four private mount namespaces and four CPU-active
+workers. Unreferenced metadata must be removed within budget. An intentionally
+mapped inode must prevent removal and remain intact within budget. JSON test
+logs record elapsed time, load, guard calls, deadline and removal outcome.
+A deadline failure keeps the performance gate open; reference checks must never
+be skipped to meet it. This bounded synthetic load does not prove latency on
+arbitrarily large or differently configured hosts. Archive source/binary hashes
+and results separately from previous frozen qualification evidence.
+
+The November 10, 2026 run on the disposable 4-vCPU Ubuntu 26.04 VM failed this
+performance gate. With the load above and a two-CPU service quota, the
+unreferenced case hit its deadline at 110,001 ms (70 guard calls), and the
+retained-reference case at 110,003 ms (73 guard calls). Both retained the sandbox
+directory when the request stopped. The retained-reference stress case did not
+complete its latency assertion and must not be reported as a stress pass; the
+separate mandatory native held-reference regressions passed. Test teardown
+removed only test-owned fixtures after stopping their workers.
+
+Worst-case cleanup latency therefore remains an open Runnerd09 acceptance gate.
+Reducing scan cost or introducing bounded resumable cleanup needs a separate
+correctness review and a passing repeat of this workload. Preserve inode,
+namespace, mount, ownership, VM/peer and durability checks throughout. Increasing
+the timeout alone does not resolve the observer request budget.

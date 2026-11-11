@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -28,6 +29,12 @@ func nativeUnavailable(t *testing.T, reason string) {
 }
 
 func startSurvivingWorker(t *testing.T, mode, target string) (string, string) {
+	t.Helper()
+	pid, tid, _ := startSurvivingWorkerControlled(t, mode, target)
+	return pid, tid
+}
+
+func startSurvivingWorkerControlled(t *testing.T, mode, target string) (string, string, func()) {
 	t.Helper()
 	cc, err := exec.LookPath("cc")
 	if err != nil {
@@ -47,14 +54,18 @@ func startSurvivingWorker(t *testing.T, mode, target string) (string, string) {
 	}
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
-	t.Cleanup(func() {
-		_ = cmd.Process.Kill()
-		select {
-		case <-done:
-		case <-time.After(5 * time.Second):
-			t.Error("worker did not exit")
-		}
-	})
+	var stopped sync.Once
+	stop := func() {
+		stopped.Do(func() {
+			_ = cmd.Process.Kill()
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Error("worker did not exit")
+			}
+		})
+	}
+	t.Cleanup(stop)
 	line := make(chan string, 1)
 	go func() {
 		scanner := bufio.NewScanner(out)
@@ -81,11 +92,11 @@ func startSurvivingWorker(t *testing.T, mode, target string) (string, string) {
 				t.Fatalf("worker returned no readiness: %q", ready)
 			}
 		}
-		return strconv.Itoa(cmd.Process.Pid), strconv.Itoa(tid)
+		return strconv.Itoa(cmd.Process.Pid), strconv.Itoa(tid), stop
 	case <-time.After(10 * time.Second):
 		t.Fatal("worker readiness timeout")
 	}
-	return "", ""
+	return "", "", stop
 }
 func TestSurvivingWorkerRetainsMmapAfterFDClosure(t *testing.T) {
 	for _, unlink := range []bool{false, true} {

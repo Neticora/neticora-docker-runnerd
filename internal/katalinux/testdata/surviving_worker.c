@@ -5,6 +5,7 @@
 #include <sys/prctl.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
+#include <sys/resource.h>
 #include <fcntl.h>
 #include <sched.h>
 #include <stdio.h>
@@ -15,6 +16,8 @@
 /* Disposable child only. No host namespace or block device is mutated. */
 static const char *target;
 static int namespace_case;
+static int busy_case;
+static const char *reference_mode;
 static int write_file(const char *path, const char *data) {
     int fd = open(path, O_WRONLY);
     if (fd < 0) return -1;
@@ -28,7 +31,13 @@ static void *worker(void *unused) {
         if (unshare(CLONE_NEWNS) || mount(NULL, "/", NULL, MS_REC|MS_PRIVATE, NULL)) _exit(77);
         if (namespace_case == 2 && mount(target, target, NULL, MS_BIND, NULL)) _exit(77);
         if (mount("tmpfs", target, "tmpfs", MS_NOSUID|MS_NODEV, "size=1048576")) _exit(77);
-    } else {
+    } else if (!strcmp(reference_mode,"fd") || !strcmp(reference_mode,"opath") || !strcmp(reference_mode,"dir")) {
+        int flags = !strcmp(reference_mode,"opath") ? O_PATH : O_RDONLY;
+        if (!strcmp(reference_mode,"dir")) flags |= O_DIRECTORY;
+        if (open(target, flags) < 0) _exit(8);
+    } else if (!strcmp(reference_mode,"cwd")) {
+        if (chdir(target)) _exit(8);
+    } else if (strcmp(reference_mode,"root")) {
         int fd = open(target, O_RDWR);
         if (fd < 0) _exit(2);
         void *mapping = mmap(NULL, 4096, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
@@ -46,9 +55,17 @@ static void *worker(void *unused) {
         fclose(f);
         char *end = strrchr(line,')');
         if (end && end[1]==' ' && end[2]=='Z') {
+            /* Keep cwd outside the chroot: test root reference independently. */
+            if (!strcmp(reference_mode,"root") && chroot(target)) _exit(8);
             printf("READY %ld\n",syscall(SYS_gettid));
             fflush(stdout);
-            for (;;) pause();
+            for (;;) {
+                if (busy_case) {
+                    volatile unsigned value = 0;
+                    for (unsigned j = 0; j < 100000; ++j) value += j;
+                    (void)value;
+                } else pause();
+            }
         }
         usleep(10000);
     }
@@ -58,6 +75,9 @@ int main(int argc, char **argv) {
     if (argc!=3) return 2;
     target=argv[2];namespace_case=!strcmp(argv[1],"namespace") ? 1 :
         (!strcmp(argv[1],"namespace-hidden-bind") ? 2 : 0);
+    reference_mode=argv[1];
+    busy_case=!strcmp(argv[1],"busy-mmap");
+    if (busy_case && setpriority(PRIO_PROCESS,0,19)) return 2;
     if (namespace_case) {
         uid_t uid=getuid();gid_t gid=getgid();
         if (unshare(CLONE_NEWUSER)) return 77;

@@ -13,7 +13,7 @@ export GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local
 # pipefail propagates the test exit code; the independent JSON gate also rejects
 # missing/skipped cases even if the package exits successfully.
 go test -mod=readonly -race -count=1 -json \
-  -run '^(TestNativeSandbox.*|TestProcessTasksFailClosed|TestProcessTaskEnumerationCancellation|TestBothScannersFenceObservableGroupWithoutTasks|TestBothScannersHonorCanceledContext|TestSurvivingWorkerRetainsMmapAfterFDClosure|TestSurvivingWorkerRetainsIndependentMountNamespace)$' \
+  -run '^(TestNativeSandbox.*|TestProc.*|TestSandboxMountDecoderPreservesEscapes|TestBothScannersFenceObservableGroupWithoutTasks|TestBothScannersHonorCanceledContext|TestSurvivingWorkerRetainsMmapAfterFDClosure|TestSurvivingWorkerRetainsIndependentMountNamespace)$' \
   ./internal/katalinux 2> "$runnerd_native_output/native-tests.stderr" \
   | tee "$runnerd_native_output/native-tests.jsonl"
 python3 .github/scripts/require_kata_native.py "$runnerd_native_output/native-tests.jsonl" \

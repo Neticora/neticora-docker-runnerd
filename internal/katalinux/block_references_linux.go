@@ -24,6 +24,13 @@ func blockReference(st syscall.Stat_t, r BlockRecord) bool {
 // after unlink. Compare maps by numeric device/inode, never pathname suffixes;
 // map_files additionally identifies mappings of block nodes by their rdev.
 func noMappedBlockUsers(ctx context.Context, task string, r BlockRecord) error {
+	if _, ok := ctx.Value(procDecodeKey{}).(*procDecoder); ok && r.LoopDevice == 0 {
+		return noDecodedMapUsers(ctx, task, r)
+	}
+	return noMappedBlockUsersStream(ctx, task, r)
+}
+
+func noMappedBlockUsersStream(ctx context.Context, task string, r BlockRecord) error {
 	f, err := os.Open(filepath.Join(task, "maps"))
 	if errors.Is(err, os.ErrNotExist) {
 		if _, e := os.Stat(task); errors.Is(e, os.ErrNotExist) {
@@ -40,35 +47,35 @@ func noMappedBlockUsers(ctx context.Context, task string, r BlockRecord) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		fields := strings.Fields(scanner.Text())
-		if len(fields) < 5 {
+		var fields [5]string
+		if procPrefixFields(scanner.Text(), fields[:]) < len(fields) {
 			return ErrQualification
 		}
 		inode, err := strconv.ParseUint(fields[4], 10, 64)
 		if err != nil {
 			return ErrQualification
 		}
-		device := strings.Split(fields[3], ":")
-		if len(device) != 2 {
+		majorText, minorText, ok := strings.Cut(fields[3], ":")
+		if !ok {
 			return ErrQualification
 		}
-		major, e1 := strconv.ParseUint(device[0], 16, 32)
-		minor, e2 := strconv.ParseUint(device[1], 16, 32)
+		major, e1 := strconv.ParseUint(majorText, 16, 32)
+		minor, e2 := strconv.ParseUint(minorText, 16, 32)
 		if e1 != nil || e2 != nil {
 			return ErrQualification
 		}
 		if inode != 0 && inode == r.FileInode && unix.Mkdev(uint32(major), uint32(minor)) == r.FileDevice {
-			return ErrQualification
+			return sandboxReferenceHeld()
 		}
 		if inode == 0 || r.LoopDevice == 0 {
 			continue
 		}
-		address := strings.Split(fields[0], "-")
-		if len(address) != 2 {
+		startText, endText, ok := strings.Cut(fields[0], "-")
+		if !ok {
 			return ErrQualification
 		}
-		start, e1 := strconv.ParseUint(address[0], 16, 64)
-		end, e2 := strconv.ParseUint(address[1], 16, 64)
+		start, e1 := strconv.ParseUint(startText, 16, 64)
+		end, e2 := strconv.ParseUint(endText, 16, 64)
 		if e1 != nil || e2 != nil || end <= start {
 			return ErrQualification
 		}
@@ -83,7 +90,7 @@ func noMappedBlockUsers(ctx context.Context, task string, r BlockRecord) error {
 			return ErrQualification
 		}
 		if blockReference(st, r) {
-			return ErrQualification
+			return sandboxReferenceHeld()
 		}
 	}
 	if scanner.Err() != nil {
@@ -110,6 +117,7 @@ func noTaskBlockUsers(ctx context.Context, task string, r BlockRecord) error {
 			return ctx.Err()
 		}
 		var st syscall.Stat_t
+		sandboxCount(ctx, "fdStat")
 		err = syscall.Stat(filepath.Join(task, "fd", fd.Name()), &st)
 		if errors.Is(err, os.ErrNotExist) {
 			continue
@@ -118,7 +126,7 @@ func noTaskBlockUsers(ctx context.Context, task string, r BlockRecord) error {
 			return ErrQualification
 		}
 		if blockReference(st, r) {
-			return ErrQualification
+			return sandboxReferenceHeld()
 		}
 	}
 	return nil
@@ -132,6 +140,7 @@ func noBlockUsersIn(ctx context.Context, procRoot string, r BlockRecord) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
+	sandboxCount(ctx, "blockProcEnumeration")
 	entries, err := os.ReadDir(procRoot)
 	if err != nil {
 		return err
@@ -149,6 +158,7 @@ func noBlockUsersIn(ctx context.Context, procRoot string, r BlockRecord) error {
 			return err
 		}
 		for _, task := range tasks {
+			sandboxCount(ctx, "blockTask")
 			if err := noTaskBlockUsers(ctx, filepath.Join(base, task.Name()), r); err != nil {
 				return err
 			}
