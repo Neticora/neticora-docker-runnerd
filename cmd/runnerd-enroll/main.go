@@ -50,11 +50,18 @@ func runArgs(args []string) error {
 	token := flags.String("token-file", "", "owner-only 0600 file containing the UI enrollment token; first attempt only")
 	installation := flags.String("installation-id", "", "independently verified platform installation ID; enables credential export")
 	runtime := flags.String("runtime-endpoint", "unix:///run/docker.sock", "local Docker socket for read-only identity probe")
+	retire := flags.Bool("retire-attempt", false, "offline: retire the token/seed attempt after verifying durable credential export; retain identity and receipt")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if flags.NArg() != 0 || *endpoint == "" || *tenant == "" || *state == "" {
-		return errors.New("usage: runnerd-enroll --endpoint HTTPS_URL --tenant-id UUID --state-dir PATH [--token-file PATH] [--installation-id ID --runtime-endpoint unix:///run/docker.sock]")
+		return errors.New("usage: runnerd-enroll --endpoint HTTPS_URL --tenant-id UUID --state-dir PATH [--token-file PATH] [--installation-id ID --runtime-endpoint unix:///run/docker.sock | --installation-id ID --retire-attempt]")
+	}
+	if *retire {
+		if err := retireEnrollmentAttempt(*state, *endpoint, *tenant, *installation); err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(map[string]any{"attemptRetired": true, "identityAndReceiptDeletedByCommand": false, "admissionEnabledByCommand": false})
 	}
 	var roots []byte
 	if *caFile != "" {
@@ -79,6 +86,9 @@ func runArgs(args []string) error {
 		return err
 	}
 	defer lock.Close()
+	if _, err := root.Lstat("retired.json"); !errors.Is(err, os.ErrNotExist) {
+		return errors.New("enrollment attempt retired or retirement marker unreadable; use the retained identity, never reenroll this state directory")
+	}
 	boot, err := os.ReadFile("/proc/sys/kernel/random/boot_id")
 	if err != nil {
 		return errors.New("Linux boot identity unavailable")

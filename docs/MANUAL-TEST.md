@@ -41,8 +41,9 @@ reuse it and check authentication/configuration without enrolling again. A boot
 change requires explicit operator resynchronization; this helper does not bypass
 session-epoch or Docker-peer recovery. Keep this directory private (0700) and its
 files private (0600); it includes the recovery key and original enrollment token.
-After enrollment, revoke the original UI token when appropriate; retain the
-protected recovery state until the host itself is revoked.
+After enrollment, revoke the original UI token when appropriate. Retain the
+attempt during uncertain enrollment and until credential export is verified;
+use the explicit retirement procedure below afterward.
 
 For a private CA, append `--ca-file /absolute/service-owned-0600-ca.pem`.
 Certificate and hostname verification remain enabled.
@@ -67,6 +68,28 @@ Then rerun enrollment with the same protected directory and append:
 This performs a read-only Docker identity probe and writes `identity.json` once,
 using the original enrolled key. The service account needs access to that
 specific Docker socket. Export refuses to overwrite existing credentials.
+
+Before starting the daemon or rotating the enrolled key, verify the exported
+host, tenant and installation against the operator's record. Retire the redundant
+enrollment token and seed with the same account, endpoint and state directory:
+
+```sh
+sudo -u neticora-runnerd ./runnerd-enroll \
+  --endpoint https://platform.example.com/api/v1/runner-hosts \
+  --tenant-id TENANT_UUID \
+  --state-dir /var/lib/neticora-runnerd-keys/manual-enrollment \
+  --installation-id PLATFORM_INSTALLATION_ID --retire-attempt
+```
+
+Retirement runs offline. It validates the confirmed receipt and exported identity
+against the original key and scope, fsyncs the export and a sanitized hash marker,
+then unlinks only `attempt.json` and fsyncs the directory. If interrupted, rerun
+the identical retirement command. Missing or changed exports retain the attempt.
+The marker prevents accidental re-enrollment in that directory. Keep
+`identity.json`, `enrollment.json` and `retired.json` protected; the exported key
+remains necessary for host authentication. Any separate operator-supplied token
+file needs its own removal/revocation procedure. Unlinking does not securely erase
+filesystem snapshots, backups or residual storage blocks.
 
 Set the packaged daemon configuration's `credentialFile` to this `identity.json`.
 Use a separate private `stateDir` for the journal. Provision the reviewed
