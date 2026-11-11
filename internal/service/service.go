@@ -111,6 +111,7 @@ func Run(ctx context.Context, c config.Config, socket string) error {
 		return result, nil
 	})
 	if controller != nil {
+		server.ExposeKataEvidence(controller.KataEvidence)
 		done := make(chan struct{})
 		go func() {
 			defer close(done)

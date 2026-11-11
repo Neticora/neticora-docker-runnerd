@@ -99,6 +99,30 @@ func TestLostCreateReplyAdoptsWithoutCreatingOrStartingAgain(t *testing.T) {
 	}
 }
 
+func TestHistoricalPlanCanInspectButCannotPrepareCreateOrStart(t *testing.T) {
+	requests := 0
+	e, p, exists, running, creates, _ := fakeEngineWithHook(t, func(string) { requests++ })
+	p.RecoveryOnly = true
+	*exists = true
+	called := false
+	authorize := func() error { called = true; return nil }
+	if err := e.PrepareImage(t.Context(), p); !errors.Is(err, ErrRecoveryPlan) {
+		t.Fatal("historical image preparation accepted", err)
+	}
+	if _, err := e.Ensure(t.Context(), p, authorize); !errors.Is(err, ErrRecoveryPlan) {
+		t.Fatal("historical create accepted", err)
+	}
+	if _, err := e.Start(t.Context(), p.Name, p, authorize); !errors.Is(err, ErrRecoveryPlan) {
+		t.Fatal("historical start accepted", err)
+	}
+	if requests != 0 || called || *running || *creates != 0 {
+		t.Fatal("historical launch touched the runtime or creation authority")
+	}
+	if object, err := e.Inspect(t.Context(), p.Name, p); err != nil || object.State != "prepared" {
+		t.Fatal("historical inspection blocked", object, err)
+	}
+}
+
 func TestOwnershipAndRestartDriftPreventMutation(t *testing.T) {
 	e, p, exists, _, _, _ := fakeEngine(t)
 	*exists = true
@@ -113,6 +137,40 @@ func TestOwnershipAndRestartDriftPreventMutation(t *testing.T) {
 	}
 	if err := e.Remove(context.Background(), p.Name, p); !errors.Is(err, ErrConflict) {
 		t.Fatal("drift permitted destructive mutation", err)
+	}
+}
+
+func TestCgroupParentDriftFences(t *testing.T) {
+	for _, example := range []struct{ name, parent string }{{"missing", ""}, {"foreign", "system.slice"}} {
+		t.Run(example.name, func(t *testing.T) {
+			e, p, exists, _, _, _ := fakeEngine(t)
+			*exists = true
+			actual := p.HostConfig
+			expected := *actual
+			p.HostConfig = &expected
+			p.HostConfig.CgroupParent = "neticora-runnerd-e" + strings.Repeat("a", 64) + ".slice"
+			actual.CgroupParent = example.parent
+			if _, err := e.Inspect(t.Context(), p.Name, p); !errors.Is(err, ErrConflict) {
+				t.Fatal("foreign or missing host boundary adopted", err)
+			}
+			called := false
+			if _, err := e.Start(t.Context(), p.Name, p, func() error { called = true; return nil }); !errors.Is(err, ErrConflict) {
+				t.Fatal("foreign boundary allowed launch", err)
+			}
+			if called {
+				t.Fatal("drift reached launch authorization")
+			}
+			if err := e.Remove(t.Context(), p.Name, p); !errors.Is(err, ErrConflict) {
+				t.Fatal("foreign boundary allowed destructive mutation", err)
+			}
+		})
+	}
+}
+
+func TestMissingHostCgroupDriverCannotFallBackForKata(t *testing.T) {
+	e, _, _, _, _, _ := fakeEngine(t)
+	if err := e.CheckKataHostCgroupDriver(t.Context()); !errors.Is(err, ErrConflict) {
+		t.Fatal("missing systemd/cgroup-v2 evidence accepted", err)
 	}
 }
 

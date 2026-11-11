@@ -19,6 +19,7 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/internal/config"
 	"github.com/Neticora/neticora-docker-runnerd/internal/dockerengine"
 	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
+	"github.com/Neticora/neticora-docker-runnerd/internal/katalinux"
 	"github.com/Neticora/neticora-docker-runnerd/internal/peerrecovery"
 	"github.com/Neticora/neticora-docker-runnerd/internal/standardlinux"
 	"github.com/Neticora/neticora-docker-runnerd/journal"
@@ -109,6 +110,16 @@ func AdministrativePeerRecovery(ctx context.Context, c config.Config, operation,
 	defer client.Close()
 	remote := &HostRemote{Client: client, Credentials: credentials, Key: key, Version: Version()}
 	coordinator := &PeerRecoveryCoordinator{Store: store, Runtime: runtime, Remote: remote, Profile: standardlinux.Settings{ImageRepository: x.ImageRepository, NetworkID: x.NetworkID, BootstrapRoot: x.BootstrapRoot, RunnerUID: os.Geteuid(), PidsLimit: x.PidsLimit}, Identity: credentials.Identity, TenantID: credentials.TenantID, InstallationID: credentials.InstallationID, BootID: actualBoot, AgentVersion: Version()}
+	if x.Kata != nil {
+		coordinator.Kata, err = katalinux.Load(x.Kata.ProfileFile, x.Kata.PublicKeyFile, x.Kata.EvidenceDirectory, c.StateDir, coordinator.Profile)
+		if err != nil {
+			return nil, err
+		}
+		coordinator.Kata.ObserverSocket = x.Kata.ObserverSocket
+		if err = coordinator.Kata.ProtectPaths(c.CredentialFile, x.KeysDirectory, x.PolicyFile, x.CapabilitiesFile, x.TrustRoots, x.ImageBundles, x.CustomCAFile, x.Kata.ObserverSocket); err != nil {
+			return nil, err
+		}
+	}
 	if operation == "inspect" {
 		plan, err := coordinator.Propose(ctx, challenge, key)
 		if err != nil {

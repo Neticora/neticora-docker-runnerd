@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	goruntime "runtime"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/internal/config"
 	"github.com/Neticora/neticora-docker-runnerd/internal/dockerengine"
 	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
+	"github.com/Neticora/neticora-docker-runnerd/internal/katalinux"
 	"github.com/Neticora/neticora-docker-runnerd/internal/standardlinux"
 	"github.com/Neticora/neticora-docker-runnerd/journal"
 	"github.com/Neticora/neticora-docker-runnerd/transport"
@@ -52,6 +54,14 @@ func (p *PolicyFile) Get() *standardlinux.Policy {
 }
 
 func Open(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drained func() bool) (*Controller, func(), error) {
+	return openWithKataLoader(c, store, policy, drained, katalinux.Load)
+}
+
+type kataLoader func(string, string, string, string, standardlinux.Settings) (*katalinux.Profile, error)
+
+// The public constructor always supplies the strict production loader. The
+// separately tagged lab constructor supplies its independently scoped authority.
+func openWithKataLoader(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drained func() bool, load kataLoader) (*Controller, func(), error) {
 	x := c.Execution
 	if x == nil || !x.Enabled || goruntime.GOOS != "linux" || goruntime.GOARCH != "amd64" || os.Geteuid() == 0 || policy.Get().UID() != os.Geteuid() {
 		return nil, nil, ErrReconcile
@@ -89,7 +99,8 @@ func Open(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drain
 		return nil, nil, err
 	}
 	capabilities, err := protocol.DecodeHostCapabilities(raw)
-	if err != nil || capabilities.DockerBuild || capabilities.HardStorageLimit || capabilities.EndpointIdentity != credentials.EndpointIdentity || capabilities.Host.Os != "linux" || capabilities.Engine.Os != "linux" {
+	isolated := x.Kata != nil
+	if err != nil || capabilities.DockerBuild != isolated || capabilities.HardStorageLimit != isolated || capabilities.EndpointIdentity != credentials.EndpointIdentity || capabilities.Host.Os != "linux" || capabilities.Engine.Os != "linux" {
 		return nil, nil, ErrReconcile
 	}
 	var ca []byte
@@ -140,6 +151,45 @@ func Open(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drain
 	}
 	controller := &Controller{Store: store, Runtime: runtime, Remote: remote, SigningKey: key, Scope: agent.StoreScope{InstallationID: credentials.InstallationID, TenantID: credentials.TenantID, HostID: credentials.Identity.HostId, SessionEpoch: credentials.Identity.SessionEpoch, EndpointIdentity: credentials.EndpointIdentity}, Authority: journal.Authority{TenantID: credentials.TenantID, HostID: credentials.Identity.HostId, SessionEpoch: credentials.Identity.SessionEpoch, EndpointIdentity: credentials.EndpointIdentity, KeyID: credentials.Identity.KeyId}, Profile: standardlinux.Settings{ImageRepository: x.ImageRepository, NetworkID: x.NetworkID, BootstrapRoot: x.BootstrapRoot, RunnerUID: os.Geteuid(), PidsLimit: x.PidsLimit}, Policy: policy.Get, VerifyImage: verifier.Verify, KeysDirectory: x.KeysDirectory, Organization: x.Organization, Pool: x.Pool, Drained: drained}
 	controller.HostLimits = policy.Get().Limits()
+	if x.Kata != nil {
+		controller.Kata, err = load(x.Kata.ProfileFile, x.Kata.PublicKeyFile, x.Kata.EvidenceDirectory, c.StateDir, controller.Profile)
+		if err != nil {
+			cleanup()
+			return nil, nil, err
+		}
+		controller.Kata.ObserverSocket = x.Kata.ObserverSocket
+		if err = hostfs.CheckAncestors(filepath.Dir(controller.Kata.HealthRoot())); err != nil {
+			cleanup()
+			return nil, nil, err
+		}
+		if err = os.Mkdir(controller.Kata.HealthRoot(), 0700); err != nil && !os.IsExist(err) {
+			cleanup()
+			return nil, nil, err
+		}
+		healthRoot, healthErr := hostfs.OpenState(controller.Kata.HealthRoot())
+		if healthErr != nil {
+			cleanup()
+			return nil, nil, healthErr
+		}
+		_ = healthRoot.Close()
+		if err = volatileDirectory(controller.Kata.HealthRoot()); err != nil {
+			cleanup()
+			return nil, nil, err
+		}
+		if controller.Kata.Manifest.ConfigurationGeneration != capabilities.ConfigurationGeneration || controller.Kata.Manifest.EndpointIdentity != credentials.EndpointIdentity || capabilities.RuntimeMechanism != "kata-runtime-rs-qemu" || !slices.Contains(capabilities.Profiles, controller.Kata.ID) {
+			cleanup()
+			return nil, nil, katalinux.ErrQualification
+		}
+		if err = controller.Kata.ProtectPaths(c.CredentialFile, x.KeysDirectory, x.PolicyFile, x.CapabilitiesFile, x.TrustRoots, x.ImageBundles, x.CustomCAFile, x.Kata.ProfileFile, x.Kata.PublicKeyFile, x.Kata.ObserverSocket); err != nil {
+			cleanup()
+			return nil, nil, err
+		}
+		if err = controller.Kata.RecoverProbe(context.Background(), runtime); err != nil {
+			cleanup()
+			return nil, nil, err
+		}
+		controller.HostLimits.Slots = min(controller.HostLimits.Slots, controller.Kata.MaxConcurrentAllocations())
+	}
 	capacity := capabilities.Capacity
 	ceilings := []*uint64{&controller.HostLimits.CPUMillis, &controller.HostLimits.MemoryBytes, &controller.HostLimits.StorageBytes, &controller.HostLimits.Slots}
 	for i, value := range []string{capacity.CpuMillis, capacity.MemoryBytes, capacity.StorageBytes, capacity.Slots} {

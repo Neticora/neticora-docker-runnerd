@@ -15,7 +15,49 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/agent"
 	"github.com/Neticora/neticora-docker-runnerd/agent/storetest"
 	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
+	"github.com/Neticora/neticora-docker-runnerd/internal/katalinux"
 )
+
+func TestFinalAckHousekeepingSurvivesProfileChangeWithoutRuntimeAuthority(t *testing.T) {
+	c, _, _, first := setup(t)
+	ctx := context.Background()
+	cleanHistory(t, c, first.Command, "1", true)
+	rows, err := c.Store.Executions(ctx, agent.ExecutionCursor{}, 100)
+	if err != nil || len(rows) != 1 {
+		t.Fatal(err)
+	}
+	e := rows[0]
+	original, err := c.plan(e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(c.Profile.BootstrapRoot, original.Name)
+	os.Mkdir(dir, 0700)
+	os.WriteFile(filepath.Join(dir, "bootstrap.json"), []byte("private-remnant"), 0600)
+	c.Kata = &katalinux.Profile{ID: "different-approved-profile", Base: c.Profile}
+	if _, err = c.plan(e); err == nil {
+		t.Fatal("new runtime accepted historical runtime contract")
+	}
+	private, err := c.retiredPrivatePlan(e)
+	if err != nil || private.Name != original.Name || !private.RecoveryOnly || private.Config != nil || private.HostConfig != nil {
+		t.Fatal("housekeeping gained runnable authority", err)
+	}
+	if err = c.retiredSecrets(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = os.Stat(filepath.Join(dir, "bootstrap.json")); !os.IsNotExist(err) {
+		t.Fatal("retired private remnant retained")
+	}
+	e.AckSequence = "0"
+	if _, err = c.retiredPrivatePlan(e); err == nil {
+		t.Fatal("unacknowledged history bypassed recovery profile")
+	}
+	e = rows[0]
+	e.Identity.AttemptID = "another-attempt"
+	if _, err = c.retiredPrivatePlan(e); err == nil {
+		t.Fatal("inconsistent identity authorized private cleanup")
+	}
+}
 
 func cleanHistory(t *testing.T, c *Controller, start json.RawMessage, inventory string, acknowledged bool) {
 	t.Helper()

@@ -7,6 +7,10 @@ Runnerd is designed to connect customer-managed hosts to Neticora and manage the
 local lifecycle of ephemeral CI runners, while keeping execution subject to
 customer-defined policy.
 
+For manual registration with a pool enrollment token from the UI, see
+[Manual testing](docs/MANUAL-TEST.md). Candidate archives include `runnerd-enroll`
+and a hidden-prompt wrapper; enrollment does not grant execution admission.
+
 ## Project status
 
 Runnerd is under active development. This repository currently contains the

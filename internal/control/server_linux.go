@@ -112,6 +112,34 @@ func (s *Server) ExposeExecutions(list func(context.Context, string, string) (an
 		_ = json.NewEncoder(w).Encode(value)
 	})
 }
+
+// Qualification diagnostics have the same owner/root boundary as journal export;
+// ordinary status observers and guest workloads cannot request host signatures.
+func (s *Server) ExposeKataEvidence(read func(context.Context, string, string) (any, error)) {
+	s.mux.HandleFunc("GET /kata-evidence", func(w http.ResponseWriter, r *http.Request) {
+		uid, ok := r.Context().Value(peerKey{}).(uint32)
+		if !ok || (uid != 0 && int(uid) != os.Geteuid()) {
+			http.Error(w, "administrative permission required", http.StatusForbidden)
+			return
+		}
+		query := r.URL.Query()
+		id, generation := query.Get("executionId"), query.Get("generation")
+		if len(query) != 2 || len(query["executionId"]) != 1 || len(query["generation"]) != 1 || len(id) < 1 || len(id) > 256 || len(generation) < 1 || len(generation) > 20 {
+			http.Error(w, "explicit execution scope required", http.StatusBadRequest)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		value, err := read(ctx, id, generation)
+		if err != nil {
+			http.Error(w, "trusted Kata evidence unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(value)
+	})
+}
 func (s *Server) Serve() error {
 	err := s.http.Serve(newLimitListener(s.listener, 32))
 	if errors.Is(err, http.ErrServerClosed) || errors.Is(err, net.ErrClosed) {

@@ -1,0 +1,45 @@
+name: Runnerd09 Native Qualification
+on:
+  workflow_call:
+  workflow_dispatch:
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  native-regressions:
+    name: Required Linux native coverage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-contract
+      - name: Require compiler, namespaces and actual native passes
+        env:
+          TMPDIR: /var/tmp
+        # Manual qualification on a disposable GitHub-hosted runner. Root is
+        # used only for local namespace capability; no platform/host credentials
+        # or customer sockets are supplied. Do not convert this to a PR job on
+        # a persistent customer runner.
+        run: |
+          sudo env "PATH=$PATH" "GOMODCACHE=$(go env GOMODCACHE)" \
+            "GOCACHE=$RUNNER_TEMP/runnerd09-go-cache" GOTOOLCHAIN=local \
+            TMPDIR=/var/tmp bash .github/scripts/qualify-kata-native.sh "$RUNNER_TEMP/runnerd09-native"
+          sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/runnerd09-native"
+      - name: Preserve complete native test output
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: runnerd09-native-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/runnerd09-native/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Scope of this qualification
+        if: always()
+        run: |
+          echo 'Native Linux regressions only. Live Kata/QEMU attachment, signed host qualification and all 48 acceptance cases remain independent gates.' >> "$GITHUB_STEP_SUMMARY"
