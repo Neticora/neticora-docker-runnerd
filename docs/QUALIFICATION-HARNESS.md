@@ -140,6 +140,22 @@ explicit constrained transient systemd units. Units are never enabled and have
 reviewed device/capability permissions; controller runs without capabilities,
 with its exact Docker socket group and private journal/key/handoff write paths.
 
+The controller remains trusted host software: access to this rootful Docker
+socket is root-equivalent despite its non-root UID and empty capability set.
+Root-observer peer authentication separates authorized callers and protocols;
+it does not contain a compromised Docker-authorized controller. Kata guest
+isolation does not imply controller containment. A deployment requiring that
+additional boundary needs independently trusted Docker authorization, including
+payload and resource-ownership enforcement, and separate qualification. A
+method/path-only proxy or dedicated rootful daemon cannot establish it.
+
+Production cgroup preparation polls the one durably recorded systemd slice for
+up to five seconds after queued creation. It never recreates the slice while
+waiting; mismatched ownership, limits or unexpected state fail closed. Restart
+trials wait for the killed unit's PID to exit and its collected unit to disappear
+before starting the same unit again. A replacement PID or bounded-wait expiry
+fails the trial without resetting systemd state.
+
 Supported experiments:
 
 | Mode | Phases | Required evidence |

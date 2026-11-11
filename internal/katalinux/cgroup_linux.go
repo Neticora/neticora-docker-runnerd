@@ -285,17 +285,61 @@ func (p *Profile) prepareHostCgroup(ctx context.Context, plan dockerengine.Plan)
 			// A lost response never erases the creating intent or replaces a unit.
 			return fmt.Errorf("%w: transient host slice creation: %v: %s", ErrQualification, createErr, strings.TrimSpace(output))
 		}
-		status, err = p.cgroupUnitStatus(ctx, plan.Name)
 	}
-	if err != nil || status["LoadState"] != "loaded" || status["ActiveState"] != "active" || status["Transient"] != "yes" || status["ControlGroup"] != record.Path || status["Description"] != cgroupDescription(record) {
-		return ErrQualification
-	}
-	stat, populated, err := inspectCgroup(record)
-	if err != nil || populated {
-		return ErrQualification
+	stat, err := waitHostCgroupReady(ctx, record, func(ctx context.Context) (map[string]string, error) {
+		return p.cgroupUnitStatus(ctx, plan.Name)
+	}, inspectCgroup)
+	if err != nil {
+		return err
 	}
 	record.Device, record.Inode, record.Phase = uint64(stat.Dev), stat.Ino, "ready"
 	return p.persistCgroup(record)
+}
+
+// StartTransientUnit queues a job. Observe only until the exact owned unit and
+// kernel limits are ready; never recreate, repair or relax an uncertain slice.
+func waitHostCgroupReady(ctx context.Context, record CgroupRecord, status func(context.Context) (map[string]string, error), inspect func(CgroupRecord) (syscall.Stat_t, bool, error)) (syscall.Stat_t, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	for {
+		if err := ctx.Err(); err != nil {
+			return syscall.Stat_t{}, errors.Join(ErrQualification, err)
+		}
+		fields, err := status(ctx)
+		if err != nil {
+			return syscall.Stat_t{}, err
+		}
+		if !cgroupUnitMissing(fields) {
+			// systemd persists transient properties at this exact runtime path.
+			// Reject configured units and foreign fragments, not the owned one.
+			fragment := fields["FragmentPath"]
+			if fields["LoadState"] != "loaded" || fields["Transient"] != "yes" || fields["Description"] != cgroupDescription(record) || (fragment != "" && fragment != "/run/systemd/transient/"+hostCgroupUnit(record.Name)) || fields["SourcePath"] != "" || fields["DropInPaths"] != "" || (fields["ControlGroup"] != "" && fields["ControlGroup"] != record.Path) {
+				return syscall.Stat_t{}, ErrQualification
+			}
+			switch fields["ActiveState"] {
+			case "inactive", "activating", "active":
+			default:
+				return syscall.Stat_t{}, ErrQualification
+			}
+			if fields["ActiveState"] == "active" && fields["ControlGroup"] == record.Path {
+				stat, populated, err := inspect(record)
+				if err == nil {
+					if populated {
+						return syscall.Stat_t{}, ErrQualification
+					}
+					return stat, nil
+				}
+				if !errors.Is(err, os.ErrNotExist) {
+					return syscall.Stat_t{}, err
+				}
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return syscall.Stat_t{}, errors.Join(ErrQualification, ctx.Err())
+		case <-time.After(25 * time.Millisecond):
+		}
+	}
 }
 
 func (p *Profile) verifyHostCgroup(ctx context.Context, plan dockerengine.Plan, processes []Process) (*CgroupRecord, error) {

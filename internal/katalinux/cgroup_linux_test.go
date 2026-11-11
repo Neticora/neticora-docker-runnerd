@@ -3,12 +3,86 @@
 package katalinux
 
 import (
+	"context"
+	"errors"
+	"os"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/Neticora/neticora-docker-runnerd/agent"
 	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
 )
+
+func cgroupReadyTestStatus(record CgroupRecord) map[string]string {
+	return map[string]string{"LoadState": "loaded", "ActiveState": "active", "Transient": "yes", "Description": cgroupDescription(record), "ControlGroup": record.Path, "FragmentPath": "/run/systemd/transient/" + hostCgroupUnit(record.Name), "SourcePath": "", "DropInPaths": ""}
+}
+
+func TestHostCgroupWaitsForQueuedUnitAndKernelDirectory(t *testing.T) {
+	record := CgroupRecord{Name: "nrd-" + strings.Repeat("a", 64), Owner: strings.Repeat("b", 64)}
+	record.Path = hostCgroupPath(record.Name)
+	reads, inspections := 0, 0
+	stat, err := waitHostCgroupReady(t.Context(), record, func(context.Context) (map[string]string, error) {
+		reads++
+		s := cgroupReadyTestStatus(record)
+		if reads == 1 {
+			s["LoadState"], s["ActiveState"], s["Transient"], s["ControlGroup"] = "not-found", "inactive", "no", ""
+			s["FragmentPath"] = ""
+		} else if reads == 2 {
+			s["ActiveState"], s["ControlGroup"] = "activating", ""
+		}
+		return s, nil
+	}, func(CgroupRecord) (syscall.Stat_t, bool, error) {
+		inspections++
+		if inspections == 1 {
+			return syscall.Stat_t{}, false, os.ErrNotExist
+		}
+		return syscall.Stat_t{Dev: 12, Ino: 34}, false, nil
+	})
+	if err != nil || stat.Dev != 12 || stat.Ino != 34 || reads != 4 || inspections != 2 {
+		t.Fatalf("queued creation not observed safely: reads=%d inspections=%d error=%v", reads, inspections, err)
+	}
+}
+
+func TestHostCgroupReadinessFencesConflictsAndInvalidLimits(t *testing.T) {
+	record := CgroupRecord{Name: "nrd-" + strings.Repeat("a", 64), Path: "/owned"}
+	for _, field := range []string{"Description", "ControlGroup", "Transient", "FragmentPath", "SourcePath", "DropInPaths", "ActiveState", "limits", "populated"} {
+		t.Run(field, func(t *testing.T) {
+			reads := 0
+			_, err := waitHostCgroupReady(t.Context(), record, func(context.Context) (map[string]string, error) {
+				reads++
+				s := cgroupReadyTestStatus(record)
+				if field != "limits" && field != "populated" {
+					s[field] = "foreign-or-failed"
+				}
+				return s, nil
+			}, func(CgroupRecord) (syscall.Stat_t, bool, error) {
+				if field == "limits" {
+					return syscall.Stat_t{}, false, ErrQualification
+				}
+				return syscall.Stat_t{}, field == "populated", nil
+			})
+			if err == nil || reads != 1 {
+				t.Fatal("conflicting or unsafe state retried/adopted", err, reads)
+			}
+		})
+	}
+}
+
+func TestHostCgroupReadinessHonorsDeadline(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
+	defer cancel()
+	_, err := waitHostCgroupReady(ctx, CgroupRecord{}, func(context.Context) (map[string]string, error) {
+		return map[string]string{"LoadState": "not-found", "ActiveState": "inactive"}, nil
+	}, func(CgroupRecord) (syscall.Stat_t, bool, error) {
+		t.Fatal("kernel inspected before owned active unit")
+		return syscall.Stat_t{}, false, nil
+	})
+	if !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, ErrQualification) {
+		t.Fatal("readiness deadline not retained", err)
+	}
+}
 
 func TestHostCgroupScopeCannotSelectArbitraryUnitsOrPaths(t *testing.T) {
 	for _, name := range []string{"", "system.slice", "nrd-" + strings.Repeat("A", 64), "nrd-" + strings.Repeat("/", 64), "nrd-" + strings.Repeat("x", 64)} {
