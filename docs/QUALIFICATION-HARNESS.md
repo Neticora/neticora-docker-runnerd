@@ -6,8 +6,53 @@ It must not receive invented acceptance references to bootstrap its own tests.
 `runnerd_qualification`. Its distinct Ed25519 lab envelope requires
 `qualified:false`, empty acceptance, a separate pinned lab authority, a private
 HTTPS control-plane address and exact VM/boot/tenant/host/pool/config bindings.
-Ordinary `Open`/`katalinux.Load` reject this envelope even in a tagged binary.
-No lab result grants production or SaaS admission.
+Ordinary builds and `katalinux.Load` reject this envelope. An explicit campaign
+configuration in a qualification build can select the same bounded loader from
+the actual daemon's normal service entrypoint. No lab result declares completed
+production acceptance.
+
+## Enrolled product campaigns
+
+The project owner may authorize an exact isolated campaign to collect genuine
+acceptance evidence. No external approval authority is required. The signed lab
+envelope retains `qualified:false` and empty acceptance; it may bind real tenant,
+host and pool UUIDs with the original `enrollment:UUID` installation. The existing
+private HTTPS, current boot/DMI/UID, six-hour expiry and immutable configuration
+bindings still apply. Never invent acceptance references to bootstrap tests.
+
+Build the actual `cmd/runnerd` executable with `runnerd_qualification`. With an
+existing broker socket, set `execution.kata.qualificationBindingFile` and
+`execution.kata.qualificationAuthorityPin`. The normal service uses the existing
+controller, native journal and broker transport; no test controller replaces it.
+The binding must match the exact daemon/policy/capability files and original
+enrollment identity. Configuration drift drains the campaign. Ordinary builds
+reject this configuration, and production profile verification remains strict.
+
+The isolated platform instance separately pins the exact owner-signed host
+artifact hash. Removing that pin blocks new admission while immutable historical
+admission retains its original cleanup and final-ACK authority. Broker execution
+grants, transactional commitment, resource ownership and disposal verification
+remain unchanged. Keep production dispatch disabled and record each acceptance
+case only after its own genuine requirements pass.
+
+### Enrollment without controller Docker authority
+
+The unprivileged service first enrolls using the normal protected token/state
+flow. A trusted root operator then uses `runnerd-enroll --observe-runtime` with
+explicit `--runtime-endpoint`, `--runtime-observation`, `--installation-id`,
+`--tenant-id` and `--host-id`. This reads the actual peer and writes an exclusive,
+fsynced observation bound to that original installation/tenant/host/current boot.
+The output requires root-owned, non-writable directory ancestry. Its public
+metadata is readable by the service; it contains no credentials or launch grant.
+
+Export credentials as the same service UID using the original enrollment state,
+`--installation-id` and `--runtime-observation`, without `--runtime-endpoint`.
+The reader requires root ownership, no writable alias/ancestor, a single regular
+file, exact scope and an observation no older than five minutes. It never opens
+Docker or falls back to another peer source. The original enrolled seed/key and
+server receipt are preserved. After verifying durable export, use the existing
+`--retire-attempt` operation to retire the obsolete token/seed attempt while
+retaining identity and receipt. Never reenroll or reset state to recover a failure.
 
 ## Build and preserve provenance
 
@@ -322,10 +367,14 @@ original physical ID and authority. A before-effect create/start uses
 `RUNNERD_D2_EXPECT_OWNED=1`. Those cases intentionally retain unresolved records
 and reservations for external reboot/power-loss observation.
 
-Kata boot transition is currently unsupported. After a boot/endpoint change,
-container absence must not discard the original block allocation, operation or
-reservation. Docker-only boot recovery is forbidden for Kata. Preserve ambiguous
-cases and the original pool owner; never clear them to make another test fit.
+Broker-managed Kata supports separately authorized cleanup-only boot recovery
+when original protected Kata/storage anchors exist. Docker-only boot recovery
+remains forbidden for Kata. Container absence never discards the original block
+allocation, operation or reservation. Missing anchors and ambiguous creates stay
+held; do not clear them to make another test fit. After broker-verified disposal,
+the actual unprivileged daemon's `--recovery broker-finalize` path reconciles the
+original native CLEANED/outbox/final ACK through the existing platform authority.
+This is explicit operator recovery, not qualified automatic boot orchestration.
 
 `RUNNERD_E2_HOLD_BLOCK=1` adds an externally held reference to the original raw
 inode during one Kata lifecycle. The parent must observe broker quarantine,

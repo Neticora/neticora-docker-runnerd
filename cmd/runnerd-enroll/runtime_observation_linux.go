@@ -67,6 +67,11 @@ func writeRuntimeObservation(path, endpoint, installation, tenant, host string) 
 		return err
 	}
 	defer file.Close()
+	// This scoped observation contains public peer metadata, not credentials.
+	// Root-owned ancestors and owner-only writes protect its authenticity.
+	if err = file.Chmod(0644); err != nil {
+		return err
+	}
 	if _, err = file.Write(raw); err != nil {
 		return err
 	}
