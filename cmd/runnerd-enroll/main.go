@@ -225,6 +225,9 @@ func runArgs(args []string) error {
 			peer, e = engine.Probe(ctx)
 		}
 		if e != nil {
+			if *observation != "" {
+				return errors.New("trusted runtime observation rejected; enrollment retained")
+			}
 			return errors.New("Docker identity probe failed; enrollment retained")
 		}
 		der, e := x509.MarshalPKCS8PrivateKey(key)
