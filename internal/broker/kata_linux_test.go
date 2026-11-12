@@ -3,10 +3,13 @@
 package broker
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -130,3 +133,41 @@ func TestKataLifecycleConsumesOnceAndRetainsStorageObligation(t *testing.T) {
 }
 
 func (*componentKata) Check(context.Context) (string, error) { return "component-kata", nil }
+
+func TestKataPreflightOnlyObservesProtectedProfile(t *testing.T) {
+	e, r, _, _ := isolatedFixture(t)
+	h := handler{config: Config{ControllerUID: 1000}, executor: e}
+	call := func(q Request) (int, Response) {
+		raw, _ := json.Marshal(q)
+		request := httptest.NewRequest(http.MethodPost, "/v1/request", bytes.NewReader(raw))
+		request.Header.Set("Content-Type", "application/json")
+		request = request.WithContext(context.WithValue(request.Context(), caller{}, uint32(1000)))
+		reply := httptest.NewRecorder()
+		h.ServeHTTP(reply, request)
+		var response Response
+		json.Unmarshal(reply.Body.Bytes(), &response)
+		return reply.Code, response
+	}
+	q := Request{Version: Version, Operation: "CheckKataProfile"}
+	status, response := call(q)
+	if status != 200 || response.KataProfile != "component-kata" || response.Endpoint != e.scope.EndpointIdentity {
+		t.Fatal("protected profile not observed", status, response)
+	}
+	q.Target = "controller-selected-profile"
+	if status, _ := call(q); status == 200 {
+		t.Fatal("caller-selected profile accepted")
+	}
+	q.Target = ""
+	q.MinimumFreeBytes = 1
+	if status, _ := call(q); status == 200 {
+		t.Fatal("unexpected preflight payload accepted")
+	}
+	q.MinimumFreeBytes = 0
+	e.kata = nil
+	if status, _ := call(q); status == 200 {
+		t.Fatal("unconfigured Kata profile inferred")
+	}
+	if r.pulls+r.creates+r.starts+r.stops+r.removes != 0 {
+		t.Fatal("read-only preflight mutated runtime")
+	}
+}
