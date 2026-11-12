@@ -50,9 +50,27 @@ func runArgs(args []string) error {
 	token := flags.String("token-file", "", "owner-only 0600 file containing the UI enrollment token; first attempt only")
 	installation := flags.String("installation-id", "", "independently verified platform installation ID; enables credential export")
 	runtime := flags.String("runtime-endpoint", "unix:///run/docker.sock", "local Docker socket for read-only identity probe")
+	observation := flags.String("runtime-observation", "", "fresh root-owned runtime peer observation; credential export never opens Docker")
+	observe := flags.Bool("observe-runtime", false, "root operator: write a fresh scoped read-only runtime observation; does not enroll")
+	hostID := flags.String("host-id", "", "independently verified enrolled host ID for root runtime observation")
 	retire := flags.Bool("retire-attempt", false, "offline: retire the token/seed attempt after verifying durable credential export; retain identity and receipt")
 	if err := flags.Parse(args); err != nil {
 		return err
+	}
+	explicitRuntime := false
+	flags.Visit(func(f *flag.Flag) {
+		if f.Name == "runtime-endpoint" {
+			explicitRuntime = true
+		}
+	})
+	if *observe {
+		if flags.NArg() != 0 || *observation == "" || *tenant == "" || *installation == "" || *hostID == "" || !explicitRuntime || *retire || *token != "" {
+			return errors.New("runtime observation requires explicit host, tenant, installation, endpoint and output; no enrollment token")
+		}
+		return writeRuntimeObservation(*observation, *runtime, *installation, *tenant, *hostID)
+	}
+	if *hostID != "" || (*observation != "" && (*installation == "" || explicitRuntime || *retire)) {
+		return errors.New("runtime observation requires credential export and cannot be mixed with another peer source")
 	}
 	if flags.NArg() != 0 || *endpoint == "" || *tenant == "" || *state == "" {
 		return errors.New("usage: runnerd-enroll --endpoint HTTPS_URL --tenant-id UUID --state-dir PATH [--token-file PATH] [--installation-id ID --runtime-endpoint unix:///run/docker.sock | --installation-id ID --retire-attempt]")
@@ -194,12 +212,18 @@ func runArgs(args []string) error {
 		return errors.New("invalid platform configuration")
 	}
 	if *installation != "" {
-		engine, e := dockerengine.OpenReadOnly(*runtime, *installation, nil)
-		if e != nil {
-			return e
+		var peer string
+		var e error
+		if *observation != "" {
+			peer, e = readRuntimeObservation(*observation, *installation, a.TenantID, enrolled.Identity.HostId, a.BootID)
+		} else {
+			engine, openErr := dockerengine.OpenReadOnly(*runtime, *installation, nil)
+			if openErr != nil {
+				return openErr
+			}
+			defer engine.Close()
+			peer, e = engine.Probe(ctx)
 		}
-		defer engine.Close()
-		peer, e := engine.Probe(ctx)
 		if e != nil {
 			return errors.New("Docker identity probe failed; enrollment retained")
 		}
