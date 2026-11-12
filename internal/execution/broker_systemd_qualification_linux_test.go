@@ -145,6 +145,10 @@ RestrictAddressFamilies=AF_UNIX
 CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_FOWNER CAP_SYS_PTRACE
 FileDescriptorStoreMax=0
 `, strconv.Quote(binary), strconv.Quote(config), base, state)
+	body, err = phaseE2BrokerUnitFromConfig(body, config)
+	if err != nil {
+		t.Fatal("Kata broker service boundary", err)
+	}
 	s.install(t, s.broker, body)
 	if output, err := phaseD2Command("systemctl", "start", s.broker); err != nil {
 		t.Fatalf("installed broker start: %v %s", err, output)
@@ -177,9 +181,14 @@ func (s *phaseD2Services) controller(t *testing.T, self, publicPath string, p ph
 	t.Helper()
 	suffix := "controller"
 	extra := ""
+	if masks, err := phaseE2ControllerPaths(p); err != nil {
+		t.Fatal(err)
+	} else {
+		extra += masks
+	}
 	if inherited {
 		suffix = "inherited"
-		extra = "Environment=RUNNERD_PHASE_D_INHERITED=1\nOpenFile=" + strings.TrimPrefix(p.Endpoint, "unix://") + ":privileged-docker\n"
+		extra += "Environment=RUNNERD_PHASE_D_INHERITED=1\nOpenFile=" + strings.TrimPrefix(p.Endpoint, "unix://") + ":privileged-docker\n"
 	}
 	name := "neticora-d2-" + filepath.Base(s.base) + "-" + suffix + ".service"
 	if p.CrashController && !inherited {

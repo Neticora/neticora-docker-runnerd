@@ -293,3 +293,36 @@ against the final candidate and retain results outside Git. A timeout is incompl
 cleanup; preserve ownership and retry through the existing guarded recovery path.
 Do not skip reference, namespace, mount, identity or durability checks to meet the
 request budget.
+
+## Broker-managed Kata lifecycle fixture
+
+The separately tagged `TestPhaseDControllerRealDocker` fixture also exercises
+broker-managed block-backed Kata when `RUNNERD_PHASE_E_SEED` names an existing
+unqualified lab envelope. It preserves that pool's original evidence/journal
+owner and allocation index. Build both the execution test executable and broker
+with `runnerd_broker_qualification,runnerd_qualification,runnerd_kata`, record the
+commit and binary hashes, and use only the marked disposable VM. Its issuer,
+provider and database are explicit fixtures; this test does not qualify the
+shipped daemon, a real provider, or production admission.
+
+Set `RUNNERD_D2_SYSTEMD=1` and `RUNNERD_D2_BROKER_BINARY` to the root-protected
+broker executable for process-crash qualification. The temporary Kata broker
+service receives only the existing signed pool/evidence/device/sandbox write
+paths, loop-control/loop-block and pinned backing-device access, and the storage
+capabilities needed for that lifecycle. The controller keeps an empty capability
+set, private devices, masked runtime sockets, masked Kata ownership/storage and
+no supplementary groups. Retained unit bodies and journals are evidence; these
+qualification units do not replace shipped packaging.
+
+Use `RUNNERD_D2_CRASH_OPERATION` (`CreateExecution`, `StartExecution`, or
+`RemoveExecution`) with the existing `RUNNERD_D2_CRASH_POINT` to select one exact
+root-owned, durably consumed SIGKILL boundary. Reconciliation must retain the
+original physical ID and authority. A before-effect create/start uses
+`RUNNERD_D2_EXPECT_QUARANTINE=1`; a before-start case additionally uses
+`RUNNERD_D2_EXPECT_OWNED=1`. Those cases intentionally retain unresolved records
+and reservations for external reboot/power-loss observation.
+
+Kata boot transition is currently unsupported. After a boot/endpoint change,
+container absence must not discard the original block allocation, operation or
+reservation. Docker-only boot recovery is forbidden for Kata. Preserve ambiguous
+cases and the original pool owner; never clear them to make another test fit.
