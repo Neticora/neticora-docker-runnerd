@@ -18,7 +18,13 @@ func brokerOriginFixture(t *testing.T) (*Profile, json.RawMessage) {
 	p.brokerOwned = true
 	p.EvidenceDirectory = t.TempDir()
 	p.JournalDirectory = t.TempDir()
-	p.storageAuthority = filepath.Join(t.TempDir(), "original-authority.pem")
+	authorityDirectory := t.TempDir()
+	for _, directory := range []string{p.EvidenceDirectory, p.JournalDirectory, authorityDirectory} {
+		if err := os.Chmod(directory, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p.storageAuthority = filepath.Join(authorityDirectory, "original-authority.pem")
 	if err := os.WriteFile(p.storageAuthority, []byte("original public authority"), 0600); err != nil {
 		t.Fatal(err)
 	}

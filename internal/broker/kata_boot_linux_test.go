@@ -73,6 +73,19 @@ func kataBootFixture(t *testing.T) (*physicalExecutor, *componentRuntime, *recov
 			q.ResourceID = object.ID
 		}
 	}
+	state, plan, err := e.load(q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handoffs, err := e.ledger.records("handoffs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = e.ledger.writeRecord(handoffs, handoffID(plan.Name), handoffRecord{Version: "runnerd-broker-handoff-v1", Name: plan.Name, Boot: bootBefore, Device: 1, Inode: 2, Hash: state.Spec.SpecHash, Phase: "READY"})
+	handoffs.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
 	original := map[string][]byte{}
 	filepath.WalkDir(e.ledger.root.Name(), func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
