@@ -952,6 +952,12 @@ func phaseDControllerChild(t *testing.T, path string) {
 	if p.ExpectQuarantine {
 		return
 	}
+	if p.HoldRunning {
+		if len(lost) != 2*len(p.Starts) {
+			t.Fatal("held launch response coverage incomplete", lost)
+		}
+		return
+	}
 	if len(lost) != 3*len(p.Starts) {
 		t.Fatal("uncertain operation response coverage incomplete", lost)
 	}
