@@ -5,6 +5,7 @@ package execution
 // Disposable real-Docker engineering smoke. Provider admission and the platform
 // database are protocol fixtures; this test cannot qualify production admission.
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/ed25519"
@@ -45,6 +46,7 @@ import (
 )
 
 type phaseDPublic struct {
+	KataEvidenceDirectory, KataJournalDirectory                                             string
 	KataManifest                                                                            json.RawMessage
 	KataProfileID                                                                           string
 	Pool                                                                                    string
@@ -314,6 +316,8 @@ func TestPhaseDControllerRealDocker(t *testing.T) {
 	public.Pool = "pool-a"
 	if kataID != "" {
 		phaseEKataBroker(t, &config, kataManifest, policyRaw, server.URL)
+		public.KataEvidenceDirectory = config.Runtime.Kata.EvidenceDirectory
+		public.KataJournalDirectory = config.Runtime.Kata.JournalDirectory
 		phaseDWrite(t, configPath, phaseDJSON(config), 0600, 0)
 	}
 	public.BootstrapExpires = now.Add(15 * time.Minute).Format(wireTime)
@@ -398,7 +402,11 @@ func TestPhaseDControllerRealDocker(t *testing.T) {
 	if installed != nil {
 		output, err = installed.controller(t, self, publicPath, public, false)
 	} else {
-		output, err = child.CombinedOutput()
+		var collected bytes.Buffer
+		child.Stdout = io.MultiWriter(os.Stdout, &collected)
+		child.Stderr = io.MultiWriter(os.Stdout, &collected)
+		err = child.Run()
+		output = collected.Bytes()
 	}
 	t.Log(string(output))
 	if err != nil {

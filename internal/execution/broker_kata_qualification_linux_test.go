@@ -113,5 +113,5 @@ func phaseEKataController(t *testing.T, c *Controller, p phaseDPublic) {
 	if json.Unmarshal(p.KataManifest, &m) != nil {
 		t.Fatal("manifest")
 	}
-	c.Kata = &katalinux.Profile{ID: p.KataProfileID, Manifest: m, Base: c.Profile}
+	c.Kata = &katalinux.Profile{ID: p.KataProfileID, Manifest: m, Base: c.Profile, EvidenceDirectory: p.KataEvidenceDirectory, JournalDirectory: p.KataJournalDirectory}
 }
