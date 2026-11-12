@@ -128,3 +128,5 @@ func TestKataLifecycleConsumesOnceAndRetainsStorageObligation(t *testing.T) {
 		t.Fatal("Docker-only boot grant accepted for Kata", err)
 	}
 }
+
+func (*componentKata) Check(context.Context) (string, error) { return "component-kata", nil }

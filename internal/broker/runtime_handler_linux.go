@@ -15,7 +15,7 @@ import (
 
 func (h handler) runtimeRequest(w http.ResponseWriter, r *http.Request, q Request) bool {
 	switch q.Operation {
-	case "ReadKataEvidence", "ProbeRuntime", "GetRuntimeInventory", "GetExecutionStatus", "ReconcileExecution", "ReadRegistration", "CheckRuntimeHeadroom", "ExecuteOperation", "AttestDisposal", "ResumeDisposal", "GetBootRecoveryChallenge", "RecoverBootExecution":
+	case "CheckKataProfile", "ReadKataEvidence", "ProbeRuntime", "GetRuntimeInventory", "GetExecutionStatus", "ReconcileExecution", "ReadRegistration", "CheckRuntimeHeadroom", "ExecuteOperation", "AttestDisposal", "ResumeDisposal", "GetBootRecoveryChallenge", "RecoverBootExecution":
 	default:
 		return false
 	}
@@ -125,7 +125,7 @@ func (h handler) runtimeRequest(w http.ResponseWriter, r *http.Request, q Reques
 		fail(ErrRejected, nil)
 		return true
 	}
-	if q.Operation == "ProbeRuntime" || q.Operation == "GetRuntimeInventory" || q.Operation == "CheckRuntimeHeadroom" {
+	if q.Operation == "CheckKataProfile" || q.Operation == "ProbeRuntime" || q.Operation == "GetRuntimeInventory" || q.Operation == "CheckRuntimeHeadroom" {
 		if q.Lookup != nil {
 			fail(ErrRejected, nil)
 			return true
@@ -135,6 +135,21 @@ func (h handler) runtimeRequest(w http.ResponseWriter, r *http.Request, q Reques
 			return true
 		}
 		switch q.Operation {
+		case "CheckKataProfile":
+			if e.kata == nil || q.MinimumFreeBytes != 0 {
+				fail(ErrRejected, nil)
+				return true
+			}
+			id, err := e.kata.Check(r.Context())
+			if err != nil {
+				fail(err, nil)
+				return true
+			}
+			if err = e.endpoint(r.Context()); err != nil {
+				fail(err, nil)
+				return true
+			}
+			respond(200, Response{Code: "kata_profile_observed", Endpoint: e.scope.EndpointIdentity, KataProfile: id})
 		case "ProbeRuntime":
 			respond(200, Response{Code: "runtime_observed", Endpoint: e.scope.EndpointIdentity})
 		case "GetRuntimeInventory":

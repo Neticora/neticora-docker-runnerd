@@ -67,6 +67,7 @@ type SignedGrant struct {
 }
 
 type Response struct {
+	KataProfile   string               `json:"kataProfile,omitempty"`
 	Version       string               `json:"version"`
 	Code          string               `json:"code"`
 	Ready         bool                 `json:"ready"`

@@ -47,3 +47,31 @@ func TestRuntimeHeadroomConfigurationCannotDisableProtectedMargin(t *testing.T) 
 		}
 	}
 }
+
+func TestBrokerKataRequiresExclusivePrivilegedEndpoint(t *testing.T) {
+	c, err := Parse([]byte(valid))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Execution = &Execution{Enabled: true, BrokerSocket: "/run/neticora/broker.sock", Kata: &Kata{ProfileFile: "/etc/runnerd/kata/profile.json", PublicKeyFile: "/etc/runnerd/kata/public.pem", EvidenceDirectory: "/var/lib/runnerd-evidence"}, Repository: "org/repo", Organization: "org", Pool: "pool", PolicyFile: "/etc/runnerd/policy.json", CapabilitiesFile: "/etc/runnerd/capabilities.json", TrustRoots: "/etc/runnerd/roots", ImageBundles: "/etc/runnerd/bundles", ImageRepository: "registry/runner", NetworkID: "customer-network", BootstrapRoot: "/run/runnerd-bootstrap", KeysDirectory: "/var/lib/runnerd-keys", TrustProvisionedAt: "2026-11-05T00:00:00Z", PidsLimit: 128}
+	check := func(want bool) {
+		t.Helper()
+		raw, _ := json.Marshal(c)
+		_, err := Parse(raw)
+		if (err == nil) != want {
+			t.Fatalf("broker/Kata mode accepted=%v, want=%v: %v", err == nil, want, err)
+		}
+	}
+	check(true)
+	c.Execution.Kata.ObserverSocket = "/run/legacy-observer.sock"
+	check(false)
+	c.Execution.BrokerSocket = ""
+	check(true)
+	c.Execution.Kata.ObserverSocket = ""
+	check(false)
+	c.Execution.BrokerSocket = "relative.sock"
+	check(false)
+	c.Execution.BrokerSocket = "/run/neticora/broker.sock"
+	c.Execution.Kata.EvidenceDirectory = c.Execution.BootstrapRoot + "/evidence"
+	check(false)
+}

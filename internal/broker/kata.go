@@ -13,6 +13,7 @@ import (
 // Installed only from protected local configuration. IPC supplies identities,
 // never a profile, a Docker plan or a block-device path.
 type kataLifecycle interface {
+	Check(context.Context) (string, error)
 	Plan(agent.StoreScope, protocol.ExecutionSpec) (dockerengine.Plan, error)
 	Admit(context.Context, agent.StoreScope, protocol.ExecutionSpec, *standardlinux.Policy, time.Time) error
 	Prepare(context.Context, dockerengine.Plan) error

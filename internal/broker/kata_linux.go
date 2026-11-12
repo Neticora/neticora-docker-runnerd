@@ -81,3 +81,10 @@ func (k *protectedKata) Evidence(ctx context.Context, id string, p dockerengine.
 	}
 	return json.Marshal(record)
 }
+
+func (k *protectedKata) Check(ctx context.Context) (string, error) {
+	if err := k.profile.Probe(ctx, k.engine); err != nil {
+		return "", err
+	}
+	return k.profile.ID, nil
+}

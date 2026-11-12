@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 
+	"github.com/Neticora/neticora-docker-runnerd/internal/broker"
 	"github.com/Neticora/neticora-docker-runnerd/internal/config"
 	"github.com/Neticora/neticora-docker-runnerd/internal/dockerengine"
 	"github.com/Neticora/neticora-docker-runnerd/internal/katalinux"
@@ -24,6 +25,19 @@ func CheckKata(ctx context.Context, c config.Config) ([]byte, error) {
 		return nil, err
 	}
 	profile.ObserverSocket = x.Kata.ObserverSocket
+	if x.BrokerSocket != "" {
+		if x.Kata.ObserverSocket != "" {
+			return nil, katalinux.ErrQualification
+		}
+		if err := checkBrokerContainment(c.RuntimeEndpoint); err != nil {
+			return nil, err
+		}
+		observed, err := broker.Call(ctx, x.BrokerSocket, broker.Request{Version: broker.Version, Operation: "CheckKataProfile"})
+		if err != nil || observed.Code != "kata_profile_observed" || observed.Endpoint != profile.Manifest.EndpointIdentity || observed.KataProfile != profile.ID {
+			return nil, katalinux.ErrQualification
+		}
+		return json.Marshal(map[string]any{"profileVersion": profile.ID, "endpointIdentity": observed.Endpoint, "expiresAt": profile.Manifest.ExpiresAt, "guest": profile.Manifest.Budget.Guest, "effective": profile.Manifest.Budget.Effective, "tupleMatches": true, "admissionGranted": false})
+	}
 	engine, err := dockerengine.OpenReadOnly(c.RuntimeEndpoint, "kata-read-only-preflight", nil)
 	if err != nil {
 		return nil, err

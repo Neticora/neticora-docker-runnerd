@@ -90,11 +90,18 @@ func Parse(data []byte) (Config, error) {
 		return Config{}, errors.New("request timeout must be between 1 and 60 seconds")
 	}
 	if x := c.Execution; x != nil && x.Enabled {
-		if x.BrokerSocket != "" && (x.Kata != nil || !filepath.IsAbs(x.BrokerSocket) || filepath.Clean(x.BrokerSocket) != x.BrokerSocket) {
-			return Config{}, errors.New("broker mode requires regular Linux and an absolute clean socket path")
+		if x.BrokerSocket != "" && (!filepath.IsAbs(x.BrokerSocket) || filepath.Clean(x.BrokerSocket) != x.BrokerSocket) {
+			return Config{}, errors.New("broker mode requires an absolute clean socket path")
 		}
 		if x.Kata != nil {
-			for _, path := range []string{x.Kata.ProfileFile, x.Kata.PublicKeyFile, x.Kata.EvidenceDirectory, x.Kata.ObserverSocket} {
+			if x.BrokerSocket != "" && x.Kata.ObserverSocket != "" {
+				return Config{}, errors.New("broker mode forbids the legacy Kata observer")
+			}
+			paths := []string{x.Kata.ProfileFile, x.Kata.PublicKeyFile, x.Kata.EvidenceDirectory}
+			if x.BrokerSocket == "" {
+				paths = append(paths, x.Kata.ObserverSocket)
+			}
+			for _, path := range paths {
 				if !filepath.IsAbs(path) || filepath.Clean(path) != path {
 					return Config{}, errors.New("Kata paths must be protected absolute paths")
 				}
