@@ -326,3 +326,10 @@ Kata boot transition is currently unsupported. After a boot/endpoint change,
 container absence must not discard the original block allocation, operation or
 reservation. Docker-only boot recovery is forbidden for Kata. Preserve ambiguous
 cases and the original pool owner; never clear them to make another test fit.
+
+`RUNNERD_E2_HOLD_BLOCK=1` adds an externally held reference to the original raw
+inode during one Kata lifecycle. The parent must observe broker quarantine,
+original inode/index retention and an unreleased native reservation before it
+closes the reference. The controller then reconciles the same consumed removal;
+no replacement allocation or renewed mutation authority is permitted. This is
+one retained-reference test, not qualification of all reference races.

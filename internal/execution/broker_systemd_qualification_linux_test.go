@@ -151,7 +151,11 @@ FileDescriptorStoreMax=0
 	}
 	s.install(t, s.broker, body)
 	if output, err := phaseD2Command("systemctl", "start", s.broker); err != nil {
-		t.Fatalf("installed broker start: %v %s", err, output)
+		journal, _ := phaseD2Command("journalctl", "--unit", s.broker, "--no-pager", "-o", "cat", "-n", "60")
+		details, _ := phaseD2Command("systemctl", "show", s.broker, "-p", "Result", "-p", "ExecMainStatus", "-p", "NRestarts")
+		trace := append(append(output, journal...), details...)
+		phaseDWrite(t, filepath.Join(state, s.broker+".startup.log"), trace, 0600, 0)
+		t.Fatalf("installed broker start: %v %s", err, trace)
 	}
 	t.Log("installed qualification broker", s.broker)
 	return s

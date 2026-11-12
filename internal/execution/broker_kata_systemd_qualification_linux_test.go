@@ -5,6 +5,7 @@ package execution
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -62,7 +63,35 @@ func phaseE2BrokerUnitFromConfig(body, config string) (string, error) {
 	if json.Unmarshal(raw, &signed) != nil {
 		return "", fmt.Errorf("invalid Kata service profile")
 	}
-	return phaseE2KataBrokerUnit(body, c, signed.Manifest)
+	body, err = phaseE2KataBrokerUnit(body, c, signed.Manifest)
+	if err != nil {
+		return "", err
+	}
+	// systemd bind allowances require their parent directories before namespace
+	// setup. Provision only declared sandbox parents on the existing runtime
+	// volume, without changing any execution directory or ownership record.
+	runtimeRoot, err := hostfs.OpenState(signed.Manifest.Storage.Runtime.Root)
+	if err != nil {
+		return "", err
+	}
+	defer runtimeRoot.Close()
+	for _, path := range signed.Manifest.SandboxRoots {
+		rel, e := filepath.Rel(signed.Manifest.Storage.Runtime.Root, path)
+		if e != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return "", fmt.Errorf("sandbox parent outside qualified runtime volume")
+		}
+		if e = runtimeRoot.MkdirAll(rel, 0755); e != nil {
+			return "", e
+		}
+		if e = hostfs.CheckAncestors(path); e != nil {
+			return "", e
+		}
+		info, e := os.Stat(path)
+		if e != nil || !info.IsDir() {
+			return "", fmt.Errorf("invalid sandbox parent")
+		}
+	}
+	return body, nil
 }
 func phaseE2ControllerPaths(p phaseDPublic) (string, error) {
 	if p.KataProfileID == "" {

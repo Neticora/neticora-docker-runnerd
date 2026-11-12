@@ -405,6 +405,7 @@ func TestPhaseDControllerRealDocker(t *testing.T) {
 	child.Env = append(child.Env, "RUNNERD_PHASE_D_CHILD="+publicPath, "TMPDIR=/var/tmp")
 	child.Env = append(child.Env, "DOCKER_HOST=unix://"+filepath.Join(base, "alternate.sock"))
 	child.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uid, Gid: uid, Groups: []uint32{}}}
+	finishHeldBlock := phaseE2HoldBlock(t, public, state, brokerState)
 	var output []byte
 	if installed != nil {
 		output, err = installed.controller(t, self, publicPath, public, false)
@@ -418,6 +419,9 @@ func TestPhaseDControllerRealDocker(t *testing.T) {
 	t.Log(string(output))
 	if err != nil {
 		t.Fatalf("controller child: %v; retained ownership: %s", err, state)
+	}
+	if holdErr := finishHeldBlock(); holdErr != nil {
+		t.Fatal("uncertain Kata disposal qualification", holdErr)
 	}
 	// Deliberately inherited live Docker FD must be refused before any runtime
 	// or platform operation, even though pathname permissions deny new connects.
