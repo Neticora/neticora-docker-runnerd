@@ -522,7 +522,17 @@ func phaseD2SnapshotHeld(t *testing.T, state, ledger string, p phaseDPublic, con
 			if json.Unmarshal(raw, &record) != nil {
 				t.Fatal("held resource")
 			}
-			files = append(files, filepath.Join(m.Storage.Block.Pool.Root, record.Name+".raw"), filepath.Join(p.KataEvidenceDirectory, record.Name+".cgroup.json"), filepath.Join(p.KataEvidenceDirectory, record.Name+".json"))
+			if p.ExpectedOwned > 0 {
+				files = append(files, filepath.Join(m.Storage.Block.Pool.Root, record.Name+".raw"), filepath.Join(p.KataEvidenceDirectory, record.Name+".cgroup.json"), filepath.Join(p.KataEvidenceDirectory, record.Name+".json"))
+			} else {
+				// A before-create fault precedes block preparation. Its consumed intent
+				// and native claim remain unresolved even though no disk was allocated.
+				for _, path := range []string{filepath.Join(m.Storage.Block.Pool.Root, record.Name+".raw"), filepath.Join(p.KataEvidenceDirectory, record.Name+".cgroup.json"), filepath.Join(p.KataEvidenceDirectory, record.Name+".json")} {
+					if _, err := os.Lstat(path); !os.IsNotExist(err) {
+						t.Fatal("unexpected pre-create Kata effect", path, err)
+					}
+				}
+			}
 		}
 		for _, file := range files {
 			f, e := os.Open(file)
