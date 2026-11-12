@@ -258,6 +258,7 @@ func TestPhaseFBrokerNativeFinalizationLab(t *testing.T) {
 				deny()
 				return
 			}
+			phaseDWrite(t, filepath.Join(state, "fixture-private", "finalization-disposal-proof.json"), raw, 0600, 0)
 			f.disposed = true
 			save()
 			send(map[string]string{"state": "VERIFIED"})
