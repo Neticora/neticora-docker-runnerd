@@ -426,7 +426,10 @@ func phaseD2RunJobs(t *testing.T, ctx context.Context, c *Controller, p phaseDPu
 		if err != nil {
 			t.Fatal(err)
 		}
-		if p.ControlledWorkload {
+		// Kata completion exercises the authorized Stop/Remove path. A fixture
+		// signal in its protected handoff would correctly block disposal as an
+		// unexpected file; it is only needed by the regular Docker workload.
+		if p.ControlledWorkload && p.KataProfileID == "" {
 			if _, err = r.post(ctx, "/fixture/finish", phaseDJSON(map[string]string{"executionId": start.Spec.ExecutionId})); err != nil {
 				t.Fatal(err)
 			}
