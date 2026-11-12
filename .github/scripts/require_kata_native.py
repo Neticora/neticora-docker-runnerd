@@ -16,6 +16,7 @@ REQUIRED = frozenset({
     "TestNativeSandboxCleanupBudgetIsResumable",
     "TestNativeSandboxLargeDirectoryUsesRequestBudget",
     "TestNativeSandboxCleanupSurvivesProcessCrash",
+    "TestNativeSandboxLateReferenceAtUnlink",
     "TestNativeSandboxReferenceTypesFromSurvivingThread/fd",
     "TestNativeSandboxReferenceTypesFromSurvivingThread/opath",
     "TestNativeSandboxReferenceTypesFromSurvivingThread/dir",

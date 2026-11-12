@@ -58,6 +58,18 @@ pre-start cancellation cannot race past the last launch check.
 The presence of protocol definitions does not imply support for a particular
 operating system, container runtime or isolation profile.
 
+The execution broker separates the unprivileged controller from privileged Docker
+operations. It independently verifies platform-signed, operation-scoped authority,
+retains original resource ownership, and requires fresh disposal evidence before
+the platform can complete cleanup. Supported boot recovery is cleanup-only and
+requires pre-recorded storage continuity; older unanchored records remain held.
+
+The broker runtime is restricted to disposable qualification builds. Shipping
+builds refuse runtime configuration, production admission remains disabled, and
+Kata lifecycle/storage migration is incomplete. Configuration, authorization and
+recovery behavior are documented in Alpha's
+[execution broker reference](https://github.com/Neticora/neticora-alpha/blob/main/docs/runnerd/EXECUTION-BROKER.md).
+
 ## Feedback and contributions
 
 Use [GitHub Issues](https://github.com/Neticora/neticora-docker-runnerd/issues)

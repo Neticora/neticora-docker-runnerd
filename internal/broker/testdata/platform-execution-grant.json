@@ -1,0 +1,75 @@
+{
+  "request": {
+    "version": "runnerd-broker-execution-v1",
+    "operation": "PrepareImage",
+    "operationId": "9ab5ad094c12e2684f2d66d40c50653ec3fab28720f4ba11c7f68ef03f2b5844",
+    "executionId": "exec-a",
+    "generation": "1",
+    "expectedRevision": "0",
+    "resourceId": "",
+    "challenge": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  },
+  "signed": {
+    "grant": {
+      "version": "runnerd-broker-execution-v1",
+      "audience": "neticora-broker:installation",
+      "operation": "PrepareImage",
+      "operationId": "9ab5ad094c12e2684f2d66d40c50653ec3fab28720f4ba11c7f68ef03f2b5844",
+      "expectedRevision": "0",
+      "expectedState": "ALLOCATED",
+      "resourceId": "",
+      "challenge": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "binding": {
+        "installationId": "installation",
+        "tenantId": "tenant",
+        "hostId": "host",
+        "sessionEpoch": "3",
+        "endpointIdentity": "docker-original",
+        "executionId": "exec-a",
+        "generation": "1",
+        "attemptId": "attempt-a",
+        "specHash": "238a322c8653b9f9cff75eb7c7667db835b7f6cc7f812cb0349d265813d95a76"
+      },
+      "spec": {
+        "attemptId": "attempt-a",
+        "authorizationExpiresAt": "2026-11-12T01:47:22.419Z",
+        "compatibilityRecordId": "candidate-a",
+        "dockerBuild": false,
+        "executionBackend": "customer-host",
+        "executionId": "exec-a",
+        "generation": "1",
+        "hostPlatform": {
+          "architecture": "amd64",
+          "build": "candidate",
+          "os": "linux"
+        },
+        "imageDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "isolationProfile": "standard",
+        "policyGeneration": "1",
+        "poolId": "pool-a",
+        "profileVersion": "standard-linux-v1",
+        "provider": "github",
+        "resources": {
+          "cpuMillis": "1000",
+          "memoryBytes": "1073741824",
+          "slots": "1",
+          "storageBytes": "10737418240"
+        },
+        "runnerPlatform": {
+          "architecture": "amd64",
+          "build": "candidate",
+          "os": "linux"
+        },
+        "runtimeEngine": "docker",
+        "specHash": "238a322c8653b9f9cff75eb7c7667db835b7f6cc7f812cb0349d265813d95a76",
+        "templateVersion": "linux-github-process-v1",
+        "trustClass": "trusted"
+      },
+      "notBefore": "2026-11-12T01:46:22.430Z",
+      "expiresAt": "2026-11-12T01:46:37.430Z"
+    },
+    "signature": "0/TfUvyOcH/XYguRtdbxdrmP2iTGI0Lz9kIK55bhrdbmCOnTNwXX7cd1VqmFeZ6jrTV1Rz9/VPnVEd0yDmnMDQ=="
+  },
+  "publicKey": "KjYq2EY91WizTzUFtlYIPIO5w6W+fjPT8bvkmB4VadA=",
+  "now": "2026-11-12T01:46:22.430Z"
+}

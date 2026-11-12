@@ -1,0 +1,20 @@
+{
+  "socket": "/run/neticora/runnerd-broker.sock",
+  "stateDirectory": "/var/lib/neticora-runnerd-broker",
+  "controllerUid": 0,
+  "controllerGid": 0,
+  "audience": "REPLACE_WITH_INSTALLATION_SPECIFIC_BROKER_AUDIENCE",
+  "authorityPublicKey": "REPLACE_WITH_SEPARATELY_PROVISIONED_BASE64_ED25519_PUBLIC_KEY",
+  "executionGrantPublicKey": "REPLACE_WITH_PLATFORM_BROKER_GRANT_BASE64_ED25519_PUBLIC_KEY",
+  "scope": {
+    "installationId": "REPLACE_WITH_EXISTING_INSTALLATION_ID",
+    "tenantId": "REPLACE_WITH_EXISTING_TENANT_ID",
+    "hostId": "REPLACE_WITH_EXISTING_HOST_ID",
+    "sessionEpoch": "REPLACE_WITH_CURRENT_SESSION_EPOCH",
+    "endpointIdentity": "REPLACE_WITH_ORIGINAL_ENDPOINT_IDENTITY",
+    "executionId": "",
+    "generation": "",
+    "attemptId": "",
+    "specHash": ""
+  }
+}

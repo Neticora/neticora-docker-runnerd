@@ -117,16 +117,29 @@ func openWithKataLoader(c config.Config, store *journal.SQLiteStore, policy *Pol
 	if err != nil {
 		return nil, nil, err
 	}
-	runtime, err := dockerengine.Open(c.RuntimeEndpoint, credentials.InstallationID, func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = store.InvalidateRuntime(ctx)
-	})
-	if err != nil {
+	var runtime Runtime
+	var engine *dockerengine.Engine
+	if x.BrokerSocket == "" {
+		engine, err = dockerengine.Open(c.RuntimeEndpoint, credentials.InstallationID, func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = store.InvalidateRuntime(ctx)
+		})
+		runtime = engine
+	} else {
+		err = checkBrokerContainment(c.RuntimeEndpoint)
+	}
+	cleanup := func() {
+		if engine != nil {
+			_ = engine.Close()
+		}
 		client.Close()
+		clear(key)
+	}
+	if err != nil {
+		cleanup()
 		return nil, nil, err
 	}
-	cleanup := func() { _ = runtime.Close(); client.Close(); clear(key) }
 	provisioned, _ := time.Parse(time.RFC3339Nano, x.TrustProvisionedAt)
 	verifier := standardlinux.ImageVerifier{RootDirectory: x.TrustRoots, BundleDirectory: x.ImageBundles, ProvisionedAt: provisioned}
 	remote := &HostRemote{Client: client, Credentials: credentials, Key: key, Capabilities: capabilities, PolicyGeneration: func() string { return policy.Get().Generation() }, Version: Version()}
@@ -150,6 +163,18 @@ func openWithKataLoader(c config.Config, store *journal.SQLiteStore, policy *Pol
 		return policy.Get().Transport(actualProxy, caDigest, skew, measured)
 	}
 	controller := &Controller{Store: store, Runtime: runtime, Remote: remote, SigningKey: key, Scope: agent.StoreScope{InstallationID: credentials.InstallationID, TenantID: credentials.TenantID, HostID: credentials.Identity.HostId, SessionEpoch: credentials.Identity.SessionEpoch, EndpointIdentity: credentials.EndpointIdentity}, Authority: journal.Authority{TenantID: credentials.TenantID, HostID: credentials.Identity.HostId, SessionEpoch: credentials.Identity.SessionEpoch, EndpointIdentity: credentials.EndpointIdentity, KeyID: credentials.Identity.KeyId}, Profile: standardlinux.Settings{ImageRepository: x.ImageRepository, NetworkID: x.NetworkID, BootstrapRoot: x.BootstrapRoot, RunnerUID: os.Geteuid(), PidsLimit: x.PidsLimit}, Policy: policy.Get, VerifyImage: verifier.Verify, KeysDirectory: x.KeysDirectory, Organization: x.Organization, Pool: x.Pool, Drained: drained}
+	if x.BrokerSocket != "" {
+		if x.Kata != nil {
+			cleanup()
+			return nil, nil, ErrReconcile
+		}
+		controller.Runtime = brokerRuntimeFor(controller, remote, x.BrokerSocket)
+		endpoint, probeErr := controller.Runtime.Probe(context.Background())
+		if probeErr != nil || endpoint != credentials.EndpointIdentity {
+			cleanup()
+			return nil, nil, ErrReconcile
+		}
+	}
 	controller.HostLimits = policy.Get().Limits()
 	if x.Kata != nil {
 		controller.Kata, err = load(x.Kata.ProfileFile, x.Kata.PublicKeyFile, x.Kata.EvidenceDirectory, c.StateDir, controller.Profile)
@@ -184,7 +209,7 @@ func openWithKataLoader(c config.Config, store *journal.SQLiteStore, policy *Pol
 			cleanup()
 			return nil, nil, err
 		}
-		if err = controller.Kata.RecoverProbe(context.Background(), runtime); err != nil {
+		if err = controller.Kata.RecoverProbe(context.Background(), engine); err != nil {
 			cleanup()
 			return nil, nil, err
 		}

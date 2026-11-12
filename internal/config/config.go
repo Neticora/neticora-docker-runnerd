@@ -26,6 +26,7 @@ type Config struct {
 // Execution is an explicit operator opt-in. Old foundation configurations remain
 // drained and never open Docker or contact the platform.
 type Execution struct {
+	BrokerSocket        string `json:"brokerSocket,omitempty"`
 	Kata                *Kata  `json:"kata,omitempty"`
 	Repository          string `json:"repository"`
 	CustomCAFile        string `json:"customCaFile,omitempty"`
@@ -89,6 +90,9 @@ func Parse(data []byte) (Config, error) {
 		return Config{}, errors.New("request timeout must be between 1 and 60 seconds")
 	}
 	if x := c.Execution; x != nil && x.Enabled {
+		if x.BrokerSocket != "" && (x.Kata != nil || !filepath.IsAbs(x.BrokerSocket) || filepath.Clean(x.BrokerSocket) != x.BrokerSocket) {
+			return Config{}, errors.New("broker mode requires regular Linux and an absolute clean socket path")
+		}
 		if x.Kata != nil {
 			for _, path := range []string{x.Kata.ProfileFile, x.Kata.PublicKeyFile, x.Kata.EvidenceDirectory, x.Kata.ObserverSocket} {
 				if !filepath.IsAbs(path) || filepath.Clean(path) != path {

@@ -78,6 +78,7 @@ type Controller struct {
 	HostLimits          agent.ReservationLimits
 	MinRuntimeFreeBytes uint64
 	mu                  sync.Mutex // One reconciliation owner; all work remains durable in Store.
+	reportMu            sync.Mutex // Preserve contiguous event ACKs during broker authority requests.
 	launchMu            sync.Mutex // Serializes durable command acceptance with final Docker start.
 	wake                chan struct{}
 	cancelled           map[agent.ExecutionCursor]bool
@@ -595,6 +596,13 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 				return e2
 			}
 		}
+		if runtime, ok := c.Runtime.(interface {
+			DisposeUnstarted(context.Context, dockerengine.Plan) error
+		}); ok {
+			if e2 = runtime.DisposeUnstarted(ctx, p); e2 != nil {
+				return e2
+			}
+		}
 		event, e2 := c.event(e, nil, nil, proof)
 		if e2 != nil {
 			return e2
@@ -856,7 +864,15 @@ func (c *Controller) handoff(p dockerengine.Plan, plain []byte, expires string) 
 }
 
 func (c *Controller) registration(ctx context.Context, e agent.Execution, p dockerengine.Plan) error {
-	raw, err := hostfs.ReadPrivate(filepath.Join(c.Profile.BootstrapRoot, p.Name, "registered.json"), 8192)
+	var raw []byte
+	var err error
+	if runtime, ok := c.Runtime.(interface {
+		Registration(context.Context, dockerengine.Plan) (json.RawMessage, error)
+	}); ok {
+		raw, err = runtime.Registration(ctx, p)
+	} else {
+		raw, err = hostfs.ReadPrivate(filepath.Join(c.Profile.BootstrapRoot, p.Name, "registered.json"), 8192)
+	}
 	if err != nil {
 		return nil
 	}
@@ -937,6 +953,13 @@ func (c *Controller) cleanup(ctx context.Context, e agent.Execution, p dockereng
 	}
 	if err := verifyKataAbsence(ctx, c.Kata, c.Runtime, ref.ResourceId, p); err != nil {
 		return err
+	}
+	if runtime, ok := c.Runtime.(interface {
+		VerifyDisposal(context.Context, string, dockerengine.Plan) error
+	}); ok {
+		if err := runtime.VerifyDisposal(ctx, ref.ResourceId, p); err != nil {
+			return err
+		}
 	}
 	observed := c.inventoryObservedAt
 	o.ID = ref.ResourceId
@@ -1057,24 +1080,45 @@ func (c *Controller) reportLoop(ctx context.Context) {
 				continue
 			}
 			for _, e := range rows {
-				events, err := c.Store.PendingEvents(ctx, agent.EventPage{ExecutionID: e.Identity.ExecutionID, Generation: e.Identity.Generation, AfterSequence: e.AckSequence, Limit: 100})
-				if err != nil || len(events) == 0 {
-					continue
-				}
-				message, err := protocol.EncodeValidated("EventBatch", map[string]any{"events": events})
-				if err != nil {
-					continue
-				}
-				acks, err := c.Remote.Events(ctx, message)
-				if err != nil {
-					continue
-				}
-				for _, ack := range acks {
-					if ack.ExecutionId == e.Identity.ExecutionID && ack.Generation == e.Identity.Generation {
-						_ = c.Store.AckEvents(ctx, c.Scope, agent.Watermark{ExecutionID: ack.ExecutionId, Generation: ack.Generation, ContiguousSequence: ack.ContiguousSequence})
-					}
-				}
+				_ = c.flushExecutionEvents(ctx, e.Identity.ExecutionID, e.Identity.Generation)
 			}
+		}
+	}
+}
+
+func (c *Controller) flushExecutionEvents(ctx context.Context, id, generation string) error {
+	c.reportMu.Lock()
+	defer c.reportMu.Unlock()
+	for {
+		e, err := c.Store.PeerRecoveryExecution(ctx, id, generation)
+		if err != nil {
+			return err
+		}
+		events, err := c.Store.PendingEvents(ctx, agent.EventPage{ExecutionID: id, Generation: generation, AfterSequence: e.AckSequence, Limit: 100})
+		if err != nil || len(events) == 0 {
+			return err
+		}
+		message, err := protocol.EncodeValidated("EventBatch", map[string]any{"events": events})
+		if err != nil {
+			return err
+		}
+		acks, err := c.Remote.Events(ctx, message)
+		if err != nil {
+			return err
+		}
+		advanced := false
+		for _, ack := range acks {
+			if ack.ExecutionId == id && ack.Generation == generation {
+				if err = c.Store.AckEvents(ctx, c.Scope, agent.Watermark{ExecutionID: id, Generation: generation, ContiguousSequence: ack.ContiguousSequence}); err != nil {
+					return err
+				}
+				before, _ := strconv.ParseUint(e.AckSequence, 10, 64)
+				after, _ := strconv.ParseUint(ack.ContiguousSequence, 10, 64)
+				advanced = advanced || after > before
+			}
+		}
+		if !advanced {
+			return ErrReconcile
 		}
 	}
 }

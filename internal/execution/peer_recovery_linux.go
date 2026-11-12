@@ -42,6 +42,9 @@ func actualBootID() (string, error) {
 // owner with the normal daemon stopped. Inspection opens Docker read-only;
 // apply accepts only committed independent approval. No signer key is loaded.
 func AdministrativePeerRecovery(ctx context.Context, c config.Config, operation, inputPath, publicKeyPath string) ([]byte, error) {
+	if c.Execution != nil && c.Execution.BrokerSocket != "" {
+		return nil, ErrReconcile
+	}
 	if operation == "diagnose" {
 		return diagnosePeerRecovery(ctx, c)
 	}
@@ -230,6 +233,9 @@ func commitRecoveredCredentials(path string, current Credentials, endpoint strin
 // diagnosePeerRecovery intentionally requires neither host credentials nor a
 // live platform. Its unsigned, distinct-purpose report cannot become approval.
 func diagnosePeerRecovery(ctx context.Context, c config.Config) ([]byte, error) {
+	if c.Execution != nil && c.Execution.BrokerSocket != "" {
+		return nil, ErrReconcile
+	}
 	if os.Geteuid() == 0 {
 		return nil, ErrReconcile
 	}

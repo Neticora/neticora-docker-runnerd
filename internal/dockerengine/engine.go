@@ -217,6 +217,20 @@ func (e *Engine) CheckHeadroom(ctx context.Context, minimum uint64) error {
 // PrepareImage pulls only the immutable verified reference. It never obtains
 // authority/JIT or starts a container. Registry credentials are not inherited.
 func (e *Engine) PrepareImage(ctx context.Context, p Plan) error {
+	return e.prepareImage(ctx, p, nil)
+}
+
+// PrepareImageAuthorized lets the broker recheck committed authority immediately
+// before initiating a pull. An already authorized pull retains its existing
+// bounded streaming lifetime; its completion is not fresh create/start authority.
+func (e *Engine) PrepareImageAuthorized(ctx context.Context, p Plan, authorize func() error) error {
+	if authorize == nil {
+		return ErrConflict
+	}
+	return e.prepareImage(ctx, p, authorize)
+}
+
+func (e *Engine) prepareImage(ctx context.Context, p Plan, authorize func() error) error {
 	if p.RecoveryOnly {
 		return ErrRecoveryPlan
 	}
@@ -235,6 +249,11 @@ func (e *Engine) PrepareImage(ctx context.Context, p Plan) error {
 	}
 	i, err := e.api.ImageInspect(ctx, p.Config.Image)
 	if err != nil && errdefs.IsNotFound(err) {
+		if authorize != nil {
+			if err = authorize(); err != nil {
+				return err
+			}
+		}
 		pullCtx, stop := context.WithTimeout(ctx, 5*time.Minute)
 		defer stop()
 		pull, e2 := e.stream.ImagePull(pullCtx, p.Config.Image, client.ImagePullOptions{})

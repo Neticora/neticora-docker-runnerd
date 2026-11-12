@@ -211,14 +211,27 @@ Coordinator shutdown stops loops only and leaves unresolved ownership intact.
 Delete a provider runner only after exact native disposal and provider busy/ID
 checks. Remove a test registry only by its recorded ID/label; never prune Docker.
 
-All 48 Runnerd09 acceptance cases, independent security approval and production
-host qualification remain explicit. A lab proof is useful evidence, not closure
-of the epic or permission to enable customer execution.
+Complete runtime, recovery and package qualification remain required before
+production admission. Lab proofs do not authorize customer execution.
 
 ## Native metadata cleanup stress
 
 For operation timings, bounded retry behavior, large-directory coverage and the
 remaining reference-fence design requirements, see [SANDBOX-CLEANUP.md](SANDBOX-CLEANUP.md).
+The current cleanup implementation does not provide an atomic reference-acquisition
+fence. Native coverage requires the cases selected by the gate script, including
+`TestNativeSandboxLateReferenceAtUnlink`. This ptrace regression traces only a
+fresh child, acquires O_PATH at the actual unlinkat boundary, and requires either
+inode preservation with cleanup refusal or denied acquisition with complete
+cleanup. Missing ptrace coverage cannot qualify. The current unfenced code is
+expected to fail this test; retain that failure until the safety design passes.
+The helper source `internal/katalinux/testdata/late_reference_probe.c` must
+accompany frozen native sources. The script retains the independent gate refusal
+in `native-coverage.stderr` even when the test package fails.
+
+Broker-backed Kata/storage migration remains incomplete. Container absence alone
+cannot prove VM shutdown, block-device detachment or safe storage reuse. Keep the
+original resource records and capacity held whenever disposal is uncertain.
 
 Run the repository's native gate from a protected frozen source snapshot on the
 marked disposable VM. The exact source tree and binary hashes must accompany
@@ -275,17 +288,8 @@ be skipped to meet it. This bounded synthetic load does not prove latency on
 arbitrarily large or differently configured hosts. Archive source/binary hashes
 and results separately from previous frozen qualification evidence.
 
-The November 10, 2026 run on the disposable 4-vCPU Ubuntu 26.04 VM failed this
-performance gate. With the load above and a two-CPU service quota, the
-unreferenced case hit its deadline at 110,001 ms (70 guard calls), and the
-retained-reference case at 110,003 ms (73 guard calls). Both retained the sandbox
-directory when the request stopped. The retained-reference stress case did not
-complete its latency assertion and must not be reported as a stress pass; the
-separate mandatory native held-reference regressions passed. Test teardown
-removed only test-owned fixtures after stopping their workers.
-
-Worst-case cleanup latency therefore remains an open Runnerd09 acceptance gate.
-Reducing scan cost or introducing bounded resumable cleanup needs a separate
-correctness review and a passing repeat of this workload. Preserve inode,
-namespace, mount, ownership, VM/peer and durability checks throughout. Increasing
-the timeout alone does not resolve the observer request budget.
+Cleanup latency remains an open qualification requirement. Run the stated workload
+against the final candidate and retain results outside Git. A timeout is incomplete
+cleanup; preserve ownership and retry through the existing guarded recovery path.
+Do not skip reference, namespace, mount, identity or durability checks to meet the
+request budget.

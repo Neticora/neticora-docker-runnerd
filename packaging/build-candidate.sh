@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 export GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local
+case "$(go env GOFLAGS)" in
+  *runnerd_broker_qualification*) echo 'Qualification runtime cannot be packaged as a foundation candidate.' >&2; exit 2 ;;
+esac
 output_dir=${1:?usage: build-candidate.sh ABSOLUTE_OUTPUT_DIRECTORY}
 [[ "$output_dir" = /* ]] || { echo 'Output directory must be absolute' >&2; exit 2; }
 mkdir -p "$output_dir"
@@ -16,6 +19,9 @@ for architecture in amd64 arm64; do
   cp packaging/linux/neticora-runnerd-kata.conf "$stage/packaging/"
   cp packaging/linux/neticora-runnerd-kata-observer.service "$stage/packaging/"
   cp packaging/linux/neticora-runnerd-kata.tmpfiles.conf "$stage/packaging/"
+  cp packaging/linux/neticora-runnerd-broker.service "$stage/packaging/"
+  cp packaging/linux/broker.config.example.json "$stage/packaging/"
+  cp packaging/linux/neticora-runnerd-broker-controller.conf.example "$stage/packaging/"
   tar --sort=name --mtime="@$source_epoch" --owner=0 --group=0 --numeric-owner \
     -czf "$output_dir/runnerd-linux-$architecture.tar.gz" -C "$stage" .
   rm -rf -- "$stage"

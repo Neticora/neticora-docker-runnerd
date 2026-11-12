@@ -22,6 +22,8 @@ type sandboxCrashFixture struct {
 	Guard     *sandboxGuardSnapshot `json:"guard,omitempty"`
 }
 
+const sandboxChildReferenceRejection = "SANDBOX_REFERENCE_HELD"
+
 // Test-only subprocess; no alternate production admission or cleanup path.
 func TestSandboxCleanupProcessChild(t *testing.T) {
 	file := os.Getenv("RUNNERD09_SANDBOX_CHILD_FIXTURE")
@@ -87,6 +89,9 @@ func TestSandboxCleanupProcessChild(t *testing.T) {
 		return nil
 	})
 	if err != nil {
+		if errors.Is(err, errSandboxReferenceHeld) {
+			t.Log(sandboxChildReferenceRejection)
+		}
 		t.Fatal("same captured cleanup failed", err)
 	}
 }

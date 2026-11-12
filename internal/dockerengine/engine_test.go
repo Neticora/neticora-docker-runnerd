@@ -18,6 +18,10 @@ func fakeEngine(t *testing.T) (*Engine, Plan, *bool, *bool, *int, *string) {
 }
 
 func fakeEngineWithHook(t *testing.T, hook func(string)) (*Engine, Plan, *bool, *bool, *int, *string) {
+	return fakeEngineWithResponder(t, hook, nil)
+}
+
+func fakeEngineWithResponder(t *testing.T, hook func(string), respond func(http.ResponseWriter, *http.Request, string) bool) (*Engine, Plan, *bool, *bool, *int, *string) {
 	t.Helper()
 	exists, running := false, false
 	creates := 0
@@ -35,6 +39,9 @@ func fakeEngineWithHook(t *testing.T, hook func(string)) (*Engine, Plan, *bool, 
 		path := strings.TrimPrefix(r.URL.Path, "/v1.52")
 		if hook != nil {
 			hook(path)
+		}
+		if respond != nil && respond(w, r, path) {
+			return
 		}
 		switch {
 		case path == "/_ping":
@@ -78,6 +85,34 @@ func fakeEngineWithHook(t *testing.T, hook func(string)) (*Engine, Plan, *bool, 
 	e.observePeer = func(context.Context, string) (string, error) { return "qualified-direct-dockerd-peer", nil }
 	e.connectionPeer = func(net.Conn) (string, error) { return "qualified-direct-dockerd-peer", nil }
 	return e, p, &exists, &running, &creates, &daemon
+}
+
+func TestBrokerImageAuthorizationPrecedesActualPull(t *testing.T) {
+	pulls := 0
+	e, p, _, _, _, _ := fakeEngineWithResponder(t, nil, func(w http.ResponseWriter, r *http.Request, path string) bool {
+		if strings.HasPrefix(path, "/networks/") {
+			_ = json.NewEncoder(w).Encode(map[string]any{"Id": "approved-network", "Driver": "bridge", "Scope": "local"})
+			return true
+		}
+		if r.Method == http.MethodGet && strings.HasPrefix(path, "/images/") {
+			http.Error(w, `{"message":"absent"}`, 404)
+			return true
+		}
+		if r.Method == http.MethodPost && path == "/images/create" {
+			pulls++
+			http.Error(w, `{"message":"test pull refused"}`, 500)
+			return true
+		}
+		return false
+	})
+	p.HostConfig.NetworkMode = "approved-network"
+	denied := errors.New("current authority revoked")
+	if err := e.PrepareImageAuthorized(t.Context(), p, func() error { return denied }); !errors.Is(err, denied) || pulls != 0 {
+		t.Fatalf("pull bypassed authorization: %v, pulls=%d", err, pulls)
+	}
+	if err := e.PrepareImageAuthorized(t.Context(), p, nil); !errors.Is(err, ErrConflict) || pulls != 0 {
+		t.Fatal("nil authorization allowed pull")
+	}
 }
 
 func TestLostCreateReplyAdoptsWithoutCreatingOrStartingAgain(t *testing.T) {
