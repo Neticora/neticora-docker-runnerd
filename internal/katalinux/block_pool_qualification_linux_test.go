@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -42,7 +43,8 @@ func TestPhaseFCleanPoolInitializationLab(t *testing.T) {
 			t.Fatal("new Phase F directories required")
 		}
 	}
-	if poolPath == evidence || poolPath == journal || evidence == journal || m.Storage.Block.Pool.BackingDevice != "/dev/disk/by-id/virtio-neticora-r9-f-pool-0" {
+	devices := []string{"/dev/disk/by-id/virtio-neticora-r9-f-pool-0", "/dev/disk/by-id/virtio-neticora-r9-f2pool-1"}
+	if poolPath == evidence || poolPath == journal || evidence == journal || !slices.Contains(devices, m.Storage.Block.Pool.BackingDevice) {
 		t.Fatal("separate directories and dedicated new disk required")
 	}
 	if err := verifyPersistentVolume(m.Storage.Block.Pool, m.Storage.Block.Pool.Device); err != nil {

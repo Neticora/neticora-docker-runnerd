@@ -461,22 +461,28 @@ func phaseD2RunJobs(t *testing.T, ctx context.Context, c *Controller, p phaseDPu
 		if err = c.flushExecutionEvents(ctx, e.Identity.ExecutionID, e.Identity.Generation); err != nil {
 			t.Fatal(err)
 		}
+		final := current(e.Identity.ExecutionID)
+		if final.State != "cleaned" || final.CleanupPending || final.LastSequence != "4" || final.AckSequence != final.LastSequence {
+			t.Fatal("execution final acknowledgment incomplete", e.Identity.ExecutionID, final.State, final.LastSequence, final.AckSequence)
+		}
 	}
 	if p.KataProfileID != "" {
-		e := current(p.Starts[0].Spec.ExecutionId)
-		plan, err := c.plan(e)
-		if err != nil {
-			t.Fatal(err)
+		for _, start := range p.Starts {
+			e := current(start.Spec.ExecutionId)
+			plan, err := c.plan(e)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var ref protocol.RuntimeRef
+			if json.Unmarshal(e.RuntimeRef, &ref) != nil {
+				t.Fatal("native reference")
+			}
+			proof, err := c.kataPhysicalEvidence(ctx, ref.ResourceId, plan)
+			if err != nil || proof.Prepared || proof.Block == nil || proof.Block.Phase != "released" || proof.Absence == nil || !proof.Absence.VMAbsent || !proof.Absence.CgroupRemoved {
+				t.Fatal("Kata physical disposal witness", err)
+			}
+			t.Log("real Kata VM/shim observed; original disk, cgroup and sandbox disposed; native final ACK separate")
 		}
-		var ref protocol.RuntimeRef
-		if json.Unmarshal(e.RuntimeRef, &ref) != nil {
-			t.Fatal("native reference")
-		}
-		proof, err := c.kataPhysicalEvidence(ctx, ref.ResourceId, plan)
-		if err != nil || proof.Prepared || proof.Block == nil || proof.Block.Phase != "released" || proof.Absence == nil || !proof.Absence.VMAbsent || !proof.Absence.CgroupRemoved {
-			t.Fatal("Kata physical disposal witness", err)
-		}
-		t.Log("real Kata VM/shim observed; original disk, cgroup and sandbox disposed; native final ACK separate")
 	}
 	if ids, err = c.Runtime.Inventory(ctx); err != nil || len(ids) != 0 {
 		t.Fatal("owned inventory remains", ids, err)

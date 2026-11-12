@@ -321,8 +321,10 @@ func TestPhaseDControllerRealDocker(t *testing.T) {
 	fixture := newPhaseDAuthority(start, config.Scope, issuer, disposalPublic)
 	fixture.historyFile = filepath.Join(trace, "platform-history.json")
 	allFixtures := []*phaseDAuthority{fixture}
-	for _, next := range starts[1:] {
-		allFixtures = append(allFixtures, newPhaseDAuthority(next, config.Scope, issuer, disposalPublic))
+	for i, next := range starts[1:] {
+		nextFixture := newPhaseDAuthority(next, config.Scope, issuer, disposalPublic)
+		nextFixture.historyFile = filepath.Join(trace, fmt.Sprintf("platform-history-%d.json", i+1))
+		allFixtures = append(allFixtures, nextFixture)
 	}
 	if bridge := os.Getenv("RUNNERD_PHASE_D_PLATFORM_BRIDGE"); bridge != "" {
 		if jobCount != 1 {
@@ -527,6 +529,7 @@ type phaseDAuthority struct {
 	grants                      map[string]broker.SignedExecutionGrant
 	commits                     map[string]broker.SignedCommit
 	challenge                   broker.SignedDisposalChallenge
+	disposalProof               *broker.SignedDisposal
 	resource                    string
 	prepared, cleanup, disposed bool
 	ack                         string
@@ -571,7 +574,7 @@ func (f *phaseDAuthority) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	send := func(v any) {
 		if f.historyFile != "" {
-			data := phaseDJSON(map[string]any{"start": f.start, "scope": f.scope, "grants": f.grants, "commits": f.commits, "resource": f.resource, "prepared": f.prepared, "cleanup": f.cleanup, "disposed": f.disposed, "ack": f.ack, "inventory": f.inventory})
+			data := phaseDJSON(map[string]any{"start": f.start, "scope": f.scope, "grants": f.grants, "commits": f.commits, "resource": f.resource, "prepared": f.prepared, "cleanup": f.cleanup, "disposed": f.disposed, "ack": f.ack, "inventory": f.inventory, "disposalProof": f.disposalProof})
 			temporary := f.historyFile + ".pending"
 			file, writeErr := os.OpenFile(temporary, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
 			if writeErr == nil {
@@ -768,6 +771,7 @@ func (f *phaseDAuthority) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		f.disposed = true
+		f.disposalProof = &proof
 		send(map[string]string{"state": "VERIFIED"})
 		return
 	}
