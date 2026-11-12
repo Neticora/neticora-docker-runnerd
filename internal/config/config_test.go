@@ -75,3 +75,37 @@ func TestBrokerKataRequiresExclusivePrivilegedEndpoint(t *testing.T) {
 	c.Execution.Kata.EvidenceDirectory = c.Execution.BootstrapRoot + "/evidence"
 	check(false)
 }
+
+func TestQualificationCampaignRequiresProtectedBrokerConfiguration(t *testing.T) {
+	c, _ := Parse([]byte(valid))
+	c.Execution = &Execution{Enabled: true, BrokerSocket: "/run/broker.sock", Kata: &Kata{ProfileFile: "/etc/runnerd/profile.json", PublicKeyFile: "/etc/runnerd/public.pem", EvidenceDirectory: "/var/lib/evidence", QualificationBindingFile: "/etc/runnerd/binding.json", QualificationAuthorityPin: strings.Repeat("a", 64)}, Repository: "org/repo", Organization: "org", Pool: "pool", PolicyFile: "/etc/runnerd/policy.json", CapabilitiesFile: "/etc/runnerd/capabilities.json", TrustRoots: "/etc/runnerd/roots", ImageBundles: "/etc/runnerd/bundles", ImageRepository: "registry/runner", NetworkID: "network", BootstrapRoot: "/run/bootstrap", KeysDirectory: "/var/lib/keys", TrustProvisionedAt: "2026-11-05T00:00:00Z", PidsLimit: 128}
+	for _, name := range []string{"valid", "no broker", "no pin", "invalid pin", "journal binding", "guest binding", "guest health binding", "relative binding"} {
+		t.Run(name, func(t *testing.T) {
+			raw, _ := json.Marshal(c)
+			var next Config
+			json.Unmarshal(raw, &next)
+			q := next.Execution.Kata
+			switch name {
+			case "no broker":
+				next.Execution.BrokerSocket = ""
+			case "no pin":
+				q.QualificationAuthorityPin = ""
+			case "invalid pin":
+				q.QualificationAuthorityPin = strings.Repeat("z", 64)
+			case "journal binding":
+				q.QualificationBindingFile = c.StateDir + "/binding.json"
+			case "guest binding":
+				q.QualificationBindingFile = c.Execution.BootstrapRoot + "/binding.json"
+			case "guest health binding":
+				q.QualificationBindingFile = c.Execution.BootstrapRoot + "-health/binding.json"
+			case "relative binding":
+				q.QualificationBindingFile = "binding.json"
+			}
+			raw, _ = json.Marshal(next)
+			_, err := Parse(raw)
+			if (err == nil) != (name == "valid") {
+				t.Fatal(name, err)
+			}
+		})
+	}
+}

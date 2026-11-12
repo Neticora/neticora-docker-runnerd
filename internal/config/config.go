@@ -144,7 +144,7 @@ func Parse(data []byte) (Config, error) {
 		}
 		if x.Kata != nil {
 			healthRoot := x.BootstrapRoot + "-health"
-			for _, private := range []string{c.StateDir, c.CredentialFile, x.BootstrapRoot, x.KeysDirectory, x.PolicyFile, x.CapabilitiesFile, x.TrustRoots, x.ImageBundles, x.CustomCAFile, x.Kata.ProfileFile, x.Kata.PublicKeyFile, x.Kata.EvidenceDirectory, x.Kata.ObserverSocket} {
+			for _, private := range []string{c.StateDir, c.CredentialFile, x.BootstrapRoot, x.KeysDirectory, x.PolicyFile, x.CapabilitiesFile, x.TrustRoots, x.ImageBundles, x.CustomCAFile, x.Kata.ProfileFile, x.Kata.PublicKeyFile, x.Kata.EvidenceDirectory, x.Kata.ObserverSocket, x.Kata.QualificationBindingFile} {
 				if private != "" && (private == healthRoot || strings.HasPrefix(private, healthRoot+string(filepath.Separator)) || strings.HasPrefix(healthRoot, private+string(filepath.Separator))) {
 					return Config{}, errors.New("private state and trust must remain separate from guest health output")
 				}
