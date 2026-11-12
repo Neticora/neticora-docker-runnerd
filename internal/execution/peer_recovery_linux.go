@@ -42,6 +42,12 @@ func actualBootID() (string, error) {
 // owner with the normal daemon stopped. Inspection opens Docker read-only;
 // apply accepts only committed independent approval. No signer key is loaded.
 func AdministrativePeerRecovery(ctx context.Context, c config.Config, operation, inputPath, publicKeyPath string) ([]byte, error) {
+	if operation == "broker-finalize" {
+		if inputPath != "" || publicKeyPath != "" {
+			return nil, ErrReconcile
+		}
+		return FinalizeBrokerRecovery(ctx, c)
+	}
 	if c.Execution != nil && c.Execution.BrokerSocket != "" {
 		return nil, ErrReconcile
 	}

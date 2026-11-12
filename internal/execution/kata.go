@@ -11,6 +11,9 @@ import (
 )
 
 func (c *Controller) resolvePlan(scope agent.StoreScope, s protocol.ExecutionSpec) (dockerengine.Plan, error) {
+	if c.recoveryOnly {
+		return dockerengine.Plan{}, ErrReconcile
+	}
 	if s.IsolationProfile == "isolated" {
 		if c.Kata == nil {
 			return dockerengine.Plan{}, katalinux.ErrQualification
@@ -26,6 +29,21 @@ func (c *Controller) resolvePlan(scope agent.StoreScope, s protocol.ExecutionSpe
 // Recovery reconstruction is used only for commands already in the store. A
 // fresh launch must separately obtain a launch plan after current admission.
 func (c *Controller) resolveRecoveryPlan(scope agent.StoreScope, s protocol.ExecutionSpec) (dockerengine.Plan, error) {
+	if c.recoveryOnly {
+		// Lookup hints only. The broker reconstructs its independently protected
+		// original profile/plan; no executable Docker payload leaves this adapter.
+		p, err := c.Profile.Plan(scope, s)
+		if err != nil {
+			return p, err
+		}
+		p.RecoveryOnly = true
+		p.HostConfig = nil
+		p.Config.Image = ""
+		p.Config.Entrypoint = nil
+		p.Config.Labels[dockerengine.LabelPrefix+"template"] = s.TemplateVersion
+		p.Config.Labels[dockerengine.LabelPrefix+"profile"] = s.ProfileVersion
+		return p, nil
+	}
 	if s.IsolationProfile == "isolated" {
 		if c.Kata == nil {
 			return dockerengine.Plan{}, katalinux.ErrQualification
@@ -38,6 +56,9 @@ func (c *Controller) resolveRecoveryPlan(scope agent.StoreScope, s protocol.Exec
 	return c.Profile.Plan(scope, s)
 }
 func (c *Controller) admit(s protocol.ExecutionSpec, now time.Time) error {
+	if c.recoveryOnly {
+		return ErrReconcile
+	}
 	if c.Kata != nil {
 		if c.brokerKata() {
 			if s.IsolationProfile != "isolated" || s.ProfileVersion != c.Kata.ID {

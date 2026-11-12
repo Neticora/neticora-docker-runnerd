@@ -56,7 +56,7 @@ func (b *brokerRuntime) lookup(ctx context.Context, p dockerengine.Plan, id stri
 		return q, ErrReconcile
 	}
 	start, err := b.controller.storedStart(e)
-	if err != nil || (start.Spec.IsolationProfile != "standard" && (start.Spec.IsolationProfile != "isolated" || b.controller.Kata == nil || start.Spec.ProfileVersion != b.controller.Kata.ID)) {
+	if err != nil || (start.Spec.IsolationProfile != "standard" && (start.Spec.IsolationProfile != "isolated" || (!b.controller.recoveryOnly && (b.controller.Kata == nil || start.Spec.ProfileVersion != b.controller.Kata.ID)))) {
 		return q, ErrReconcile
 	}
 	return q, nil
@@ -98,6 +98,9 @@ func (b *brokerRuntime) state(ctx context.Context, q broker.Lookup) (broker.Runt
 }
 
 func (b *brokerRuntime) perform(ctx context.Context, action, id string, p dockerengine.Plan) (dockerengine.Object, error) {
+	if b.controller.recoveryOnly && action != "StopExecution" && action != "RemoveExecution" {
+		return dockerengine.Object{}, ErrReconcile
+	}
 	q, err := b.lookup(ctx, p, id)
 	if err != nil {
 		return dockerengine.Object{}, err
@@ -112,6 +115,9 @@ func (b *brokerRuntime) perform(ctx context.Context, action, id string, p docker
 		if action == "StopExecution" || action == "RemoveExecution" || action == "DisposeUnstarted" {
 			return dockerengine.Object{ID: id, State: "removed"}, nil
 		}
+		return dockerengine.Object{}, ErrReconcile
+	}
+	if b.controller.recoveryOnly {
 		return dockerengine.Object{}, ErrReconcile
 	}
 	if _, ok := state.Operations[action]; !ok {
@@ -168,11 +174,25 @@ func (b *brokerRuntime) perform(ctx context.Context, action, id string, p docker
 }
 
 func (b *brokerRuntime) Probe(ctx context.Context) (string, error) {
-	r, err := b.request(ctx, broker.Request{Operation: "ProbeRuntime"})
+	operation := "ProbeRuntime"
+	if b.controller.recoveryOnly {
+		operation = "ProbeRecoveryRuntime"
+	}
+	r, err := b.request(ctx, broker.Request{Operation: operation})
+	if b.controller.recoveryOnly && (r.Code != "recovery_runtime_observed" || r.Ready) {
+		return "", ErrReconcile
+	}
 	return r.Endpoint, err
 }
 func (b *brokerRuntime) Inventory(ctx context.Context) ([]string, error) {
-	r, err := b.request(ctx, broker.Request{Operation: "GetRuntimeInventory"})
+	operation := "GetRuntimeInventory"
+	if b.controller.recoveryOnly {
+		operation = "GetRecoveryInventory"
+	}
+	r, err := b.request(ctx, broker.Request{Operation: operation})
+	if b.controller.recoveryOnly && (r.Code != "recovery_runtime_observed" || r.Ready) {
+		return nil, ErrReconcile
+	}
 	return r.Inventory, err
 }
 func (b *brokerRuntime) Inspect(ctx context.Context, id string, p dockerengine.Plan) (dockerengine.Object, error) {
@@ -338,4 +358,16 @@ func (b *brokerRuntime) KataPhysicalEvidence(ctx context.Context, id string, p d
 		return evidence, ErrReconcile
 	}
 	return evidence, nil
+}
+
+func (b *brokerRuntime) RecoveryDisposed(ctx context.Context, id string, p dockerengine.Plan) (bool, error) {
+	q, err := b.lookup(ctx, p, id)
+	if err != nil {
+		return false, err
+	}
+	state, err := b.state(ctx, q)
+	if err != nil && err != dockerengine.ErrAbsent {
+		return false, err
+	}
+	return err == dockerengine.ErrAbsent && state.Phase == "RECOVERY_DISPOSED" && state.RecoveryID != "" && state.Object == nil, nil
 }

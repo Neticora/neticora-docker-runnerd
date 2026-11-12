@@ -60,6 +60,7 @@ type Remote interface {
 }
 
 type Controller struct {
+	recoveryOnly        bool // Explicit drained terminal reconciliation; never new admission.
 	kataBroker          kataBrokerRuntime
 	Kata                *katalinux.Profile
 	Store               *journal.SQLiteStore
@@ -609,6 +610,26 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 			return e2
 		}
 		return c.Store.CompleteNeverStarted(ctx, c.Scope, event)
+	}
+	// A verified broker recovery closure is physical disposal, not a successful
+	// create/start or a never-started fence. Preserve the original RuntimeRef and
+	// enter the existing cleanup/attestation/final-ACK path only with cleanup intent.
+	if errors.Is(err, dockerengine.ErrAbsent) && len(e.RuntimeRef) > 0 && c.cancelled[executionKey(e)] && !e.CleanupPending {
+		if recovery, ok := c.Runtime.(interface {
+			RecoveryDisposed(context.Context, string, dockerengine.Plan) (bool, error)
+		}); ok {
+			ref, refErr := protocol.DecodeRuntimeRef(e.RuntimeRef)
+			if refErr != nil || ref.Scope != c.Scope.EndpointIdentity || ref.ExecutionId != e.Identity.ExecutionID || ref.Generation != e.Identity.Generation || ref.SpecHash != e.Identity.SpecHash {
+				return ErrReconcile
+			}
+			disposed, recoveryErr := recovery.RecoveryDisposed(ctx, ref.ResourceId, p)
+			if recoveryErr != nil {
+				return recoveryErr
+			}
+			if disposed {
+				return c.cleanup(ctx, e, p, dockerengine.Object{ID: ref.ResourceId, State: "exited"})
+			}
+		}
 	}
 	if e.CleanupPending && len(e.RuntimeRef) > 0 {
 		return c.cleanup(ctx, e, p, dockerengine.Object{State: "exited"})

@@ -15,7 +15,7 @@ import (
 
 func (h handler) runtimeRequest(w http.ResponseWriter, r *http.Request, q Request) bool {
 	switch q.Operation {
-	case "CheckKataProfile", "ReadKataEvidence", "ProbeRuntime", "GetRuntimeInventory", "GetExecutionStatus", "ReconcileExecution", "ReadRegistration", "CheckRuntimeHeadroom", "ExecuteOperation", "AttestDisposal", "ResumeDisposal", "GetBootRecoveryChallenge", "RecoverBootExecution":
+	case "ProbeRecoveryRuntime", "GetRecoveryInventory", "CheckKataProfile", "ReadKataEvidence", "ProbeRuntime", "GetRuntimeInventory", "GetExecutionStatus", "ReconcileExecution", "ReadRegistration", "CheckRuntimeHeadroom", "ExecuteOperation", "AttestDisposal", "ResumeDisposal", "GetBootRecoveryChallenge", "RecoverBootExecution":
 	default:
 		return false
 	}
@@ -123,6 +123,34 @@ func (h handler) runtimeRequest(w http.ResponseWriter, r *http.Request, q Reques
 	}
 	if q.ExecutionGrant != nil || q.ExecutionCommit != nil || q.ExecutionRequest != nil {
 		fail(ErrRejected, nil)
+		return true
+	}
+	// Recovery observation uses the original accounting scope. It is never a
+	// normal runtime readiness assertion or permission to create/start work.
+	if q.Operation == "ProbeRecoveryRuntime" || q.Operation == "GetRecoveryInventory" {
+		if !e.recoveryOnly || q.Lookup != nil || q.MinimumFreeBytes != 0 {
+			fail(ErrRejected, nil)
+			return true
+		}
+		before, err := e.runtime.Probe(r.Context())
+		if err != nil || before != e.runtimeEndpoint {
+			fail(ErrBootRecovery, nil)
+			return true
+		}
+		var ids []string
+		if q.Operation == "GetRecoveryInventory" {
+			ids, err = e.runtime.Inventory(r.Context())
+			if err != nil {
+				fail(err, nil)
+				return true
+			}
+		}
+		after, err := e.runtime.Probe(r.Context())
+		if err != nil || after != before {
+			fail(ErrBootRecovery, nil)
+			return true
+		}
+		respond(200, Response{Code: "recovery_runtime_observed", Endpoint: e.scope.EndpointIdentity, Ready: false, Inventory: ids})
 		return true
 	}
 	if q.Operation == "CheckKataProfile" || q.Operation == "ProbeRuntime" || q.Operation == "GetRuntimeInventory" || q.Operation == "CheckRuntimeHeadroom" {
