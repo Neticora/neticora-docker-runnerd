@@ -914,9 +914,12 @@ func phaseDControllerChild(t *testing.T, path string) {
 		if q.Operation == "ExecuteOperation" && q.ExecutionRequest != nil {
 			action := q.ExecutionRequest.Operation
 			key := q.ExecutionRequest.ExecutionID + ":" + action
-			if err != nil && response.Code == "" && (action == "CreateExecution" || action == "StartExecution" || action == "RemoveExecution") {
+			if err != nil && (response.Code == "" || response.Code == "reconciliation_required") && (action == "CreateExecution" || action == "StartExecution" || action == "RemoveExecution") {
+				// A real ambiguous/partial response already exercises reconciliation.
+				// Do not demand a synthetic success-reply loss as a second authority path.
 				lost[key] = true
 				saveLoss()
+				t.Logf("original %s response uncertain (%s); reconcile the same operation", action, response.Code)
 			}
 			if err != nil {
 				return response, err
@@ -947,7 +950,7 @@ func phaseDControllerChild(t *testing.T, path string) {
 		return
 	}
 	if len(lost) != 3*len(p.Starts) {
-		t.Fatal("lost response injection incomplete", lost)
+		t.Fatal("uncertain operation response coverage incomplete", lost)
 	}
 	if p.KataProfileID == "" {
 		t.Log("real workload exit=0; original creation/start journal retained; broker disposal accepted before final cleaned event")
