@@ -45,6 +45,9 @@ import (
 )
 
 type phaseDPublic struct {
+	KataManifest                                                                            json.RawMessage
+	KataProfileID                                                                           string
+	Pool                                                                                    string
 	Scope                                                                                   agent.StoreScope
 	Start                                                                                   protocol.StartCommand
 	Starts                                                                                  []protocol.StartCommand
@@ -165,11 +168,18 @@ func TestPhaseDControllerRealDocker(t *testing.T) {
 	scope := storetest.Scope
 	scope.InstallationID = "phase-d-" + filepath.Base(base)
 	scope.EndpointIdentity = identity
+	if os.Getenv("RUNNERD_PHASE_E_SEED") != "" {
+		scope.InstallationID = "runnerd09-lab-e-" + strings.TrimPrefix(filepath.Base(base), "neticora-phase-d-")
+		scope.HostID = scope.InstallationID
+		scope.TenantID = scope.InstallationID
+	}
 	command := storetest.Object(t, storetest.Start(t, "phase-d"))
 	spec := command["spec"].(map[string]any)
 	spec["templateVersion"] = standardlinux.TemplateVersion
 	spec["imageDigest"] = parts[1]
 	spec["authorizationExpiresAt"] = now.Add(20 * time.Minute).Format(wireTime)
+	kataManifest, kataID := phaseEKataSpec(t, spec, identity)
+
 	var start protocol.StartCommand
 	raw := storetest.Encode(t, "HostCommand", command)
 	if json.Unmarshal(raw, &start) != nil {
@@ -212,6 +222,12 @@ func TestPhaseDControllerRealDocker(t *testing.T) {
 		t.Fatal("policy fixture absent")
 	}
 	policy["restrictions"].(map[string]any)["runnerUid"] = uid
+	if kataID != "" {
+		policy["allowedTenantIds"] = []string{scope.TenantID}
+		policy["allowedProfiles"] = []string{kataID}
+		resources := start.Spec.Resources
+		policy["limits"] = map[string]any{"cpuMillis": resources.CpuMillis, "memoryBytes": resources.MemoryBytes, "storageBytes": resources.StorageBytes, "slots": "1"}
+	}
 	if jobCount > 1 {
 		limits := policy["limits"].(map[string]any)
 		resources := start.Spec.Resources
@@ -293,6 +309,13 @@ func TestPhaseDControllerRealDocker(t *testing.T) {
 	defer server.Close()
 	ca := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw})
 	public := phaseDPublic{Scope: scope, Start: start, Starts: starts, Policy: policyRaw, Socket: config.Socket, Endpoint: endpoint, URL: server.URL, CA: string(ca), Source: source, Trust: clientTrust, Keys: clientKeys, State: clientState, Repository: parts[0], Network: network, Provisioned: config.Runtime.TrustProvisionedAt}
+	public.KataManifest = kataManifest
+	public.KataProfileID = kataID
+	public.Pool = "pool-a"
+	if kataID != "" {
+		phaseEKataBroker(t, &config, kataManifest, policyRaw, server.URL)
+		phaseDWrite(t, configPath, phaseDJSON(config), 0600, 0)
+	}
 	public.BootstrapExpires = now.Add(15 * time.Minute).Format(wireTime)
 	public.CrashController = os.Getenv("RUNNERD_D2_CONTROLLER_CRASH") == "1"
 	public.ControlledWorkload = os.Getenv("RUNNERD_D2_CONTROLLED_WORKLOAD") == "1"
@@ -777,7 +800,7 @@ func phaseDControllerChild(t *testing.T, path string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()
 	s, err := journal.OpenRecovery(ctx, p.State, journal.Options{ReservationLimits: policy.Limits()})
 	if err != nil {
@@ -793,7 +816,7 @@ func phaseDControllerChild(t *testing.T, path string) {
 	}
 	defer client.Close()
 	httpClient := &http.Client{Transport: clientHTTPTransport(p.CA)}
-	r := &phaseDRemote{fakeRemote: &fakeRemote{t: t, start: p.Start, inventory: "1", expires: p.BootstrapExpires}, url: p.URL, client: httpClient, endpoint: p.Scope.EndpointIdentity, ack: "0", starts: p.Starts, acks: map[string]string{}, cancelled: map[string]bool{}}
+	r := &phaseDRemote{fakeRemote: &fakeRemote{t: t, start: p.Start, inventory: "1", expires: p.BootstrapExpires, tenant: p.Scope.TenantID, host: p.Scope.HostID}, url: p.URL, client: httpClient, endpoint: p.Scope.EndpointIdentity, ack: "0", starts: p.Starts, acks: map[string]string{}, cancelled: map[string]bool{}}
 	var watermarks []agent.Watermark
 	for _, start := range p.Starts {
 		if _, lookupErr := s.PeerRecoveryExecution(ctx, start.Spec.ExecutionId, start.Generation); lookupErr == nil {
@@ -890,7 +913,8 @@ func phaseDControllerChild(t *testing.T, path string) {
 	provisioned, _ := time.Parse(time.RFC3339Nano, p.Provisioned)
 	verifier := standardlinux.ImageVerifier{RootDirectory: p.Trust, BundleDirectory: p.Trust, ProvisionedAt: provisioned}
 	c := &Controller{Store: s, Remote: r, Scope: p.Scope, Authority: journal.Authority{TenantID: p.Scope.TenantID, HostID: p.Scope.HostID, SessionEpoch: p.Scope.SessionEpoch, EndpointIdentity: p.Scope.EndpointIdentity, KeyID: "key-a"}, Profile: standardlinux.Settings{ImageRepository: p.Repository, NetworkID: p.Network, BootstrapRoot: p.Source, RunnerUID: os.Geteuid(), PidsLimit: 128}, Policy: func() *standardlinux.Policy { return policy }, VerifyImage: verifier.Verify, KeysDirectory: p.Keys, Organization: "Neticora", Repository: "Neticora/project", Pool: "pool-a", Drained: func() bool { return false }, cancelled: map[agent.ExecutionCursor]bool{}}
-	c.Runtime = &brokerRuntime{controller: c, remote: remote, socket: p.Socket, call: broker.Call}
+	c.Runtime = brokerRuntimeFor(c, remote, p.Socket)
+	phaseEKataController(t, c, p)
 	c.heartbeatGeneration.Store("1")
 	if len(watermarks) > 0 {
 		// Recover through the original controller inventory/watermark flow,
@@ -906,7 +930,11 @@ func phaseDControllerChild(t *testing.T, path string) {
 	if len(lost) != 3*len(p.Starts) {
 		t.Fatal("lost response injection incomplete", lost)
 	}
-	t.Log("real workload exit=0; original creation/start journal retained; broker disposal accepted before final cleaned event")
+	if p.KataProfileID == "" {
+		t.Log("real workload exit=0; original creation/start journal retained; broker disposal accepted before final cleaned event")
+	} else {
+		t.Log("broker-backed Kata launch/cancel/dispose; provider workload not qualified")
+	}
 }
 
 func clientHTTPTransport(ca string) *http.Transport {

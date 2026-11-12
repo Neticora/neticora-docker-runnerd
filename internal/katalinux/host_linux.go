@@ -248,7 +248,12 @@ func (p *Profile) Healthy(plan dockerengine.Plan, startedAt string, now time.Tim
 	if e != nil || start.After(now) || now.Sub(start) > time.Duration(p.Manifest.Deadlines.ExecutionSeconds)*time.Second {
 		return false
 	}
-	raw, e := hostfs.ReadPrivate(filepath.Join(p.HealthRoot(), plan.Name, "supervisor-health.json"), 1024)
+	var raw []byte
+	if p.brokerOwned {
+		raw, e = p.brokerHealthRead(plan)
+	} else {
+		raw, e = hostfs.ReadPrivate(filepath.Join(p.HealthRoot(), plan.Name, "supervisor-health.json"), 1024)
+	}
 	if e != nil {
 		return now.Sub(start) <= time.Duration(p.Manifest.Deadlines.StartupSeconds)*time.Second
 	}
@@ -271,6 +276,13 @@ func (p *Profile) Healthy(plan dockerengine.Plan, startedAt string, now time.Tim
 // Only the service owner provisions this volatile, per-attempt output directory.
 // Host reads reject mismatched ownership/mode if a guest UID mapping changes.
 func (p *Profile) PrepareHealth(plan dockerengine.Plan) error {
+	if p.brokerOwned {
+		root, err := p.brokerHealthDirectory(plan, true)
+		if err != nil {
+			return err
+		}
+		return root.Close()
+	}
 	if !ownedName(plan.Name) {
 		return ErrQualification
 	}
@@ -290,6 +302,16 @@ func (p *Profile) PrepareHealth(plan dockerengine.Plan) error {
 }
 
 func (p *Profile) CleanHealth(plan dockerengine.Plan) {
+	if p.brokerOwned {
+		root, err := p.brokerHealthDirectory(plan, false)
+		if err != nil {
+			return
+		}
+		_ = root.Remove("supervisor-health.json")
+		root.Close()
+		_ = os.Remove(filepath.Join(p.HealthRoot(), plan.Name))
+		return
+	}
 	if !ownedName(plan.Name) {
 		return
 	}

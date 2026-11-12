@@ -23,6 +23,7 @@ import (
 
 	"github.com/Neticora/neticora-docker-runnerd/agent"
 	"github.com/Neticora/neticora-docker-runnerd/agent/storetest"
+	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
 	"github.com/Neticora/neticora-docker-runnerd/internal/broker"
 	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
 	"github.com/Neticora/neticora-docker-runnerd/internal/standardlinux"
@@ -409,7 +410,7 @@ func phaseD2RunJobs(t *testing.T, ctx context.Context, c *Controller, p phaseDPu
 				t.Fatal(err)
 			}
 		}
-		for {
+		for p.KataProfileID == "" {
 			object, err := c.Runtime.Inspect(ctx, plan.Name, plan)
 			if err != nil {
 				t.Fatal(err)
@@ -436,6 +437,22 @@ func phaseD2RunJobs(t *testing.T, ctx context.Context, c *Controller, p phaseDPu
 		if err = c.flushExecutionEvents(ctx, e.Identity.ExecutionID, e.Identity.Generation); err != nil {
 			t.Fatal(err)
 		}
+	}
+	if p.KataProfileID != "" {
+		e := current(p.Starts[0].Spec.ExecutionId)
+		plan, err := c.plan(e)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var ref protocol.RuntimeRef
+		if json.Unmarshal(e.RuntimeRef, &ref) != nil {
+			t.Fatal("native reference")
+		}
+		proof, err := c.kataPhysicalEvidence(ctx, ref.ResourceId, plan)
+		if err != nil || proof.Prepared || proof.Block == nil || proof.Block.Phase != "released" || proof.Absence == nil || !proof.Absence.VMAbsent || !proof.Absence.CgroupRemoved {
+			t.Fatal("Kata physical disposal witness", err)
+		}
+		t.Log("real Kata VM/shim observed; original disk, cgroup and sandbox disposed; native final ACK separate")
 	}
 	if ids, err = c.Runtime.Inventory(ctx); err != nil || len(ids) != 0 {
 		t.Fatal("owned inventory remains", ids, err)

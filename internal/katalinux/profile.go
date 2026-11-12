@@ -125,6 +125,7 @@ type Profile struct {
 	storageAuthority      string
 	storageInstallationID string
 	storageHostID         string
+	brokerOwned           bool
 	ObserverSocket        string
 	Manifest              Manifest
 	ID                    string
