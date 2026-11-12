@@ -173,7 +173,9 @@ func refreshUnusedRuntime(endpoint, tenant, state, installation, observation, jo
 	}
 	if err = writeNew(root, "initial-runtime-certificate.json", certificate); err != nil {
 		previous, e := hostfs.ReadPrivate(filepath.Join(state, "initial-runtime-certificate.json"), 16384)
-		if e != nil || string(previous) != string(certificate) {
+		before, e1 := protocol.CanonicalizeJSON(previous)
+		after, e2 := protocol.CanonicalizeJSON(certificate)
+		if e != nil || e1 != nil || e2 != nil || string(before) != string(after) {
 			return initialbinding.ErrRejected
 		}
 	}
