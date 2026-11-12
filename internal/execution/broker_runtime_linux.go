@@ -9,6 +9,7 @@ import (
 
 	"github.com/Neticora/neticora-docker-runnerd/internal/broker"
 	"github.com/Neticora/neticora-docker-runnerd/internal/dockerengine"
+	"github.com/Neticora/neticora-docker-runnerd/internal/katalinux"
 )
 
 // brokerRuntime carries identities, never Docker plans or privileged descriptors.
@@ -24,7 +25,9 @@ type brokerRuntime struct {
 var _ Runtime = (*brokerRuntime)(nil)
 
 func brokerRuntimeFor(c *Controller, r *HostRemote, socket string) Runtime {
-	return &brokerRuntime{controller: c, remote: r, socket: socket, call: broker.Call}
+	b := &brokerRuntime{controller: c, remote: r, socket: socket, call: broker.Call}
+	c.kataBroker = b
+	return b
 }
 
 func (b *brokerRuntime) request(ctx context.Context, q broker.Request) (broker.Response, error) {
@@ -53,7 +56,7 @@ func (b *brokerRuntime) lookup(ctx context.Context, p dockerengine.Plan, id stri
 		return q, ErrReconcile
 	}
 	start, err := b.controller.storedStart(e)
-	if err != nil || start.Spec.IsolationProfile != "standard" {
+	if err != nil || (start.Spec.IsolationProfile != "standard" && (start.Spec.IsolationProfile != "isolated" || b.controller.Kata == nil || start.Spec.ProfileVersion != b.controller.Kata.ID)) {
 		return q, ErrReconcile
 	}
 	return q, nil
@@ -300,4 +303,39 @@ func (b *brokerRuntime) DisposeUnstarted(ctx context.Context, p dockerengine.Pla
 		return err
 	}
 	return b.VerifyDisposal(ctx, "", p)
+}
+
+func (b *brokerRuntime) KataHealthy(ctx context.Context, id string, p dockerengine.Plan) bool {
+	q, err := b.lookup(ctx, p, id)
+	if err != nil {
+		return false
+	}
+	state, err := b.state(ctx, q)
+	return err == nil && state.KataHealthy != nil && *state.KataHealthy
+}
+func (b *brokerRuntime) VerifyKataAbsence(ctx context.Context, id string, p dockerengine.Plan) error {
+	q, err := b.lookup(ctx, p, id)
+	if err != nil {
+		return err
+	}
+	state, err := b.state(ctx, q)
+	if err == dockerengine.ErrAbsent && state.Phase == "REMOVED" && state.Object == nil {
+		return nil
+	}
+	return ErrReconcile
+}
+func (b *brokerRuntime) KataPhysicalEvidence(ctx context.Context, id string, p dockerengine.Plan) (katalinux.Evidence, error) {
+	var evidence katalinux.Evidence
+	q, err := b.lookup(ctx, p, id)
+	if err != nil {
+		return evidence, err
+	}
+	response, err := b.request(ctx, broker.Request{Operation: "ReadKataEvidence", Lookup: &q})
+	if err != nil || len(response.KataEvidence) == 0 {
+		return evidence, ErrReconcile
+	}
+	if json.Unmarshal(response.KataEvidence, &evidence) != nil || evidence.Container != id || evidence.Profile != b.controller.Kata.ID {
+		return evidence, ErrReconcile
+	}
+	return evidence, nil
 }

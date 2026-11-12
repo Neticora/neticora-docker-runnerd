@@ -164,7 +164,8 @@ func openWithKataLoader(c config.Config, store *journal.SQLiteStore, policy *Pol
 	}
 	controller := &Controller{Store: store, Runtime: runtime, Remote: remote, SigningKey: key, Scope: agent.StoreScope{InstallationID: credentials.InstallationID, TenantID: credentials.TenantID, HostID: credentials.Identity.HostId, SessionEpoch: credentials.Identity.SessionEpoch, EndpointIdentity: credentials.EndpointIdentity}, Authority: journal.Authority{TenantID: credentials.TenantID, HostID: credentials.Identity.HostId, SessionEpoch: credentials.Identity.SessionEpoch, EndpointIdentity: credentials.EndpointIdentity, KeyID: credentials.Identity.KeyId}, Profile: standardlinux.Settings{ImageRepository: x.ImageRepository, NetworkID: x.NetworkID, BootstrapRoot: x.BootstrapRoot, RunnerUID: os.Geteuid(), PidsLimit: x.PidsLimit}, Policy: policy.Get, VerifyImage: verifier.Verify, KeysDirectory: x.KeysDirectory, Organization: x.Organization, Pool: x.Pool, Drained: drained}
 	if x.BrokerSocket != "" {
-		if x.Kata != nil {
+		if x.Kata != nil && x.Kata.ObserverSocket != "" {
+			// The controller must have no legacy privileged observer endpoint.
 			cleanup()
 			return nil, nil, ErrReconcile
 		}
@@ -183,23 +184,25 @@ func openWithKataLoader(c config.Config, store *journal.SQLiteStore, policy *Pol
 			return nil, nil, err
 		}
 		controller.Kata.ObserverSocket = x.Kata.ObserverSocket
-		if err = hostfs.CheckAncestors(filepath.Dir(controller.Kata.HealthRoot())); err != nil {
-			cleanup()
-			return nil, nil, err
-		}
-		if err = os.Mkdir(controller.Kata.HealthRoot(), 0700); err != nil && !os.IsExist(err) {
-			cleanup()
-			return nil, nil, err
-		}
-		healthRoot, healthErr := hostfs.OpenState(controller.Kata.HealthRoot())
-		if healthErr != nil {
-			cleanup()
-			return nil, nil, healthErr
-		}
-		_ = healthRoot.Close()
-		if err = volatileDirectory(controller.Kata.HealthRoot()); err != nil {
-			cleanup()
-			return nil, nil, err
+		if x.BrokerSocket == "" {
+			if err = hostfs.CheckAncestors(filepath.Dir(controller.Kata.HealthRoot())); err != nil {
+				cleanup()
+				return nil, nil, err
+			}
+			if err = os.Mkdir(controller.Kata.HealthRoot(), 0700); err != nil && !os.IsExist(err) {
+				cleanup()
+				return nil, nil, err
+			}
+			healthRoot, healthErr := hostfs.OpenState(controller.Kata.HealthRoot())
+			if healthErr != nil {
+				cleanup()
+				return nil, nil, healthErr
+			}
+			_ = healthRoot.Close()
+			if err = volatileDirectory(controller.Kata.HealthRoot()); err != nil {
+				cleanup()
+				return nil, nil, err
+			}
 		}
 		if controller.Kata.Manifest.ConfigurationGeneration != capabilities.ConfigurationGeneration || controller.Kata.Manifest.EndpointIdentity != credentials.EndpointIdentity || capabilities.RuntimeMechanism != "kata-runtime-rs-qemu" || !slices.Contains(capabilities.Profiles, controller.Kata.ID) {
 			cleanup()
@@ -209,9 +212,11 @@ func openWithKataLoader(c config.Config, store *journal.SQLiteStore, policy *Pol
 			cleanup()
 			return nil, nil, err
 		}
-		if err = controller.Kata.RecoverProbe(context.Background(), engine); err != nil {
-			cleanup()
-			return nil, nil, err
+		if x.BrokerSocket == "" {
+			if err = controller.Kata.RecoverProbe(context.Background(), engine); err != nil {
+				cleanup()
+				return nil, nil, err
+			}
 		}
 		controller.HostLimits.Slots = min(controller.HostLimits.Slots, controller.Kata.MaxConcurrentAllocations())
 	}

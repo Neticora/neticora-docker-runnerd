@@ -67,6 +67,11 @@ func (e *physicalExecutor) ResumeDisposal(ctx context.Context, q Lookup) error {
 		if err = e.executionGone(ctx, state, p); err != nil {
 			return err
 		}
+		if e.kata != nil {
+			if err = e.kata.Dispose(ctx, state.ResourceID, p, func() error { return e.executionGone(ctx, state, p) }); err != nil {
+				return err
+			}
+		}
 		if e.handoffs != nil {
 			if err = e.handoffs.Dispose(p); err != nil {
 				return err

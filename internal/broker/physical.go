@@ -34,6 +34,7 @@ type physicalRuntime interface {
 var _ physicalRuntime = (*dockerengine.Engine)(nil)
 
 type physicalExecutor struct {
+	kata            kataLifecycle
 	ledger          *Ledger
 	runtime         physicalRuntime
 	key             ed25519.PublicKey
@@ -108,7 +109,7 @@ func (e *physicalExecutor) Execute(ctx context.Context, r ExecutionGrantRequest,
 	// the existing runtime/caller deadline; expiry never mints another operation.
 	spec := s.Grant.Spec
 	scope := agent.StoreScope{InstallationID: e.scope.InstallationID, TenantID: e.scope.TenantID, HostID: e.scope.HostID, SessionEpoch: e.scope.SessionEpoch, EndpointIdentity: e.scope.EndpointIdentity}
-	p, err := e.settings.Plan(scope, spec)
+	p, err := e.plan(scope, spec)
 	if err != nil || planHash(p) == "" {
 		return dockerengine.Object{}, ErrRejected
 	}
@@ -205,7 +206,7 @@ func (e *physicalExecutor) Execute(ctx context.Context, r ExecutionGrantRequest,
 			return dockerengine.ErrUnavailable
 		}
 		if r.Operation == "PrepareImage" || r.Operation == "CreateExecution" || r.Operation == "StartExecution" {
-			if err = e.policy.Admit(scope, spec, e.now()); err != nil {
+			if err = e.admit(ctx, scope, spec); err != nil {
 				return err
 			}
 			if err = e.verifyImage(ctx, spec); err != nil {
@@ -307,7 +308,15 @@ func (e *physicalExecutor) Execute(ctx context.Context, r ExecutionGrantRequest,
 	case "PrepareImage":
 		err = e.runtime.PrepareImageAuthorized(ctx, p, guard)
 	case "CreateExecution":
-		object, err = e.runtime.Ensure(ctx, p, guard)
+		if e.kata != nil {
+			err = e.kata.Prepare(ctx, p)
+		}
+		if err == nil {
+			object, err = e.runtime.Ensure(ctx, p, guard)
+		}
+		if err == nil && e.kata != nil {
+			err = e.kata.Prepared(object.ID, p)
+		}
 		if err == nil && (!digest(object.ID) || object.State != "prepared") {
 			err = ErrConflict
 		}
@@ -316,7 +325,15 @@ func (e *physicalExecutor) Execute(ctx context.Context, r ExecutionGrantRequest,
 			state.State = "PREPARED"
 		}
 	case "StartExecution":
-		object, err = e.runtime.Start(ctx, state.ResourceID, p, guard)
+		if e.kata != nil {
+			err = e.kata.VerifyStorage(ctx, p)
+		}
+		if err == nil {
+			object, err = e.runtime.Start(ctx, state.ResourceID, p, guard)
+		}
+		if err == nil && e.kata != nil {
+			err = e.kata.Capture(ctx, state.ResourceID, p)
+		}
 		if err == nil && (object.ID != state.ResourceID || (object.State != "running" && object.State != "exited")) {
 			err = ErrConflict
 		}
@@ -324,7 +341,19 @@ func (e *physicalExecutor) Execute(ctx context.Context, r ExecutionGrantRequest,
 			state.State = "ACTIVE"
 		}
 	case "StopExecution":
-		err = e.runtime.Stop(ctx, state.ResourceID, p)
+		if e.kata != nil {
+			current, inspectErr := e.runtime.Inspect(ctx, state.ResourceID, p)
+			if inspectErr != nil {
+				err = inspectErr
+			} else if current.State == "running" {
+				err = e.kata.Capture(ctx, state.ResourceID, p)
+			} else if current.State == "prepared" {
+				err = e.kata.Prepared(state.ResourceID, p)
+			}
+		}
+		if err == nil {
+			err = e.runtime.Stop(ctx, state.ResourceID, p)
+		}
 		if err == nil {
 			object, err = e.runtime.Inspect(ctx, state.ResourceID, p)
 			if errors.Is(err, dockerengine.ErrAbsent) {
@@ -357,6 +386,9 @@ func (e *physicalExecutor) Execute(ctx context.Context, r ExecutionGrantRequest,
 		}
 		if err == nil {
 			err = e.endpoint(ctx)
+		}
+		if err == nil && e.kata != nil {
+			err = e.kata.Dispose(ctx, state.ResourceID, p, func() error { return e.executionGone(ctx, state, p) })
 		}
 		if err == nil && e.handoffs != nil {
 			err = e.handoffs.Dispose(p)

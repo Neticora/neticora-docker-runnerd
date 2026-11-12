@@ -168,6 +168,9 @@ func (e *physicalExecutor) IssueBootChallenge(ctx context.Context, q Lookup, key
 	if err != nil {
 		return SignedBootChallenge{}, err
 	}
+	if s.Spec.IsolationProfile != "standard" {
+		return SignedBootChallenge{}, ErrQuarantined
+	}
 	peer, peerErr := e.recoveryEndpoint(ctx, s)
 	if peerErr != nil {
 		return SignedBootChallenge{}, peerErr
@@ -308,6 +311,9 @@ func (e *physicalExecutor) RecoverBoot(ctx context.Context, a SignedBootCertific
 	s, p, err := e.loadOriginal(Lookup{ExecutionID: ch.Binding.ExecutionID, Generation: ch.Binding.Generation, SpecHash: ch.Binding.SpecHash, ResourceID: ch.ResourceID})
 	if err != nil {
 		return err
+	}
+	if s.Spec.IsolationProfile != "standard" {
+		return ErrQuarantined
 	}
 	peer, peerErr := e.recoveryEndpoint(ctx, s)
 	if peerErr != nil {

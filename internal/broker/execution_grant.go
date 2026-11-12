@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
@@ -141,7 +142,7 @@ func VerifyExecutionGrant(s SignedExecutionGrant, r ExecutionGrantRequest, key e
 		return ErrRejected
 	}
 	spec, err := protocol.DecodeExecutionSpec(raw)
-	if err != nil || spec.ExecutionId != b.ExecutionID || spec.Generation != b.Generation || spec.AttemptId != b.AttemptID || spec.SpecHash != b.SpecHash || spec.IsolationProfile != "standard" || spec.TemplateVersion != "linux-github-process-v1" || spec.RuntimeEngine != "docker" || spec.ExecutionBackend != "customer-host" {
+	if err != nil || spec.ExecutionId != b.ExecutionID || spec.Generation != b.Generation || spec.AttemptId != b.AttemptID || spec.SpecHash != b.SpecHash || !supportedExecutionProfile(spec) || spec.RuntimeEngine != "docker" || spec.ExecutionBackend != "customer-host" {
 		return ErrRejected
 	}
 	if r.Operation == "PrepareImage" || r.Operation == "CreateExecution" || r.Operation == "StartExecution" {
@@ -157,4 +158,14 @@ func VerifyExecutionGrant(s SignedExecutionGrant, r ExecutionGrantRequest, key e
 // only the same immutable operation; it cannot silently replace its payload.
 func (g ExecutionGrant) IntentPayload() ([]byte, error) {
 	return canonical(map[string]any{"version": g.Version, "operation": g.Operation, "operationId": g.OperationID, "expectedRevision": g.ExpectedRevision, "expectedState": g.ExpectedState, "resourceId": g.ResourceID, "binding": g.Binding, "spec": g.Spec})
+}
+
+// The signature authorizes the exact spec. The executor must additionally match
+// isolated work to its independently loaded, signed local block-storage tuple.
+func supportedExecutionProfile(s protocol.ExecutionSpec) bool {
+	if s.IsolationProfile == "standard" {
+		return s.TemplateVersion == "linux-github-process-v1"
+	}
+	return s.IsolationProfile == "isolated" && s.TemplateVersion == "linux-github-kata-v2" &&
+		(strings.HasPrefix(s.ProfileVersion, "docker-kata-rs-qemu-v2-") || strings.HasPrefix(s.ProfileVersion, "docker-kata-rs-qemu-v3-")) && len(s.ProfileVersion) == len("docker-kata-rs-qemu-v3-")+64 && digest(s.ProfileVersion[len("docker-kata-rs-qemu-v3-"):])
 }

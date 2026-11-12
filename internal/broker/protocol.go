@@ -77,6 +77,7 @@ type Response struct {
 	Endpoint      string               `json:"endpoint,omitempty"`
 	Inventory     []string             `json:"inventory,omitempty"`
 	Observation   *dockerengine.Object `json:"observation,omitempty"`
+	KataEvidence  json.RawMessage      `json:"kataEvidence,omitempty"`
 	Registration  json.RawMessage      `json:"registration,omitempty"`
 	Disposal      *SignedDisposal      `json:"disposal,omitempty"`
 	BootChallenge *SignedBootChallenge `json:"bootChallenge,omitempty"`

@@ -20,11 +20,12 @@ type Lookup struct {
 	RecoveryID  string `json:"recoveryId,omitempty"`
 }
 type RuntimeState struct {
-	Revision   string                           `json:"revision"`
-	Phase      string                           `json:"phase"`
-	Object     *dockerengine.Object             `json:"object,omitempty"`
-	Operations map[string]ExecutionGrantRequest `json:"operations,omitempty"`
-	RecoveryID string                           `json:"recoveryId,omitempty"`
+	Revision    string                           `json:"revision"`
+	Phase       string                           `json:"phase"`
+	Object      *dockerengine.Object             `json:"object,omitempty"`
+	Operations  map[string]ExecutionGrantRequest `json:"operations,omitempty"`
+	RecoveryID  string                           `json:"recoveryId,omitempty"`
+	KataHealthy *bool                            `json:"kataHealthy,omitempty"`
 }
 
 func (q Lookup) valid() bool {
@@ -99,7 +100,7 @@ func (e *physicalExecutor) loadOriginal(q Lookup) (physicalRecord, dockerengine.
 	if !pendingFound {
 		return state, dockerengine.Plan{}, ErrQuarantined
 	}
-	p, err := e.settings.Plan(agent.StoreScope{InstallationID: b.InstallationID, TenantID: b.TenantID, HostID: b.HostID, SessionEpoch: b.SessionEpoch, EndpointIdentity: b.EndpointIdentity}, state.Spec)
+	p, err := e.plan(agent.StoreScope{InstallationID: b.InstallationID, TenantID: b.TenantID, HostID: b.HostID, SessionEpoch: b.SessionEpoch, EndpointIdentity: b.EndpointIdentity}, state.Spec)
 	if err != nil || state.Name != p.Name || state.PlanHash != planHash(p) {
 		return state, p, ErrQuarantined
 	}
@@ -163,6 +164,22 @@ func (e *physicalExecutor) State(ctx context.Context, q Lookup, reconcile bool) 
 	}
 	if inspectErr == nil && (!digest(object.ID) || (state.ResourceID != "" && object.ID != state.ResourceID)) {
 		return RuntimeState{}, ErrConflict
+	}
+	if inspectErr == nil && e.kata != nil {
+		if object.State == "prepared" {
+			err = e.kata.Prepared(object.ID, p)
+		}
+		if object.State == "running" {
+			err = e.kata.Capture(ctx, object.ID, p)
+		}
+		if err != nil {
+			return RuntimeState{Revision: state.Revision, Phase: "QUARANTINED", Operations: state.Operations}, errors.Join(ErrQuarantined, err)
+		}
+		// An exited guest without a running witness must never promote an
+		// interrupted start. Its original obligation remains quarantined.
+		if object.State == "exited" && state.Pending == state.Operations["StartExecution"].OperationID && state.Pending != "" {
+			return RuntimeState{Revision: state.Revision, Phase: "QUARANTINED", Operations: state.Operations}, ErrQuarantined
+		}
 	}
 	if reconcile && state.Pending != "" {
 		for action, original := range state.Operations {
@@ -230,6 +247,10 @@ func (e *physicalExecutor) State(ctx context.Context, q Lookup, reconcile bool) 
 	result := RuntimeState{Revision: state.Revision, Phase: state.State, Operations: state.Operations}
 	if inspectErr == nil {
 		result.Object = &object
+		if e.kata != nil && object.State == "running" {
+			healthy := e.kata.Healthy(p, object.StartedAt, e.now())
+			result.KataHealthy = &healthy
+		}
 	}
 	if err = e.endpoint(ctx); err != nil {
 		return RuntimeState{}, err
@@ -238,6 +259,11 @@ func (e *physicalExecutor) State(ctx context.Context, q Lookup, reconcile bool) 
 		return result, ErrQuarantined
 	}
 	if inspectErr != nil {
+		if state.State == "REMOVED" {
+			if err = e.absence(ctx, state, p); err != nil {
+				return result, err
+			}
+		}
 		return result, dockerengine.ErrAbsent
 	}
 	return result, nil
@@ -263,6 +289,11 @@ func (e *physicalExecutor) unstartedAbsence(ctx context.Context, state physicalR
 }
 
 func (e *physicalExecutor) absence(ctx context.Context, state physicalRecord, p dockerengine.Plan) error {
+	if e.kata != nil {
+		if err := e.kata.Absence(ctx, state.ResourceID, p); err != nil {
+			return err
+		}
+	}
 	if err := e.executionGone(ctx, state, p); err != nil {
 		return err
 	}

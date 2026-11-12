@@ -223,3 +223,11 @@ Explicit Runnerd07 opt-in wires authenticated command/inventory/event loops and
 the Docker controller; automatic enrollment/key rotation remain separate work.
 `runnerctl executions` exposes a bounded owner-only summary. Drain is persisted;
 service shutdown never stops healthy runtime objects.
+
+Broker-managed block-backed Kata uses the existing signed profile, allocation
+ledger, VM/process witnesses and native controller journal. Configure the root
+broker's `runtime.kata` paths and the controller's matching `execution.kata`
+profile with an empty `observerSocket`; privileged operations run in the broker.
+The broker holds the original observer lifecycle lock and retains original pool
+ownership. Production activation and Kata cross-boot recovery remain disabled
+pending qualification. Docker-only recovery authority cannot dispose Kata state.

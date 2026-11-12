@@ -15,7 +15,7 @@ import (
 
 func (h handler) runtimeRequest(w http.ResponseWriter, r *http.Request, q Request) bool {
 	switch q.Operation {
-	case "ProbeRuntime", "GetRuntimeInventory", "GetExecutionStatus", "ReconcileExecution", "ReadRegistration", "CheckRuntimeHeadroom", "ExecuteOperation", "AttestDisposal", "ResumeDisposal", "GetBootRecoveryChallenge", "RecoverBootExecution":
+	case "ReadKataEvidence", "ProbeRuntime", "GetRuntimeInventory", "GetExecutionStatus", "ReconcileExecution", "ReadRegistration", "CheckRuntimeHeadroom", "ExecuteOperation", "AttestDisposal", "ResumeDisposal", "GetBootRecoveryChallenge", "RecoverBootExecution":
 	default:
 		return false
 	}
@@ -169,6 +169,26 @@ func (h handler) runtimeRequest(w http.ResponseWriter, r *http.Request, q Reques
 	}
 	if q.Lookup == nil || !q.Lookup.valid() || q.MinimumFreeBytes != 0 {
 		fail(ErrRejected, nil)
+		return true
+	}
+	if q.Operation == "ReadKataEvidence" {
+		e.ledger.mu.Lock()
+		state, p, err := e.load(*q.Lookup)
+		var raw json.RawMessage
+		if err == nil && e.kata != nil && state.State == "REMOVED" && state.Pending == "" {
+			err = e.absence(r.Context(), state, p)
+			if err == nil {
+				raw, err = e.kata.Evidence(r.Context(), state.ResourceID, p)
+			}
+		} else if err == nil {
+			err = ErrRejected
+		}
+		e.ledger.mu.Unlock()
+		if err != nil {
+			fail(err, nil)
+			return true
+		}
+		respond(200, Response{Code: "kata_evidence_observed", KataEvidence: raw})
 		return true
 	}
 	if q.Operation == "ReadRegistration" {

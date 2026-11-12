@@ -33,7 +33,7 @@ func (c *Controller) KataEvidence(ctx context.Context, id, generation string) (a
 	if err != nil || ref.ExecutionId != id || ref.Generation != generation || ref.SpecHash != e.Identity.SpecHash || ref.Scope != c.Scope.EndpointIdentity {
 		return nil, ErrReconcile
 	}
-	physical, err := c.Kata.PhysicalEvidence(ctx, ref.ResourceId, plan)
+	physical, err := c.kataPhysicalEvidence(ctx, ref.ResourceId, plan)
 	if err != nil {
 		return nil, err
 	}

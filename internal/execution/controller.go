@@ -60,6 +60,7 @@ type Remote interface {
 }
 
 type Controller struct {
+	kataBroker          kataBrokerRuntime
 	Kata                *katalinux.Profile
 	Store               *journal.SQLiteStore
 	Runtime             Runtime
@@ -563,10 +564,10 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 			return c.cleanup(ctx, e, p, o)
 		}
 		if o.State == "running" {
-			if c.Kata != nil && !c.Kata.Healthy(p, o.StartedAt, time.Now()) {
+			if c.Kata != nil && !c.kataHealthy(ctx, p, o) {
 				return c.cleanup(ctx, e, p, o)
 			}
-			if c.Kata != nil {
+			if c.Kata != nil && !c.brokerKata() {
 				if err = c.Kata.Capture(ctx, o.ID, p); err != nil {
 					return err
 				}
@@ -591,7 +592,7 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 		if e2 != nil {
 			return e2
 		}
-		if c.Kata != nil {
+		if c.Kata != nil && !c.brokerKata() {
 			if e2 = c.Kata.DiscardPrepared(ctx, p); e2 != nil {
 				return e2
 			}
@@ -642,7 +643,7 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 	if err = c.Runtime.PrepareImage(ctx, p); err != nil {
 		return err
 	}
-	if c.Kata != nil {
+	if c.Kata != nil && !c.brokerKata() {
 		if err = c.Kata.PrepareHealth(p); err != nil {
 			return err
 		}
@@ -678,7 +679,7 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 		return err
 	}
 	authorize := func() error {
-		if c.Kata != nil {
+		if c.Kata != nil && !c.brokerKata() {
 			if err := c.Kata.VerifyStorage(ctx, p); err != nil {
 				return err
 			}
@@ -738,7 +739,7 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 	// accepted/ACKed until the bounded Docker start/inspection returns. Unknown
 	// start replies remain the same attempt; accepted cancellation wakes cleanup.
 	c.launchMu.Lock()
-	if c.Kata != nil {
+	if c.Kata != nil && !c.brokerKata() {
 		if err = c.Kata.CapturePrepared(o.ID, p); err != nil {
 			c.launchMu.Unlock()
 			return err
@@ -754,7 +755,7 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 	if err != nil {
 		return err
 	}
-	if c.Kata != nil {
+	if c.Kata != nil && !c.brokerKata() {
 		if err = c.Kata.Capture(ctx, o.ID, p); err != nil {
 			return err
 		}
@@ -893,7 +894,7 @@ func (c *Controller) registration(ctx context.Context, e agent.Execution, p dock
 }
 
 func (c *Controller) cleanup(ctx context.Context, e agent.Execution, p dockerengine.Plan, o dockerengine.Object) error {
-	if c.Kata != nil && o.State == "prepared" {
+	if c.Kata != nil && !c.brokerKata() && o.State == "prepared" {
 		if err := c.Kata.CapturePrepared(o.ID, p); err != nil {
 			return err
 		}
@@ -951,7 +952,7 @@ func (c *Controller) cleanup(ctx context.Context, e agent.Execution, p dockereng
 	if _, err := c.refresh(ctx); err != nil {
 		return err
 	}
-	if err := verifyKataAbsence(ctx, c.Kata, c.Runtime, ref.ResourceId, p); err != nil {
+	if err := c.verifyKataAbsence(ctx, ref.ResourceId, p); err != nil {
 		return err
 	}
 	if runtime, ok := c.Runtime.(interface {
@@ -1031,7 +1032,7 @@ func (c *Controller) cleanSecrets(e agent.Execution, p dockerengine.Plan) {
 		// rmdir only: unexpected files are preserved, never recursively pruned.
 		_ = os.Remove(dir)
 	}
-	if c.Kata != nil {
+	if c.Kata != nil && !c.brokerKata() {
 		c.Kata.CleanHealth(p)
 	}
 	keys, err := hostfs.OpenState(c.KeysDirectory)

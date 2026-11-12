@@ -39,6 +39,17 @@ func (c *Controller) resolveRecoveryPlan(scope agent.StoreScope, s protocol.Exec
 }
 func (c *Controller) admit(s protocol.ExecutionSpec, now time.Time) error {
 	if c.Kata != nil {
+		if c.brokerKata() {
+			if s.IsolationProfile != "isolated" || s.ProfileVersion != c.Kata.ID {
+				return katalinux.ErrQualification
+			}
+			if err := c.Policy().AdmitIsolated(c.Scope, s, now); err != nil {
+				return err
+			}
+			// Root repeats signed tuple, storage, image and runtime admission
+			// under the exact committed operation. Controller has no engine.
+			return nil
+		}
 		if err := c.Kata.Admit(c.Scope, s, c.Policy(), now); err != nil {
 			return err
 		}
@@ -55,6 +66,11 @@ func (c *Controller) admit(s protocol.ExecutionSpec, now time.Time) error {
 func verifyKataAbsence(ctx context.Context, profile *katalinux.Profile, runtime any, id string, p dockerengine.Plan) error {
 	if p.Config.Labels[dockerengine.LabelPrefix+"template"] != katalinux.Template && p.Config.Labels[dockerengine.LabelPrefix+"template"] != katalinux.BlockTemplate {
 		return nil
+	}
+	if remote, ok := runtime.(interface {
+		VerifyKataAbsence(context.Context, string, dockerengine.Plan) error
+	}); ok {
+		return remote.VerifyKataAbsence(ctx, id, p)
 	}
 	if profile == nil {
 		return katalinux.ErrQualification

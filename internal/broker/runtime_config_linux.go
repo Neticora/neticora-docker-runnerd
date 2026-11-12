@@ -17,23 +17,24 @@ import (
 )
 
 type RuntimeConfig struct {
-	Endpoint                string `json:"endpoint"`
-	PolicyFile              string `json:"policyFile"`
-	ImageRepository         string `json:"imageRepository"`
-	NetworkID               string `json:"networkId"`
-	BootstrapRoot           string `json:"bootstrapRoot"`
-	ControllerBootstrapRoot string `json:"controllerBootstrapRoot"`
-	TrustRoots              string `json:"trustRoots"`
-	ImageBundles            string `json:"imageBundles"`
-	TrustProvisionedAt      string `json:"trustProvisionedAt"`
-	PidsLimit               int64  `json:"pidsLimit"`
-	Organization            string `json:"organization"`
-	Repository              string `json:"repository"`
-	Pool                    string `json:"pool"`
-	DisposalKeyFile         string `json:"disposalKeyFile"`
-	QualificationMarker     string `json:"qualificationMarker"`
-	QualificationFaultFile  string `json:"qualificationFaultFile,omitempty"`
-	BootRecoveryOnly        bool   `json:"bootRecoveryOnly,omitempty"`
+	Kata                    *KataConfig `json:"kata,omitempty"`
+	Endpoint                string      `json:"endpoint"`
+	PolicyFile              string      `json:"policyFile"`
+	ImageRepository         string      `json:"imageRepository"`
+	NetworkID               string      `json:"networkId"`
+	BootstrapRoot           string      `json:"bootstrapRoot"`
+	ControllerBootstrapRoot string      `json:"controllerBootstrapRoot"`
+	TrustRoots              string      `json:"trustRoots"`
+	ImageBundles            string      `json:"imageBundles"`
+	TrustProvisionedAt      string      `json:"trustProvisionedAt"`
+	PidsLimit               int64       `json:"pidsLimit"`
+	Organization            string      `json:"organization"`
+	Repository              string      `json:"repository"`
+	Pool                    string      `json:"pool"`
+	DisposalKeyFile         string      `json:"disposalKeyFile"`
+	QualificationMarker     string      `json:"qualificationMarker"`
+	QualificationFaultFile  string      `json:"qualificationFaultFile,omitempty"`
+	BootRecoveryOnly        bool        `json:"bootRecoveryOnly,omitempty"`
 }
 
 func openRuntime(ctx context.Context, c Config, l *Ledger, key ed25519.PublicKey) (*physicalExecutor, ed25519.PrivateKey, func(), error) {
@@ -94,7 +95,8 @@ func openRuntime(ctx context.Context, c Config, l *Ledger, key ed25519.PublicKey
 		m.source.Close()
 		return nil, nil, noop, err
 	}
-	closeAll := func() { _ = engine.Close(); m.root.Close(); m.source.Close() }
+	closeKata := func() {}
+	closeAll := func() { closeKata(); _ = engine.Close(); m.root.Close(); m.source.Close() }
 	endpoint, err := engine.Probe(ctx)
 	if err != nil || (endpoint != c.Scope.EndpointIdentity && !x.BootRecoveryOnly) {
 		closeAll()
@@ -132,6 +134,49 @@ func openRuntime(ctx context.Context, c Config, l *Ledger, key ed25519.PublicKey
 			return verifier.Verify(ctx, policy, x.ImageRepository, s.ImageDigest, time.Now())
 		},
 		guardMounts: func(_ context.Context, p dockerengine.Plan) error { return m.Prepare(p) }}
+	if x.Kata != nil {
+		if x.BootRecoveryOnly {
+			closeAll()
+			clear(private)
+			return nil, nil, noop, ErrRejected
+		}
+		profile, loadErr := loadKata(c, *x.Kata, e.settings)
+		if loadErr != nil {
+			closeAll()
+			clear(private)
+			return nil, nil, noop, loadErr
+		}
+		release, claimErr := profile.ClaimBroker(c.Scope.InstallationID, c.Scope.HostID)
+		if claimErr != nil {
+			closeAll()
+			clear(private)
+			return nil, nil, noop, claimErr
+		}
+		closeKata = release
+		if profile.Manifest.EndpointIdentity != endpoint || profile.Manifest.ImageRepository != x.ImageRepository {
+			closeAll()
+			clear(private)
+			return nil, nil, noop, ErrRejected
+		}
+		if err = profile.RecoverProbe(ctx, engine); err != nil {
+			closeAll()
+			clear(private)
+			return nil, nil, noop, err
+		}
+		if err = os.Mkdir(profile.HealthRoot(), 0700); err != nil && !os.IsExist(err) {
+			closeAll()
+			clear(private)
+			return nil, nil, noop, err
+		}
+		health, healthErr := hostfs.OpenState(profile.HealthRoot())
+		if healthErr != nil {
+			closeAll()
+			clear(private)
+			return nil, nil, noop, healthErr
+		}
+		health.Close()
+		e.kata = &protectedKata{profile: profile, engine: engine}
+	}
 	return e, private, func() { clear(private); closeAll() }, nil
 }
 
