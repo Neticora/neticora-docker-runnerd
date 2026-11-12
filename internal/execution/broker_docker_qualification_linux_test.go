@@ -157,6 +157,7 @@ func TestPhaseDControllerRealDocker(t *testing.T) {
 	phaseDWrite(t, filepath.Join(trace, "issuer.pem"), pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: issuerTrace}), 0600, 0)
 	disposalPublic, disposal, _ := ed25519.GenerateKey(rand.Reader)
 	disposalDER, _ := x509.MarshalPKCS8PrivateKey(disposal)
+	phaseDWrite(t, filepath.Join(trace, "disposal.pem"), pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: disposalDER}), 0600, 0)
 	disposalPath := filepath.Join(private, "disposal.pem")
 	phaseDWrite(t, disposalPath, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: disposalDER}), 0600, 0)
 	engine, err := dockerengine.Open(endpoint, "phase-d-observer", nil)

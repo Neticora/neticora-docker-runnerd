@@ -177,6 +177,28 @@ func TestBootRecoveryRetainedDockerLab(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if original.Spec.IsolationProfile == "isolated" {
+		keyPath := filepath.Join(filepath.Dir(snapshot.Ledger), "fixture-private", "disposal.pem")
+		raw, readErr := hostfs.ReadPrivate(keyPath, 16384)
+		if readErr != nil {
+			t.Fatal("original disposal trust missing", readErr)
+		}
+		b, rest := pem.Decode(raw)
+		if b == nil || len(rest) != 0 {
+			t.Fatal("original disposal trust invalid")
+		}
+		value, parseErr := x509.ParsePKCS8PrivateKey(b.Bytes)
+		if parseErr != nil {
+			t.Fatal(parseErr)
+		}
+		originalKey, ok := value.(ed25519.PrivateKey)
+		if !ok {
+			t.Fatal("original disposal type")
+		}
+		clear(disposal)
+		disposal = originalKey
+	}
+	defer clear(disposal)
 	publicDER, err := x509.MarshalPKIXPublicKey(disposal.Public())
 	if err != nil {
 		t.Fatal(err)
