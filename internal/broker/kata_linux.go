@@ -20,10 +20,12 @@ type KataConfig struct {
 	EvidenceDirectory string `json:"evidenceDirectory"`
 	JournalDirectory  string `json:"journalDirectory"`
 	QualificationPin  string `json:"qualificationPin,omitempty"`
+	NetworkGuardFile  string `json:"networkGuardFile,omitempty"`
 }
 type protectedKata struct {
-	profile *katalinux.Profile
-	engine  *dockerengine.Engine
+	profile      *katalinux.Profile
+	engine       *dockerengine.Engine
+	networkGuard func(context.Context) error
 }
 
 func (k *protectedKata) Plan(scope agent.StoreScope, s protocol.ExecutionSpec) (dockerengine.Plan, error) {
@@ -34,6 +36,11 @@ func (k *protectedKata) Plan(scope agent.StoreScope, s protocol.ExecutionSpec) (
 func (k *protectedKata) Admit(ctx context.Context, scope agent.StoreScope, s protocol.ExecutionSpec, policy *standardlinux.Policy, now time.Time) error {
 	if err := k.profile.Admit(scope, s, policy, now); err != nil {
 		return err
+	}
+	if k.networkGuard != nil {
+		if err := k.networkGuard(ctx); err != nil {
+			return err
+		}
 	}
 	return k.profile.Probe(ctx, k.engine)
 }

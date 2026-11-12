@@ -203,7 +203,24 @@ func openRuntime(ctx context.Context, c Config, l *Ledger, key ed25519.PublicKey
 			return nil, nil, noop, healthErr
 		}
 		health.Close()
-		e.kata = &protectedKata{profile: profile, engine: engine}
+		protected := &protectedKata{profile: profile, engine: engine}
+		if x.Kata.NetworkGuardFile != "" {
+			guard, guardErr := readNetworkGuard(x.Kata.NetworkGuardFile, x.NetworkID, profile.Manifest.Files)
+			if guardErr != nil {
+				closeAll()
+				clear(private)
+				return nil, nil, noop, guardErr
+			}
+			protected.networkGuard = func(ctx context.Context) error {
+				return guard.check(ctx, x.Kata.NetworkGuardFile, x.NetworkID, profile.Manifest.Files, engine.CheckIsolatedNetwork)
+			}
+			if guardErr = protected.networkGuard(ctx); guardErr != nil {
+				closeAll()
+				clear(private)
+				return nil, nil, noop, guardErr
+			}
+		}
+		e.kata = protected
 	}
 	return e, private, func() { clear(private); closeAll() }, nil
 }

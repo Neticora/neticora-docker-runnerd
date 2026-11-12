@@ -35,6 +35,20 @@ grants, transactional commitment, resource ownership and disposal verification
 remain unchanged. Keep production dispatch disabled and record each acceptance
 case only after its own genuine requirements pass.
 
+An enrolled campaign may authorize up to two concurrent slots, bounded by the
+signed Kata block pool's concurrent-allocation limit and the existing local and
+platform capacity checks. Per-execution resource budgets remain unchanged.
+
+`runnerctl resume` explicitly clears only the durable local administrative drain.
+It requires the service owner/root, a live ready controller, healthy reconciled
+journal, no unfinished executions, original Docker peer continuity and current
+campaign files/expiry. It never changes enrollment, session, boot, resource
+ownership or historical records. Startup preserves a prior drain. Missing runtime
+authority, used-host peer transitions and unresolved cleanup require their own
+recovery procedures. Platform admission and committed broker grants remain
+separate requirements. Network qualification requirements are documented in
+[NETWORK-ISOLATION.md](NETWORK-ISOLATION.md).
+
 ### Enrollment without controller Docker authority
 
 The unprivileged service first enrolls using the normal protected token/state

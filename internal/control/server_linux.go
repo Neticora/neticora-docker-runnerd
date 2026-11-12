@@ -34,6 +34,28 @@ type drainAction struct{ run func() error }
 
 func (s *Server) SetDurableDrain(action func() error) { s.drainAction.run = action }
 
+// ExposeResume only clears a local administrative fence. The service must
+// independently check recovery and runtime continuity; this grants no execution
+// authority and never repairs or replaces identity or journal records.
+func (s *Server) ExposeResume(action func(context.Context) error, audit func(string)) {
+	s.mux.HandleFunc("POST /resume", func(w http.ResponseWriter, r *http.Request) {
+		uid, ok := r.Context().Value(peerKey{}).(uint32)
+		if !ok || (uid != 0 && int(uid) != os.Geteuid()) {
+			audit("resume rejected")
+			http.Error(w, "administrative permission required", http.StatusForbidden)
+			return
+		}
+		if err := action(r.Context()); err != nil {
+			audit("resume refused; admission remains fenced")
+			http.Error(w, "resume refused; recovery and runtime checks required", http.StatusServiceUnavailable)
+			return
+		}
+		audit("resume accepted")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+	})
+}
+
 // Listen uses a service-owned directory and never removes an existing socket.
 // Stale sockets require explicit operator inspection, not a destructive reset.
 func Listen(path string, snapshot func() Snapshot, drain func(), audit func(string)) (*Server, error) {

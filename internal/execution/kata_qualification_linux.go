@@ -4,6 +4,7 @@ package execution
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
 	"github.com/Neticora/neticora-docker-runnerd/internal/config"
@@ -11,6 +12,7 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/internal/katalinux"
 	"github.com/Neticora/neticora-docker-runnerd/internal/standardlinux"
 	"github.com/Neticora/neticora-docker-runnerd/journal"
+	"time"
 )
 
 // Explicit campaign configuration enters the normal service/controller lifecycle
@@ -42,7 +44,7 @@ func openConfiguredQualification(c config.Config, store *journal.SQLiteStore, po
 // Normal Open, binaries and artifact loaders never select this constructor.
 func OpenQualification(c config.Config, configFile string, store *journal.SQLiteStore, policy *PolicyFile, drained func() bool, pin string, binding katalinux.LabBinding) (*Controller, func(), error) {
 	x := c.Execution
-	if x == nil || x.Kata == nil || c.ControlPlaneURL != binding.ControlPlaneURL || x.Repository != binding.Repository || x.Pool != binding.PoolID || policy.Get() == nil || policy.Get().Limits().Slots != 1 {
+	if x == nil || x.Kata == nil || c.ControlPlaneURL != binding.ControlPlaneURL || x.Repository != binding.Repository || x.Pool != binding.PoolID || policy.Get() == nil || policy.Get().Limits().Slots < 1 || policy.Get().Limits().Slots > 2 {
 		return nil, nil, ErrReconcile
 	}
 	if katalinux.ValidateLabFiles(binding, configFile, x.PolicyFile, x.CapabilitiesFile) != nil {
@@ -59,10 +61,24 @@ func OpenQualification(c config.Config, configFile string, store *journal.SQLite
 	if err != nil {
 		return nil, nil, err
 	}
+	if candidate.Kata == nil || policy.Get().Limits().Slots > candidate.Kata.MaxConcurrentAllocations() {
+		close()
+		return nil, nil, ErrReconcile
+	}
 	approved := policy.Get()
 	candidate.Policy = func() *standardlinux.Policy { return approved }
 	candidate.Drained = func() bool {
 		return drained() || katalinux.ValidateLabFiles(binding, configFile, x.PolicyFile, x.CapabilitiesFile) != nil
+	}
+	candidate.resumeGuard = func(ctx context.Context) error {
+		if ctx.Err() != nil || katalinux.ValidateLabFiles(binding, configFile, x.PolicyFile, x.CapabilitiesFile) != nil || candidate.Kata == nil {
+			return ErrReconcile
+		}
+		expires, err := time.Parse(time.RFC3339Nano, candidate.Kata.Manifest.ExpiresAt)
+		if err != nil || !time.Now().Before(expires) {
+			return ErrReconcile
+		}
+		return nil
 	}
 	return candidate, close, nil
 }

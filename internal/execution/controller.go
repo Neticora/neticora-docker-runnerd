@@ -60,6 +60,7 @@ type Remote interface {
 }
 
 type Controller struct {
+	resumeGuard         func(context.Context) error
 	recoveryOnly        bool // Explicit drained terminal reconciliation; never new admission.
 	kataBroker          kataBrokerRuntime
 	Kata                *katalinux.Profile

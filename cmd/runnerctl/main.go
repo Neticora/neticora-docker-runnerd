@@ -28,7 +28,7 @@ func run() error {
 	generation := flag.String("generation", "", "exact generation for trusted Kata evidence")
 	flag.Parse()
 	if flag.NArg() != 1 {
-		return errors.New("usage: runnerctl [--socket PATH] [--execution ID --generation N] status|doctor|capabilities|executions|kata-evidence|drain")
+		return errors.New("usage: runnerctl [--socket PATH] [--execution ID --generation N] status|doctor|capabilities|executions|kata-evidence|drain|resume")
 	}
 	command := flag.Arg(0)
 	method := http.MethodGet
@@ -38,7 +38,7 @@ func run() error {
 		if *executionID == "" || *generation == "" {
 			return errors.New("exact execution and generation required")
 		}
-	case "drain":
+	case "drain", "resume":
 		method = http.MethodPost
 	default:
 		return errors.New("unsupported administrative command")
