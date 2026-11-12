@@ -54,6 +54,9 @@ func runArgs(args []string) error {
 	observe := flags.Bool("observe-runtime", false, "root operator: write a fresh scoped read-only runtime observation; does not enroll")
 	hostID := flags.String("host-id", "", "independently verified enrolled host ID for root runtime observation")
 	retire := flags.Bool("retire-attempt", false, "offline: retire the token/seed attempt after verifying durable credential export; retain identity and receipt")
+	refresh := flags.Bool("refresh-unused-runtime", false, "first admission only: consume independent platform binding after fresh root observation and empty native journal")
+	journalDir := flags.String("journal-dir", "", "original empty native journal for first runtime binding")
+	issuerKey := flags.String("broker-issuer-key", "", "protected independent platform issuer public key for first runtime binding")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -63,6 +66,15 @@ func runArgs(args []string) error {
 			explicitRuntime = true
 		}
 	})
+	if *refresh {
+		if flags.NArg() != 0 || *observe || *retire || *token != "" || *hostID != "" || explicitRuntime {
+			return errors.New("initial binding cannot enroll, retire or open Docker")
+		}
+		return refreshUnusedRuntime(*endpoint, *tenant, *state, *installation, *observation, *journalDir, *issuerKey, *caFile)
+	}
+	if *journalDir != "" || *issuerKey != "" {
+		return errors.New("initial binding options require refresh-unused-runtime")
+	}
 	if *observe {
 		if flags.NArg() != 0 || *observation == "" || *tenant == "" || *installation == "" || *hostID == "" || !explicitRuntime || *retire || *token != "" {
 			return errors.New("runtime observation requires explicit host, tenant, installation, endpoint and output; no enrollment token")

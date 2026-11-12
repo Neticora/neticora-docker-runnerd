@@ -54,6 +54,19 @@ server receipt are preserved. After verifying durable export, use the existing
 `--retire-attempt` operation to retire the obsolete token/seed attempt while
 retaining identity and receipt. Never reenroll or reset state to recover a failure.
 
+Before first admission only, a Docker restart can invalidate the exported peer.
+`runnerd-enroll --refresh-unused-runtime` consumes a fresh root observation and
+an independently platform-signed initial-binding certificate. It requires the
+original empty native journal, original enrollment receipt/key/session/boot,
+explicit issuer public key and authenticated HTTPS endpoint. Durable original
+credentials, request nonce and certificate precede atomic credential replacement.
+The isolated platform must explicitly allow that exact host and reject all prior
+heartbeat, inventory, qualification, execution, command, event, reservation,
+operation or peer-recovery history. One audited request pins one target peer;
+replay never selects a different peer or grants execution authority. Used hosts
+remain on the existing recovery path. Never restart Docker between this initial
+binding and campaign execution without supported recovery.
+
 ## Build and preserve provenance
 
 From this repository, use a fresh output beneath a protected directory on the
