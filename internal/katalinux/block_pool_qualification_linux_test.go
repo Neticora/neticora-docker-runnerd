@@ -42,7 +42,7 @@ func TestPhaseFCleanPoolInitializationLab(t *testing.T) {
 			t.Fatal("new Phase F directories required")
 		}
 	}
-	if poolPath == evidence || poolPath == journal || evidence == journal || m.Storage.Block.Pool.BackingDevice != "/dev/disk/by-id/virtio-neticora-r9-f-pool-01" {
+	if poolPath == evidence || poolPath == journal || evidence == journal || m.Storage.Block.Pool.BackingDevice != "/dev/disk/by-id/virtio-neticora-r9-f-pool-0" {
 		t.Fatal("separate directories and dedicated new disk required")
 	}
 	if err := verifyPersistentVolume(m.Storage.Block.Pool, m.Storage.Block.Pool.Device); err != nil {
