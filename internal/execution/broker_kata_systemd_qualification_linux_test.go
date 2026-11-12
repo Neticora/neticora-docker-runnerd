@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/Neticora/neticora-docker-runnerd/internal/broker"
@@ -80,15 +81,22 @@ func phaseE2BrokerUnitFromConfig(body, config string) (string, error) {
 		if e != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			return "", fmt.Errorf("sandbox parent outside qualified runtime volume")
 		}
-		if e = runtimeRoot.MkdirAll(rel, 0755); e != nil {
-			return "", e
-		}
-		if e = hostfs.CheckAncestors(path); e != nil {
-			return "", e
-		}
-		info, e := os.Stat(path)
-		if e != nil || !info.IsDir() {
-			return "", fmt.Errorf("invalid sandbox parent")
+		current := "."
+		for _, part := range strings.Split(rel, string(filepath.Separator)) {
+			current = filepath.Join(current, part)
+			if e = runtimeRoot.Mkdir(current, 0755); e != nil && !os.IsExist(e) {
+				return "", e
+			}
+			info, e := runtimeRoot.Lstat(current)
+			if e != nil {
+				return "", e
+			}
+			stat, ok := info.Sys().(*syscall.Stat_t)
+			// Existing Kata shared directories may be 0777, behind the validated
+			// root-only 0700 runtime anchor. Never repair their original permissions.
+			if !ok || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || stat.Uid != 0 {
+				return "", fmt.Errorf("invalid sandbox parent")
+			}
 		}
 	}
 	return body, nil
