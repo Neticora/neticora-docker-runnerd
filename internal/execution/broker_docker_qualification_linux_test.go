@@ -80,14 +80,36 @@ func phaseDSign(domain string, v any, key ed25519.PrivateKey) string {
 }
 func phaseDWrite(t *testing.T, path string, v []byte, mode os.FileMode, uid int) {
 	t.Helper()
-	if err := os.WriteFile(path, v, mode); err != nil {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chmod(path, mode); err != nil {
+	defer f.Close()
+	if _, err := f.Write(v); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Chmod(mode); err != nil {
 		t.Fatal(err)
 	}
 	if uid != 0 {
-		if err := os.Chown(path, uid, uid); err != nil {
+		if err := f.Chown(uid, uid); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Qualification metadata must survive the same power-loss boundary as the
+	// product ledger. A successful write alone can leave an empty snapshot.
+	if err := f.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	directory := filepath.Dir(path)
+	for _, parent := range []string{directory, filepath.Dir(directory)} {
+		d, err := os.Open(parent)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = d.Sync()
+		d.Close()
+		if err != nil {
 			t.Fatal(err)
 		}
 	}
