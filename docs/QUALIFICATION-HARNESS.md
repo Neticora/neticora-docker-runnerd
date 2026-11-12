@@ -333,3 +333,13 @@ original inode/index retention and an unreleased native reservation before it
 closes the reference. The controller then reconciles the same consumed removal;
 no replacement allocation or renewed mutation authority is permitted. This is
 one retained-reference test, not qualification of all reference races.
+
+For cross-boot preservation, the held snapshot includes the original native and
+broker hashes, pool owner/index, prepared physical/cgroup witnesses and a full
+raw-disk hash. Active allocations live in `block-slots.json`; per-execution
+`.block.json` files are released tombstones, not the active ownership source.
+`TestKataBootRetainedLab`, with `RUNNERD_E2_HELD_STATE` set to that protected
+snapshot, observes the same marked VM after an actual boot/peer change using a
+read-only engine. It must retain the original operation, raw inode/data, pool
+reservation and native reservation, and reject Docker-only recovery. A passing
+result proves preservation and denial, not automatic Kata reboot recovery.

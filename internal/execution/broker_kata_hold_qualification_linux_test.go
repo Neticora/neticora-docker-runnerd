@@ -84,18 +84,26 @@ func phaseE2ObserveHeldBlock(ctx context.Context, p phaseDPublic, state, ledger 
 			}
 			if held == nil {
 				// Hold only after the original disk allocation has its durable record.
-				blockRaw, err := os.ReadFile(filepath.Join(p.KataEvidenceDirectory, record.Name+".block.json"))
+				blockRaw, err := os.ReadFile(filepath.Join(p.KataEvidenceDirectory, "block-slots.json"))
 				if os.IsNotExist(err) {
 					continue
 				}
 				if err != nil {
 					return err
 				}
-				var block struct {
-					Record katalinux.BlockRecord `json:"record"`
+				var index struct {
+					Record struct {
+						Active map[string]struct {
+							Record katalinux.BlockRecord `json:"record"`
+						} `json:"active"`
+					} `json:"record"`
 				}
-				if json.Unmarshal(blockRaw, &block) != nil {
-					return fmt.Errorf("invalid block ownership")
+				if json.Unmarshal(blockRaw, &index) != nil {
+					return fmt.Errorf("invalid block ownership index")
+				}
+				block, exists := index.Record.Active[record.Name]
+				if !exists {
+					continue
 				}
 				if block.Record.Phase != "ready" {
 					continue

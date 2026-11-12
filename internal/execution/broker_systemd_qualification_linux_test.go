@@ -26,6 +26,7 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
 	"github.com/Neticora/neticora-docker-runnerd/internal/broker"
 	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
+	"github.com/Neticora/neticora-docker-runnerd/internal/katalinux"
 	"github.com/Neticora/neticora-docker-runnerd/internal/standardlinux"
 )
 
@@ -504,7 +505,44 @@ func phaseD2SnapshotHeld(t *testing.T, state, ledger string, p phaseDPublic, con
 	if err != nil {
 		t.Fatal(err)
 	}
-	phaseDWrite(t, filepath.Join(state, "held-reboot-evidence.json"), phaseDJSON(map[string]any{"purpose": "runnerd-d2-held-reboot", "boot": strings.TrimSpace(string(boot)), "scope": p.Scope, "starts": p.Starts, "ledger": ledger, "journal": p.State, "brokerConfig": config, "hashes": hashes, "productionAdmission": false}), 0600, 0)
+	kataHashes := map[string]string{}
+	if p.KataProfileID != "" {
+		var m katalinux.Manifest
+		if json.Unmarshal(p.KataManifest, &m) != nil || m.Storage.Block == nil {
+			t.Fatal("held Kata manifest")
+		}
+		files := []string{filepath.Join(m.Storage.Block.Pool.Root, ".runnerd.owner.json"), filepath.Join(p.KataEvidenceDirectory, "block-slots.json")}
+		resources, _ := filepath.Glob(filepath.Join(ledger, "resources", "*.json"))
+		for _, file := range resources {
+			raw, e := os.ReadFile(file)
+			if e != nil {
+				t.Fatal(e)
+			}
+			var record struct{ Name string }
+			if json.Unmarshal(raw, &record) != nil {
+				t.Fatal("held resource")
+			}
+			files = append(files, filepath.Join(m.Storage.Block.Pool.Root, record.Name+".raw"), filepath.Join(p.KataEvidenceDirectory, record.Name+".cgroup.json"), filepath.Join(p.KataEvidenceDirectory, record.Name+".json"))
+		}
+		for _, file := range files {
+			f, e := os.Open(file)
+			if e != nil {
+				t.Fatal(e)
+			}
+			h := sha256.New()
+			_, e = io.Copy(h, f)
+			f.Close()
+			if e != nil {
+				t.Fatal(e)
+			}
+			kataHashes[file] = hex.EncodeToString(h.Sum(nil))
+		}
+	}
+	machine, e := os.ReadFile("/sys/class/dmi/id/product_uuid")
+	if e != nil {
+		t.Fatal(e)
+	}
+	phaseDWrite(t, filepath.Join(state, "held-reboot-evidence.json"), phaseDJSON(map[string]any{"purpose": "runnerd-d2-held-reboot", "boot": strings.TrimSpace(string(boot)), "machineUuid": strings.TrimSpace(string(machine)), "scope": p.Scope, "starts": p.Starts, "ledger": ledger, "journal": p.State, "brokerConfig": config, "publicFixture": p, "hashes": hashes, "kataArtifacts": kataHashes, "productionAdmission": false}), 0600, 0)
 	t.Log("held reboot evidence", filepath.Join(state, "held-reboot-evidence.json"))
 }
 
