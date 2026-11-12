@@ -181,6 +181,9 @@ func TestPhaseDControllerRealDocker(t *testing.T) {
 	spec["imageDigest"] = parts[1]
 	spec["authorizationExpiresAt"] = now.Add(20 * time.Minute).Format(wireTime)
 	kataManifest, kataID := phaseEKataSpec(t, spec, identity)
+	if kataID != "" {
+		spec["poolId"] = scope.InstallationID
+	}
 
 	var start protocol.StartCommand
 	raw := storetest.Encode(t, "HostCommand", command)
@@ -226,6 +229,7 @@ func TestPhaseDControllerRealDocker(t *testing.T) {
 	policy["restrictions"].(map[string]any)["runnerUid"] = uid
 	if kataID != "" {
 		policy["allowedTenantIds"] = []string{scope.TenantID}
+		policy["allowedPoolIds"] = []string{scope.InstallationID}
 		policy["allowedProfiles"] = []string{kataID}
 		resources := start.Spec.Resources
 		policy["limits"] = map[string]any{"cpuMillis": resources.CpuMillis, "memoryBytes": resources.MemoryBytes, "storageBytes": resources.StorageBytes, "slots": "1"}
@@ -265,6 +269,9 @@ func TestPhaseDControllerRealDocker(t *testing.T) {
 	marker := filepath.Join(private, "qualification.json")
 	phaseDWrite(t, marker, phaseDJSON(map[string]any{"purpose": "runnerd-phase-d-disposable", "installationId": scope.InstallationID, "hostId": scope.HostID, "endpoint": endpoint, "expiresAt": now.Add(30 * time.Minute).Format(wireTime), "productionAdmission": false}), 0600, 0)
 	config := broker.Config{Socket: filepath.Join(base, "broker.sock"), StateDirectory: brokerState, ControllerUID: uid, ControllerGID: uid, Audience: "phase-d-disposable", AuthorityPublicKey: base64.StdEncoding.EncodeToString(issuerPublic), ExecutionGrantPublicKey: base64.StdEncoding.EncodeToString(issuerPublic), Scope: broker.Binding{InstallationID: scope.InstallationID, TenantID: scope.TenantID, HostID: scope.HostID, SessionEpoch: scope.SessionEpoch, EndpointIdentity: scope.EndpointIdentity}, Runtime: &broker.RuntimeConfig{Endpoint: endpoint, PolicyFile: policyPath, ImageRepository: parts[0], NetworkID: network, BootstrapRoot: private, ControllerBootstrapRoot: source, TrustRoots: private, ImageBundles: private, TrustProvisionedAt: now.Add(-time.Minute).Format(wireTime), PidsLimit: 128, Organization: "Neticora", Repository: "Neticora/project", Pool: "pool-a", DisposalKeyFile: disposalPath, QualificationMarker: marker}}
+	if kataID != "" {
+		config.Runtime.Pool = scope.InstallationID
+	}
 	// Snapshot directory must be separate from policy/signing material.
 	config.Runtime.BootstrapRoot = filepath.Join(private, "handoffs")
 	phaseDDir(t, config.Runtime.BootstrapRoot, 0700, 0)
@@ -313,7 +320,7 @@ func TestPhaseDControllerRealDocker(t *testing.T) {
 	public := phaseDPublic{Scope: scope, Start: start, Starts: starts, Policy: policyRaw, Socket: config.Socket, Endpoint: endpoint, URL: server.URL, CA: string(ca), Source: source, Trust: clientTrust, Keys: clientKeys, State: clientState, Repository: parts[0], Network: network, Provisioned: config.Runtime.TrustProvisionedAt}
 	public.KataManifest = kataManifest
 	public.KataProfileID = kataID
-	public.Pool = "pool-a"
+	public.Pool = config.Runtime.Pool
 	if kataID != "" {
 		phaseEKataBroker(t, &config, kataManifest, policyRaw, server.URL)
 		public.KataEvidenceDirectory = config.Runtime.Kata.EvidenceDirectory
@@ -920,7 +927,7 @@ func phaseDControllerChild(t *testing.T, path string) {
 	}
 	provisioned, _ := time.Parse(time.RFC3339Nano, p.Provisioned)
 	verifier := standardlinux.ImageVerifier{RootDirectory: p.Trust, BundleDirectory: p.Trust, ProvisionedAt: provisioned}
-	c := &Controller{Store: s, Remote: r, Scope: p.Scope, Authority: journal.Authority{TenantID: p.Scope.TenantID, HostID: p.Scope.HostID, SessionEpoch: p.Scope.SessionEpoch, EndpointIdentity: p.Scope.EndpointIdentity, KeyID: "key-a"}, Profile: standardlinux.Settings{ImageRepository: p.Repository, NetworkID: p.Network, BootstrapRoot: p.Source, RunnerUID: os.Geteuid(), PidsLimit: 128}, Policy: func() *standardlinux.Policy { return policy }, VerifyImage: verifier.Verify, KeysDirectory: p.Keys, Organization: "Neticora", Repository: "Neticora/project", Pool: "pool-a", Drained: func() bool { return false }, cancelled: map[agent.ExecutionCursor]bool{}}
+	c := &Controller{Store: s, Remote: r, Scope: p.Scope, Authority: journal.Authority{TenantID: p.Scope.TenantID, HostID: p.Scope.HostID, SessionEpoch: p.Scope.SessionEpoch, EndpointIdentity: p.Scope.EndpointIdentity, KeyID: "key-a"}, Profile: standardlinux.Settings{ImageRepository: p.Repository, NetworkID: p.Network, BootstrapRoot: p.Source, RunnerUID: os.Geteuid(), PidsLimit: 128}, Policy: func() *standardlinux.Policy { return policy }, VerifyImage: verifier.Verify, KeysDirectory: p.Keys, Organization: "Neticora", Repository: "Neticora/project", Pool: p.Pool, Drained: func() bool { return false }, cancelled: map[agent.ExecutionCursor]bool{}}
 	c.Runtime = brokerRuntimeFor(c, remote, p.Socket)
 	phaseEKataController(t, c, p)
 	c.heartbeatGeneration.Store("1")

@@ -146,6 +146,11 @@ func openRuntime(ctx context.Context, c Config, l *Ledger, key ed25519.PublicKey
 			clear(private)
 			return nil, nil, noop, loadErr
 		}
+		if err = profile.ProtectPaths(c.StateDirectory, c.Socket, x.PolicyFile, x.TrustRoots, x.ImageBundles, x.DisposalKeyFile, x.QualificationMarker, x.QualificationFaultFile, x.ControllerBootstrapRoot, x.BootstrapRoot, profile.HealthRoot()); err != nil {
+			closeAll()
+			clear(private)
+			return nil, nil, noop, err
+		}
 		release, claimErr := profile.ClaimBroker(c.Scope.InstallationID, c.Scope.HostID)
 		if claimErr != nil {
 			closeAll()

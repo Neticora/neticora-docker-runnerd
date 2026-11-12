@@ -22,7 +22,7 @@ func loadKata(c Config, x KataConfig, base standardlinux.Settings) (*katalinux.P
 		return nil, ErrRejected
 	}
 	b := envelope.Binding
-	if b.InstallationID != c.Scope.InstallationID || b.HostID != c.Scope.HostID || b.TenantID != c.Scope.TenantID || b.ServiceUID != int(c.ControllerUID) {
+	if b.InstallationID != c.Scope.InstallationID || b.HostID != c.Scope.HostID || b.TenantID != c.Scope.TenantID || b.ServiceUID != int(c.ControllerUID) || b.Repository != c.Runtime.Repository || b.PoolID != c.Runtime.Pool {
 		return nil, ErrRejected
 	}
 	return katalinux.LoadQualification(x.ProfileFile, x.PublicKeyFile, x.QualificationPin, b, x.EvidenceDirectory, x.JournalDirectory, base)

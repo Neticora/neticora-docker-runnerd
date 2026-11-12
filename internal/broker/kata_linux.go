@@ -66,6 +66,9 @@ func (k *protectedKata) Dispose(ctx context.Context, id string, p dockerengine.P
 	return nil
 }
 func (k *protectedKata) Absence(ctx context.Context, id string, p dockerengine.Plan) error {
+	if _, err := os.Lstat(k.profile.HealthRoot() + "/" + p.Name); !os.IsNotExist(err) {
+		return ErrQuarantined
+	}
 	return k.profile.BrokerAbsence(ctx, id, p)
 }
 func (k *protectedKata) Evidence(ctx context.Context, id string, p dockerengine.Plan) (json.RawMessage, error) {

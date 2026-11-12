@@ -123,7 +123,11 @@ func (f *fakeRemote) Recovery(_ context.Context, lookups []agent.ExecutionCursor
 	if entries == nil {
 		entries = []protocol.RecoveryEntry{{ExecutionId: f.start.Spec.ExecutionId, Generation: f.start.Generation, CommandId: f.start.CommandId, SpecHash: f.start.Spec.SpecHash, ContiguousSequence: "0"}}
 	}
-	return protocol.RecoveryState{Identity: protocol.HostIdentity{HostId: "host-a", KeyId: "key-a", KeyVersion: "1", SessionEpoch: "1"}, EndpointIdentity: "engine-a", InventoryGeneration: f.inventory, Entries: entries}, nil
+	host := f.host
+	if host == "" {
+		host = "host-a"
+	}
+	return protocol.RecoveryState{Identity: protocol.HostIdentity{HostId: host, KeyId: "key-a", KeyVersion: "1", SessionEpoch: "1"}, EndpointIdentity: "engine-a", InventoryGeneration: f.inventory, Entries: entries}, nil
 }
 func (f *fakeRemote) Commands(context.Context) ([]json.RawMessage, error) { return nil, nil }
 func (f *fakeRemote) Ack(context.Context, agent.Receipt) error            { return nil }
