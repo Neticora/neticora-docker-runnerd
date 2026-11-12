@@ -3,6 +3,7 @@ package broker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"github.com/Neticora/neticora-docker-runnerd/agent"
 	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
 	"github.com/Neticora/neticora-docker-runnerd/internal/dockerengine"
@@ -49,6 +50,7 @@ func (e *physicalExecutor) admit(ctx context.Context, scope agent.StoreScope, s 
 }
 
 type kataBootLifecycle interface {
+	Evidence(context.Context, string, dockerengine.Plan) (json.RawMessage, error)
 	Plan(agent.StoreScope, protocol.ExecutionSpec) (dockerengine.Plan, error)
 	Observe(context.Context, string, dockerengine.Plan) error
 	RecoverDispose(context.Context, string, dockerengine.Plan, func() error) error
@@ -66,4 +68,39 @@ func kataRecoveryHash(s physicalRecord) string {
 		return bootHash(json.RawMessage(s.KataOrigin))
 	}
 	return ""
+}
+
+// Caller holds the ledger lock. Export cannot complete cleanup or advance native ACKs.
+func (e *physicalExecutor) kataEvidence(ctx context.Context, q Lookup) (json.RawMessage, error) {
+	state, p, err := e.load(q)
+	if state.Spec.IsolationProfile != "isolated" {
+		return nil, ErrRejected
+	}
+	if errors.Is(err, ErrBootRecovery) {
+		record, readErr := e.bootRecord(state)
+		if readErr != nil {
+			return nil, readErr
+		}
+		if record.Phase != "DISPOSED" {
+			return nil, ErrQuarantined
+		}
+		if err = e.bootAbsent(ctx, state, p, record); err != nil {
+			return nil, err
+		}
+		k, restoreErr := e.bootKata(state)
+		if restoreErr != nil {
+			return nil, restoreErr
+		}
+		return k.Evidence(ctx, state.ResourceID, p)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if e.kata == nil || state.State != "REMOVED" || state.Pending != "" {
+		return nil, ErrRejected
+	}
+	if err = e.absence(ctx, state, p); err != nil {
+		return nil, err
+	}
+	return e.kata.Evidence(ctx, state.ResourceID, p)
 }

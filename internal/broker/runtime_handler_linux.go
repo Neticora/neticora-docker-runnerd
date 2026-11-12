@@ -188,16 +188,7 @@ func (h handler) runtimeRequest(w http.ResponseWriter, r *http.Request, q Reques
 	}
 	if q.Operation == "ReadKataEvidence" {
 		e.ledger.mu.Lock()
-		state, p, err := e.load(*q.Lookup)
-		var raw json.RawMessage
-		if err == nil && e.kata != nil && state.State == "REMOVED" && state.Pending == "" {
-			err = e.absence(r.Context(), state, p)
-			if err == nil {
-				raw, err = e.kata.Evidence(r.Context(), state.ResourceID, p)
-			}
-		} else if err == nil {
-			err = ErrRejected
-		}
+		raw, err := e.kataEvidence(r.Context(), *q.Lookup)
 		e.ledger.mu.Unlock()
 		if err != nil {
 			fail(err, nil)

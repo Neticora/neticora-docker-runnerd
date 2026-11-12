@@ -35,6 +35,12 @@ func (k *recoveryKataFixture) Absence(ctx context.Context, id string, p dockeren
 	}
 	return k.componentKata.Absence(ctx, id, p)
 }
+func (k *recoveryKataFixture) Evidence(ctx context.Context, id string, p dockerengine.Plan) (json.RawMessage, error) {
+	if err := k.Absence(ctx, id, p); err != nil {
+		return nil, err
+	}
+	return json.RawMessage(`{"original":"disposed"}`), nil
+}
 func (k *recoveryKataFixture) RecoverDispose(ctx context.Context, id string, p dockerengine.Plan, guard func() error) error {
 	if err := k.Observe(ctx, id, p); err != nil {
 		return err
@@ -139,6 +145,9 @@ func TestKataBootCleanupRetainsOriginalAcrossInterruptedBoots(t *testing.T) {
 	if second.Certificate.Challenge.Challenge.PreviousRecoveryID != first.Certificate.ID {
 		t.Fatal("lost original chain")
 	}
+	if _, err = e.kataEvidence(context.Background(), q); err == nil {
+		t.Fatal("pending recovery exported disposal")
+	}
 	k.interrupted = false
 	if err = e.RecoverBoot(context.Background(), second); err != nil {
 		t.Fatal(err)
@@ -150,7 +159,13 @@ func TestKataBootCleanupRetainsOriginalAcrossInterruptedBoots(t *testing.T) {
 	if r.creates != 1 || r.starts != 1 || r.stops != 1 || r.removes != 1 || k.prepare != 1 || k.disposals != 1 {
 		t.Fatal("replaced/repeated original effect", r, k)
 	}
+	if raw, err := e.kataEvidence(context.Background(), q); err != nil || len(raw) == 0 {
+		t.Fatal("original recovery evidence unavailable", err)
+	}
 	k.uncertain = true
+	if _, err = e.kataEvidence(context.Background(), q); err == nil {
+		t.Fatal("uncertain recovery exported disposal")
+	}
 	if _, err = e.State(context.Background(), q, true); err == nil {
 		t.Fatal("storage continuity loss ignored")
 	}

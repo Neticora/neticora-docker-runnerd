@@ -319,7 +319,7 @@ func (b *brokerRuntime) VerifyKataAbsence(ctx context.Context, id string, p dock
 		return err
 	}
 	state, err := b.state(ctx, q)
-	if err == dockerengine.ErrAbsent && state.Phase == "REMOVED" && state.Object == nil {
+	if err == dockerengine.ErrAbsent && (state.Phase == "REMOVED" || (state.Phase == "RECOVERY_DISPOSED" && state.RecoveryID != "")) && state.Object == nil {
 		return nil
 	}
 	return ErrReconcile

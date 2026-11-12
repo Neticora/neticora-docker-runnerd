@@ -74,6 +74,9 @@ func TestControllerBrokerBootClosureNeverAcquiresLaunchAuthority(t *testing.T) {
 		t.Fatal("new authority acquired")
 		return ErrReconcile
 	}
+	if err = b.VerifyKataAbsence(context.Background(), strings.Repeat("c", 64), p); err != nil {
+		t.Fatal("verified recovery closure blocked cleanup", err)
+	}
 	if _, err = b.perform(context.Background(), "CreateExecution", "", p); err == nil {
 		t.Fatal("recovery became create")
 	}
