@@ -136,6 +136,9 @@ func (p *Profile) validateBlockStorage() error {
 	return nil
 }
 func (p *Profile) RequireLaunchStorage() error {
+	if p != nil && p.cleanupOnly {
+		return ErrQualification
+	}
 	if p != nil {
 		for _, fs := range p.storageFilesystems() {
 			if !validVolumeIdentity(fs) {

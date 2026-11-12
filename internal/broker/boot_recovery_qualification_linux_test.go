@@ -21,6 +21,7 @@ import (
 
 	"github.com/Neticora/neticora-docker-runnerd/internal/dockerengine"
 	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
+	"github.com/Neticora/neticora-docker-runnerd/internal/katalinux"
 	"github.com/Neticora/neticora-docker-runnerd/internal/standardlinux"
 )
 
@@ -146,6 +147,30 @@ func TestBootRecoveryRetainedDockerLab(t *testing.T) {
 	resources.Close()
 	if err != nil || json.Unmarshal(raw, &original) != nil {
 		t.Fatal(err)
+	}
+	if original.Spec.IsolationProfile == "isolated" {
+		if os.Getenv("RUNNERD_BOOT_RECOVERY_KATA") != "1" || len(original.KataOrigin) == 0 {
+			t.Fatal("explicit original Kata origin required")
+		}
+		release, err := katalinux.ClaimBrokerRecoveryDirectory(c.Runtime.Kata.EvidenceDirectory)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer release()
+		e.recoveryOnly = true
+		e.restoreKata = func(raw json.RawMessage) (kataBootLifecycle, error) {
+			profile, err := katalinux.RestoreBrokerCleanup(raw, e.settings, c.Scope.InstallationID, c.Scope.HostID)
+			if err != nil {
+				return nil, err
+			}
+			if profile.EvidenceDirectory != c.Runtime.Kata.EvidenceDirectory || profile.JournalDirectory != c.Runtime.Kata.JournalDirectory {
+				return nil, ErrQuarantined
+			}
+			if err = profile.RecoverProbe(context.Background(), engine); err != nil {
+				return nil, err
+			}
+			return &protectedKata{profile: profile, engine: engine}, nil
+		}
 	}
 	q := Lookup{ExecutionID: original.Binding.ExecutionID, Generation: original.Binding.Generation, SpecHash: original.Binding.SpecHash, ResourceID: original.ResourceID}
 	_, disposal, err := ed25519.GenerateKey(rand.Reader)

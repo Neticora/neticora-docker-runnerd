@@ -56,6 +56,7 @@ type phaseDPublic struct {
 	BootstrapExpires                                                                        string
 	CrashController                                                                         bool
 	ControlledWorkload                                                                      bool
+	HoldRunning                                                                             bool
 	ExpectQuarantine                                                                        bool
 	ExpectedOwned                                                                           int
 	Policy                                                                                  json.RawMessage
@@ -330,6 +331,7 @@ func TestPhaseDControllerRealDocker(t *testing.T) {
 	public.BootstrapExpires = now.Add(15 * time.Minute).Format(wireTime)
 	public.CrashController = os.Getenv("RUNNERD_D2_CONTROLLER_CRASH") == "1"
 	public.ControlledWorkload = os.Getenv("RUNNERD_D2_CONTROLLED_WORKLOAD") == "1"
+	public.HoldRunning = os.Getenv("RUNNERD_E3_HOLD_RUNNING") == "1"
 	public.ExpectQuarantine = os.Getenv("RUNNERD_D2_EXPECT_QUARANTINE") == "1"
 	if os.Getenv("RUNNERD_D2_EXPECT_OWNED") == "1" {
 		public.ExpectedOwned = 1
@@ -452,7 +454,7 @@ func TestPhaseDControllerRealDocker(t *testing.T) {
 		f.mu.Lock()
 		disposed, counts := f.disposed, len(f.commits)
 		f.mu.Unlock()
-		if public.ExpectQuarantine {
+		if public.ExpectQuarantine || public.HoldRunning {
 			if disposed || counts != 2+public.ExpectedOwned {
 				t.Fatal("unknown create lost committed obligations", counts)
 			}
@@ -460,7 +462,7 @@ func TestPhaseDControllerRealDocker(t *testing.T) {
 			t.Fatal("exact five commitments/disposal not observed", counts)
 		}
 	}
-	if public.ExpectQuarantine {
+	if public.ExpectQuarantine || public.HoldRunning {
 		phaseD2SnapshotHeld(t, state, brokerState, public, config)
 	} else {
 		phaseD2CreatedExactly(t, endpoint, scope.InstallationID, now, allFixtures)

@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"os"
 	"strconv"
@@ -34,6 +35,7 @@ type physicalRuntime interface {
 var _ physicalRuntime = (*dockerengine.Engine)(nil)
 
 type physicalExecutor struct {
+	restoreKata     func(json.RawMessage) (kataBootLifecycle, error)
 	kata            kataLifecycle
 	ledger          *Ledger
 	runtime         physicalRuntime
@@ -52,6 +54,7 @@ type physicalExecutor struct {
 }
 
 type physicalRecord struct {
+	KataOrigin   json.RawMessage                  `json:"kataOrigin,omitempty"`
 	Version      string                           `json:"version"`
 	Binding      Binding                          `json:"binding"`
 	Boot         string                           `json:"boot"`
@@ -132,6 +135,16 @@ func (e *physicalExecutor) Execute(ctx context.Context, r ExecutionGrantRequest,
 			return dockerengine.Object{}, ErrQuarantined
 		}
 		state = physicalRecord{Version: "runnerd-broker-resource-v2", Binding: s.Grant.Binding, Boot: e.boot, PlanHash: planHash(p), Name: p.Name, State: "ALLOCATED", Revision: "0", Completed: map[string]bool{}, Spec: spec, Operations: map[string]ExecutionGrantRequest{}}
+		if spec.IsolationProfile == "isolated" {
+			if source, ok := e.kata.(interface {
+				Origin() (json.RawMessage, error)
+			}); ok {
+				state.KataOrigin, err = source.Origin()
+				if err != nil {
+					return dockerengine.Object{}, err
+				}
+			}
+		}
 		if engine, ok := e.runtime.(interface {
 			RecoveryDomain(context.Context) (string, error)
 		}); ok {

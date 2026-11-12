@@ -47,3 +47,23 @@ func (e *physicalExecutor) admit(ctx context.Context, scope agent.StoreScope, s 
 	}
 	return e.policy.Admit(scope, s, e.now())
 }
+
+type kataBootLifecycle interface {
+	Plan(agent.StoreScope, protocol.ExecutionSpec) (dockerengine.Plan, error)
+	Observe(context.Context, string, dockerengine.Plan) error
+	RecoverDispose(context.Context, string, dockerengine.Plan, func() error) error
+	Absence(context.Context, string, dockerengine.Plan) error
+}
+
+func (e *physicalExecutor) bootKata(s physicalRecord) (kataBootLifecycle, error) {
+	if s.Spec.IsolationProfile != "isolated" || len(s.KataOrigin) == 0 || e.restoreKata == nil {
+		return nil, ErrQuarantined
+	}
+	return e.restoreKata(s.KataOrigin)
+}
+func kataRecoveryHash(s physicalRecord) string {
+	if s.Spec.IsolationProfile == "isolated" && len(s.KataOrigin) > 0 {
+		return bootHash(json.RawMessage(s.KataOrigin))
+	}
+	return ""
+}

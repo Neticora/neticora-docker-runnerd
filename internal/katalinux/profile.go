@@ -126,6 +126,8 @@ type Profile struct {
 	storageInstallationID string
 	storageHostID         string
 	brokerOwned           bool
+	cleanupOnly           bool
+	storageAuthorityPEM   []byte
 	ObserverSocket        string
 	Manifest              Manifest
 	ID                    string

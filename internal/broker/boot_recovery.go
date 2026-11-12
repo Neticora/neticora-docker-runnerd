@@ -24,6 +24,7 @@ var ErrBootRecovery = errors.New("explicit broker boot recovery required")
 // Boot recovery is cleanup-only, on the SAME engine and installation/session.
 // Original physical records, receipts and consumed challenges are never edited.
 type BootChallenge struct {
+	KataAnchor         string   `json:"kataAnchor,omitempty"`
 	EngineAnchor       string   `json:"engineAnchor"`
 	ToEndpointIdentity string   `json:"toEndpointIdentity"`
 	PreviousRecoveryID string   `json:"previousRecoveryId"`
@@ -168,7 +169,18 @@ func (e *physicalExecutor) IssueBootChallenge(ctx context.Context, q Lookup, key
 	if err != nil {
 		return SignedBootChallenge{}, err
 	}
-	if s.Spec.IsolationProfile != "standard" {
+	if s.Spec.IsolationProfile == "isolated" {
+		k, restoreErr := e.bootKata(s)
+		if restoreErr != nil {
+			return SignedBootChallenge{}, restoreErr
+		}
+		if s.ResourceID == "" {
+			return SignedBootChallenge{}, ErrQuarantined
+		}
+		if err = k.Observe(ctx, s.ResourceID, p); err != nil {
+			return SignedBootChallenge{}, err
+		}
+	} else if s.Spec.IsolationProfile != "standard" {
 		return SignedBootChallenge{}, ErrQuarantined
 	}
 	peer, peerErr := e.recoveryEndpoint(ctx, s)
@@ -221,7 +233,7 @@ func (e *physicalExecutor) IssueBootChallenge(ctx context.Context, q Lookup, key
 			return old, archiveErr
 		}
 	}
-	if err == nil && old.Challenge.StateHash == bootHash(s) && old.Challenge.ToBoot == e.boot && old.Challenge.ToEndpointIdentity == peer && old.Challenge.TargetID == target {
+	if err == nil && old.Challenge.KataAnchor == kataRecoveryHash(s) && old.Challenge.StateHash == bootHash(s) && old.Challenge.ToBoot == e.boot && old.Challenge.ToEndpointIdentity == peer && old.Challenge.TargetID == target {
 		expiry, parseErr := time.Parse(time.RFC3339Nano, old.Challenge.ExpiresAt)
 		if parseErr != nil || !verifyBoot(BootChallengeDomain, old.Challenge, old.Signature, key.Public().(ed25519.PublicKey)) {
 			return old, ErrQuarantined
@@ -236,7 +248,7 @@ func (e *physicalExecutor) IssueBootChallenge(ctx context.Context, q Lookup, key
 	if _, err = rand.Read(nonce); err != nil {
 		return old, err
 	}
-	c := BootChallenge{EngineAnchor: s.EngineAnchor, ToEndpointIdentity: peer, PreviousRecoveryID: previous, Version: BootRecoveryVersion, Binding: s.Binding, FromBoot: s.Boot, ToBoot: e.boot, StateHash: bootHash(s), ResourceID: s.ResourceID, TargetID: target, OperationIDs: ids, Nonce: hex.EncodeToString(nonce), ExpiresAt: e.now().Add(15 * time.Second).UTC().Format(time.RFC3339Nano)}
+	c := BootChallenge{KataAnchor: kataRecoveryHash(s), EngineAnchor: s.EngineAnchor, ToEndpointIdentity: peer, PreviousRecoveryID: previous, Version: BootRecoveryVersion, Binding: s.Binding, FromBoot: s.Boot, ToBoot: e.boot, StateHash: bootHash(s), ResourceID: s.ResourceID, TargetID: target, OperationIDs: ids, Nonce: hex.EncodeToString(nonce), ExpiresAt: e.now().Add(15 * time.Second).UTC().Format(time.RFC3339Nano)}
 	old = SignedBootChallenge{Challenge: c, Signature: signBoot(BootChallengeDomain, c, key)}
 	if err = e.ledger.writeRecord(root, bootHash(old), old); err != nil {
 		return old, err
@@ -246,7 +258,7 @@ func (e *physicalExecutor) IssueBootChallenge(ctx context.Context, q Lookup, key
 func validBootAuthority(a SignedBootCertificate, key ed25519.PublicKey) bool {
 	c := a.Certificate
 	ch := c.Challenge.Challenge
-	return c.Version == BootRecoveryVersion && c.Operation == "RecoverBootCleanup" && c.ID == bootHash(c.Challenge) && ch.Version == BootRecoveryVersion && ch.Binding.valid() && (ch.FromBoot != ch.ToBoot || ch.Binding.EndpointIdentity != ch.ToEndpointIdentity) && digest(ch.EngineAnchor) && ch.ToEndpointIdentity != "" && digest(ch.StateHash) && digest(ch.Nonce) && (ch.PreviousRecoveryID == "" || digest(ch.PreviousRecoveryID)) && verifyBoot(BootRecoveryDomain, c, a.Signature, key)
+	return c.Version == BootRecoveryVersion && c.Operation == "RecoverBootCleanup" && c.ID == bootHash(c.Challenge) && ch.Version == BootRecoveryVersion && ch.Binding.valid() && (ch.FromBoot != ch.ToBoot || ch.Binding.EndpointIdentity != ch.ToEndpointIdentity) && (ch.KataAnchor == "" || digest(ch.KataAnchor)) && digest(ch.EngineAnchor) && ch.ToEndpointIdentity != "" && digest(ch.StateHash) && digest(ch.Nonce) && (ch.PreviousRecoveryID == "" || digest(ch.PreviousRecoveryID)) && verifyBoot(BootRecoveryDomain, c, a.Signature, key)
 }
 func (e *physicalExecutor) bootRecord(s physicalRecord) (bootRecord, error) {
 	r, err := e.readBootRecord(s)
@@ -271,7 +283,7 @@ func (e *physicalExecutor) readBootRecord(s physicalRecord) (bootRecord, error) 
 	accepted, e1 := time.Parse(time.RFC3339Nano, record.AcceptedAt)
 	begin, e2 := time.Parse(time.RFC3339Nano, c.NotBefore)
 	end, e3 := time.Parse(time.RFC3339Nano, c.ExpiresAt)
-	if record.Version != BootRecoveryVersion || !validBootAuthority(record.Authority, e.key) || ch.Binding != s.Binding || ch.StateHash != bootHash(s) || ch.FromBoot != s.Boot || ch.EngineAnchor != s.EngineAnchor || ch.ResourceID != s.ResourceID || e1 != nil || e2 != nil || e3 != nil || accepted.Before(begin) || !accepted.Before(end) || end.Sub(begin) > 15*time.Second || !end.After(begin) || (record.Phase != "PENDING" && record.Phase != "DISPOSED") {
+	if record.Version != BootRecoveryVersion || !validBootAuthority(record.Authority, e.key) || ch.KataAnchor != kataRecoveryHash(s) || ch.Binding != s.Binding || ch.StateHash != bootHash(s) || ch.FromBoot != s.Boot || ch.EngineAnchor != s.EngineAnchor || ch.ResourceID != s.ResourceID || e1 != nil || e2 != nil || e3 != nil || accepted.Before(begin) || !accepted.Before(end) || end.Sub(begin) > 15*time.Second || !end.After(begin) || (record.Phase != "PENDING" && record.Phase != "DISPOSED") {
 		return record, ErrQuarantined
 	}
 	ids, err := e.originalOperations(s)
@@ -293,7 +305,7 @@ func (e *physicalExecutor) readBootRecord(s physicalRecord) (bootRecord, error) 
 		}
 		seen[id] = true
 		var prior bootRecord
-		if readRecord(history, id, &prior) != nil || !validBootAuthority(prior.Authority, e.key) || prior.Authority.Certificate.ID != id || prior.Authority.Certificate.Challenge.Challenge.StateHash != bootHash(s) || prior.Authority.Certificate.Challenge.Challenge.Binding != s.Binding || (prior.Authority.Certificate.Challenge.Challenge.TargetID != "" && prior.Authority.Certificate.Challenge.Challenge.TargetID != cursor.Authority.Certificate.Challenge.Challenge.TargetID) {
+		if readRecord(history, id, &prior) != nil || !validBootAuthority(prior.Authority, e.key) || prior.Authority.Certificate.ID != id || prior.Authority.Certificate.Challenge.Challenge.KataAnchor != kataRecoveryHash(s) || prior.Authority.Certificate.Challenge.Challenge.StateHash != bootHash(s) || prior.Authority.Certificate.Challenge.Challenge.Binding != s.Binding || (prior.Authority.Certificate.Challenge.Challenge.TargetID != "" && prior.Authority.Certificate.Challenge.Challenge.TargetID != cursor.Authority.Certificate.Challenge.Challenge.TargetID) {
 			return record, ErrQuarantined
 		}
 		cursor = prior
@@ -312,7 +324,14 @@ func (e *physicalExecutor) RecoverBoot(ctx context.Context, a SignedBootCertific
 	if err != nil {
 		return err
 	}
-	if s.Spec.IsolationProfile != "standard" {
+	if s.Spec.IsolationProfile == "isolated" {
+		if _, restoreErr := e.bootKata(s); restoreErr != nil {
+			return restoreErr
+		}
+		if s.ResourceID == "" || ch.KataAnchor == "" || ch.KataAnchor != kataRecoveryHash(s) {
+			return ErrQuarantined
+		}
+	} else if s.Spec.IsolationProfile != "standard" || ch.KataAnchor != "" {
 		return ErrQuarantined
 	}
 	peer, peerErr := e.recoveryEndpoint(ctx, s)
@@ -332,7 +351,7 @@ func (e *physicalExecutor) RecoverBoot(ctx context.Context, a SignedBootCertific
 		if ch.PreviousRecoveryID != previous {
 			return ErrConflict
 		}
-		if !validBootAuthority(a, e.key) || ch.Binding != s.Binding || ch.StateHash != bootHash(s) || ch.FromBoot != s.Boot || ch.ToBoot != e.boot || ch.ToEndpointIdentity != peer || ch.EngineAnchor != s.EngineAnchor || ch.ResourceID != s.ResourceID {
+		if !validBootAuthority(a, e.key) || ch.KataAnchor != kataRecoveryHash(s) || ch.Binding != s.Binding || ch.StateHash != bootHash(s) || ch.FromBoot != s.Boot || ch.ToBoot != e.boot || ch.ToEndpointIdentity != peer || ch.EngineAnchor != s.EngineAnchor || ch.ResourceID != s.ResourceID {
 			return ErrRejected
 		}
 		begin, e1 := time.Parse(time.RFC3339Nano, c.NotBefore)
@@ -368,6 +387,15 @@ func (e *physicalExecutor) RecoverBoot(ctx context.Context, a SignedBootCertific
 		}
 		if target != ch.TargetID {
 			return ErrQuarantined
+		}
+		if s.Spec.IsolationProfile == "isolated" {
+			k, restoreErr := e.bootKata(s)
+			if restoreErr != nil {
+				return restoreErr
+			}
+			if err = k.Observe(ctx, s.ResourceID, p); err != nil {
+				return err
+			}
 		}
 		if newBoot {
 			history, err := e.ledger.records("boot-history")
@@ -436,6 +464,15 @@ func (e *physicalExecutor) RecoverBoot(ctx context.Context, a SignedBootCertific
 			}
 		}
 	}
+	if s.Spec.IsolationProfile == "isolated" {
+		k, restoreErr := e.bootKata(s)
+		if restoreErr != nil {
+			return restoreErr
+		}
+		if err = k.RecoverDispose(ctx, s.ResourceID, p, func() error { return e.bootRuntimeAbsent(ctx, s, p, record) }); err != nil {
+			return err
+		}
+	}
 	if e.handoffs != nil && s.Boot == e.boot {
 		if s.Operations["CreateExecution"].OperationID != "" {
 			err = e.handoffs.Dispose(p)
@@ -458,6 +495,30 @@ func (e *physicalExecutor) RecoverBoot(ctx context.Context, a SignedBootCertific
 	return e.ledger.writeRecord(root, recordID(s.Binding), record)
 }
 func (e *physicalExecutor) bootAbsent(ctx context.Context, s physicalRecord, p dockerengine.Plan, r bootRecord) error {
+	if err := e.bootRuntimeAbsent(ctx, s, p, r); err != nil {
+		return err
+	}
+	if e.handoffs != nil {
+		var err error
+		if s.Boot == e.boot {
+			err = e.handoffs.CheckDisposed(p)
+		} else {
+			err = e.handoffs.BootAbsent(p, s.Boot, s.Operations["CreateExecution"].OperationID != "")
+		}
+		if err != nil {
+			return err
+		}
+	}
+	if s.Spec.IsolationProfile == "isolated" {
+		k, err := e.bootKata(s)
+		if err != nil {
+			return err
+		}
+		return k.Absence(ctx, s.ResourceID, p)
+	}
+	return nil
+}
+func (e *physicalExecutor) bootRuntimeAbsent(ctx context.Context, s physicalRecord, p dockerengine.Plan, r bootRecord) error {
 	observed, endpointErr := e.recoveryEndpoint(ctx, s)
 	if endpointErr != nil {
 		return endpointErr
@@ -490,16 +551,6 @@ func (e *physicalExecutor) bootAbsent(ctx context.Context, s physicalRecord, p d
 	}
 	if err = network.VerifyRecoveryNetworkDetached(ctx, target, p.Name, string(p.HostConfig.NetworkMode)); err != nil {
 		return err
-	}
-	if e.handoffs != nil {
-		if s.Boot == e.boot {
-			err = e.handoffs.CheckDisposed(p)
-		} else {
-			err = e.handoffs.BootAbsent(p, s.Boot, s.Operations["CreateExecution"].OperationID != "")
-		}
-		if err != nil {
-			return err
-		}
 	}
 	observed, endpointErr = e.recoveryEndpoint(ctx, s)
 	if endpointErr != nil {

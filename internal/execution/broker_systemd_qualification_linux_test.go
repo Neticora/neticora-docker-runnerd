@@ -363,6 +363,13 @@ func phaseD2RunJobs(t *testing.T, ctx context.Context, c *Controller, p phaseDPu
 	for _, start := range p.Starts {
 		stepUntil(start.Spec.ExecutionId, "running")
 	}
+	if p.HoldRunning {
+		if len(p.Starts) != 1 || p.KataProfileID == "" || !p.ControlledWorkload {
+			t.Fatal("one controlled Kata VM required")
+		}
+		t.Log("original running Kata VM held for boot recovery; native reservation unreleased")
+		return
+	}
 	if p.CrashController {
 		marker := filepath.Join(p.Keys, "qualification-controller-crash")
 		f, err := os.OpenFile(marker, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)

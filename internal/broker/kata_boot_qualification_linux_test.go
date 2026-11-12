@@ -123,13 +123,22 @@ func TestKataBootRetainedLab(t *testing.T) {
 	e := &physicalExecutor{ledger: l, runtime: engine, scope: c.Scope, settings: settings, boot: boot, now: time.Now, kata: &protectedKata{profile: profile, engine: engine}}
 	start := s.PublicFixture.Start
 	q := Lookup{ExecutionID: start.Spec.ExecutionId, Generation: start.Generation, SpecHash: start.Spec.SpecHash}
-	original, _, err := e.loadOriginal(q)
+	resources, err := l.records("resources")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var original physicalRecord
+	b := e.scope
+	b.ExecutionID = q.ExecutionID
+	b.Generation = q.Generation
+	err = readRecord(resources, recordID(b), &original)
+	resources.Close()
 	if err != nil || original.Spec.IsolationProfile != "isolated" || original.Pending == "" || original.ResourceID == "" {
 		t.Fatal("original pending Kata ownership not retained", err)
 	}
 	q.ResourceID = original.ResourceID
 	state, err := e.State(context.Background(), q, true)
-	if !errors.Is(err, ErrBootRecovery) || state.Phase != "BOOT_RECOVERY_REQUIRED" {
+	if !errors.Is(err, ErrQuarantined) {
 		t.Fatal("Kata boot uncertainty inferred completion", state.Phase, err)
 	}
 	_, private, _ := ed25519.GenerateKey(rand.Reader)

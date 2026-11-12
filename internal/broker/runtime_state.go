@@ -100,7 +100,17 @@ func (e *physicalExecutor) loadOriginal(q Lookup) (physicalRecord, dockerengine.
 	if !pendingFound {
 		return state, dockerengine.Plan{}, ErrQuarantined
 	}
-	p, err := e.plan(agent.StoreScope{InstallationID: b.InstallationID, TenantID: b.TenantID, HostID: b.HostID, SessionEpoch: b.SessionEpoch, EndpointIdentity: b.EndpointIdentity}, state.Spec)
+	scope := agent.StoreScope{InstallationID: b.InstallationID, TenantID: b.TenantID, HostID: b.HostID, SessionEpoch: b.SessionEpoch, EndpointIdentity: b.EndpointIdentity}
+	var p dockerengine.Plan
+	if state.Spec.IsolationProfile == "isolated" && (state.Boot != e.boot || e.recoveryOnly) {
+		k, restoreErr := e.bootKata(state)
+		if restoreErr != nil {
+			return state, p, restoreErr
+		}
+		p, err = k.Plan(scope, state.Spec)
+	} else {
+		p, err = e.plan(scope, state.Spec)
+	}
 	if err != nil || state.Name != p.Name || state.PlanHash != planHash(p) {
 		return state, p, ErrQuarantined
 	}

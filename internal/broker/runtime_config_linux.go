@@ -6,7 +6,9 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
+	"github.com/Neticora/neticora-docker-runnerd/internal/katalinux"
 	"os"
 	"time"
 
@@ -135,10 +137,31 @@ func openRuntime(ctx context.Context, c Config, l *Ledger, key ed25519.PublicKey
 		},
 		guardMounts: func(_ context.Context, p dockerengine.Plan) error { return m.Prepare(p) }}
 	if x.Kata != nil {
+		e.restoreKata = func(raw json.RawMessage) (kataBootLifecycle, error) {
+			profile, restoreErr := katalinux.RestoreBrokerCleanup(raw, e.settings, c.Scope.InstallationID, c.Scope.HostID)
+			if restoreErr != nil {
+				return nil, restoreErr
+			}
+			if profile.EvidenceDirectory != x.Kata.EvidenceDirectory || profile.JournalDirectory != x.Kata.JournalDirectory {
+				return nil, ErrQuarantined
+			}
+			if restoreErr = profile.ProtectPaths(c.StateDirectory, c.Socket, x.PolicyFile, x.TrustRoots, x.ImageBundles, x.DisposalKeyFile, x.QualificationMarker, x.ControllerBootstrapRoot, x.BootstrapRoot, profile.HealthRoot()); restoreErr != nil {
+				return nil, restoreErr
+			}
+			if restoreErr = profile.RecoverProbe(ctx, engine); restoreErr != nil {
+				return nil, restoreErr
+			}
+			return &protectedKata{profile: profile, engine: engine}, nil
+		}
 		if x.BootRecoveryOnly {
-			closeAll()
-			clear(private)
-			return nil, nil, noop, ErrRejected
+			release, claimErr := katalinux.ClaimBrokerRecoveryDirectory(x.Kata.EvidenceDirectory)
+			if claimErr != nil {
+				closeAll()
+				clear(private)
+				return nil, nil, noop, claimErr
+			}
+			closeKata = release
+			return e, private, func() { clear(private); closeAll() }, nil
 		}
 		profile, loadErr := loadKata(c, *x.Kata, e.settings)
 		if loadErr != nil {

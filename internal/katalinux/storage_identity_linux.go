@@ -135,9 +135,13 @@ func (p *Profile) verifyStorageGrant(raw []byte, fs Filesystem, actual uint64) (
 	if err != nil {
 		return refuse()
 	}
-	keyRaw, err := hostfs.ReadPrivate(p.storageAuthority, 16384)
-	if err != nil {
-		return refuse()
+	keyRaw := p.storageAuthorityPEM
+	if len(keyRaw) == 0 {
+		var err error
+		keyRaw, err = hostfs.ReadPrivate(p.storageAuthority, 16384)
+		if err != nil {
+			return refuse()
+		}
 	}
 	block, rest := pem.Decode(keyRaw)
 	if block == nil || len(bytes.TrimSpace(rest)) != 0 {
