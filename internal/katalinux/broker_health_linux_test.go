@@ -14,6 +14,9 @@ import (
 
 func TestBrokerHealthRetainsGuestOwnerAndRejectsSubstitution(t *testing.T) {
 	base := t.TempDir()
+	if err := os.Chmod(base, 0700); err != nil {
+		t.Fatal(err)
+	}
 	p := &Profile{brokerOwned: true, Base: standardlinux.Settings{BootstrapRoot: filepath.Join(base, "handoff"), RunnerUID: os.Geteuid()}}
 	p.Manifest.Deadlines.StartupSeconds = 90
 	p.Manifest.Deadlines.HeartbeatSeconds = 30
