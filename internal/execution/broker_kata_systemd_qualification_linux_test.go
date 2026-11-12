@@ -26,7 +26,12 @@ func phaseE2KataBrokerUnit(body string, c broker.Config, m katalinux.Manifest) (
 	if c.Runtime.Kata.QualificationPin == "" || m.Storage.Block == nil || m.Version != katalinux.MultiBlockVersion || m.Qualified || len(m.Acceptance) != 0 {
 		return "", fmt.Errorf("explicit unqualified block-backed Kata fixture required")
 	}
-	paths := append([]string{c.Runtime.Kata.EvidenceDirectory, m.Storage.Block.Pool.Root, m.Storage.Block.DeviceDirectory}, m.SandboxRoots...)
+	paths := append([]string{c.Runtime.Kata.EvidenceDirectory, m.Storage.Block.Pool.Root}, m.SandboxRoots...)
+	if !c.Runtime.BootRecoveryOnly {
+		paths = append(paths, m.Storage.Block.DeviceDirectory)
+	} else {
+		paths = append(paths, c.Runtime.BootstrapRoot, c.Runtime.ControllerBootstrapRoot)
+	}
 	for _, p := range paths {
 		if !filepath.IsAbs(p) || filepath.Clean(p) != p || p == "/" || strings.ContainsAny(p, " \t\r\n\"\\") {
 			return "", fmt.Errorf("invalid Kata service path")
@@ -54,15 +59,35 @@ func phaseE2BrokerUnitFromConfig(body, config string) (string, error) {
 	if c.Runtime == nil || c.Runtime.Kata == nil {
 		return body, nil
 	}
-	raw, err = hostfs.ReadPrivate(c.Runtime.Kata.ProfileFile, 131072)
-	if err != nil {
-		return "", err
-	}
 	var signed struct {
 		Manifest katalinux.Manifest `json:"manifest"`
 	}
-	if json.Unmarshal(raw, &signed) != nil {
-		return "", fmt.Errorf("invalid Kata service profile")
+	if c.Runtime.BootRecoveryOnly {
+		files, e := filepath.Glob(filepath.Join(c.StateDirectory, "resources", "*.json"))
+		if e != nil || len(files) != 1 {
+			return "", fmt.Errorf("one original recovery fixture required")
+		}
+		raw, e = hostfs.ReadPrivate(files[0], broker.MaxMessage)
+		if e != nil {
+			return "", e
+		}
+		var original struct {
+			KataOrigin struct {
+				Manifest katalinux.Manifest `json:"manifest"`
+			} `json:"kataOrigin"`
+		}
+		if json.Unmarshal(raw, &original) != nil {
+			return "", fmt.Errorf("original Kata origin absent")
+		}
+		signed.Manifest = original.KataOrigin.Manifest
+	} else {
+		raw, err = hostfs.ReadPrivate(c.Runtime.Kata.ProfileFile, 131072)
+		if err != nil {
+			return "", err
+		}
+		if json.Unmarshal(raw, &signed) != nil {
+			return "", fmt.Errorf("invalid Kata service profile")
+		}
 	}
 	body, err = phaseE2KataBrokerUnit(body, c, signed.Manifest)
 	if err != nil {

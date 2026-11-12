@@ -177,6 +177,12 @@ func TestPhaseDControllerRealDocker(t *testing.T) {
 		scope.HostID = scope.InstallationID
 		scope.TenantID = scope.InstallationID
 	}
+	// Persist a separate host identity before any native or broker effects so
+	// the actual installed controller can later authenticate terminal recovery.
+	_, hostPrivate, _ := ed25519.GenerateKey(rand.Reader)
+	hostDER, _ := x509.MarshalPKCS8PrivateKey(hostPrivate)
+	phaseDWrite(t, filepath.Join(state, "client-credentials.json"), phaseDJSON(Credentials{InstallationID: scope.InstallationID, TenantID: scope.TenantID, EndpointIdentity: scope.EndpointIdentity, Identity: protocol.HostIdentity{HostId: scope.HostID, KeyId: "key-a", KeyVersion: "1", SessionEpoch: scope.SessionEpoch}, BootID: strings.TrimSpace(string(mustPhaseFBoot(t))), PrivateKeyPEM: string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: hostDER}))}), 0600, uid)
+	clear(hostPrivate)
 	command := storetest.Object(t, storetest.Start(t, "phase-d"))
 	spec := command["spec"].(map[string]any)
 	spec["templateVersion"] = standardlinux.TemplateVersion
@@ -291,6 +297,7 @@ func TestPhaseDControllerRealDocker(t *testing.T) {
 	configPath := filepath.Join(private, "broker.json")
 	phaseDWrite(t, configPath, phaseDJSON(config), 0600, 0)
 	fixture := newPhaseDAuthority(start, config.Scope, issuer, disposalPublic)
+	fixture.historyFile = filepath.Join(trace, "platform-history.json")
 	allFixtures := []*phaseDAuthority{fixture}
 	for _, next := range starts[1:] {
 		allFixtures = append(allFixtures, newPhaseDAuthority(next, config.Scope, issuer, disposalPublic))
@@ -489,6 +496,7 @@ func TestPhaseDControllerRealDocker(t *testing.T) {
 }
 
 type phaseDAuthority struct {
+	historyFile                 string
 	mu                          sync.Mutex
 	start                       protocol.StartCommand
 	scope                       broker.Binding
@@ -539,7 +547,37 @@ func (f *phaseDAuthority) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(400)
 		return
 	}
-	send := func(v any) { _ = json.NewEncoder(w).Encode(v) }
+	send := func(v any) {
+		if f.historyFile != "" {
+			data := phaseDJSON(map[string]any{"start": f.start, "scope": f.scope, "grants": f.grants, "commits": f.commits, "resource": f.resource, "prepared": f.prepared, "cleanup": f.cleanup, "disposed": f.disposed, "ack": f.ack, "inventory": f.inventory})
+			temporary := f.historyFile + ".pending"
+			file, writeErr := os.OpenFile(temporary, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+			if writeErr == nil {
+				_, writeErr = file.Write(data)
+				if writeErr == nil {
+					writeErr = file.Sync()
+				}
+				file.Close()
+			}
+			if writeErr == nil {
+				writeErr = os.Rename(temporary, f.historyFile)
+			}
+			if writeErr == nil {
+				dir, e := os.Open(filepath.Dir(f.historyFile))
+				if e == nil {
+					writeErr = dir.Sync()
+					dir.Close()
+				} else {
+					writeErr = e
+				}
+			}
+			if writeErr != nil {
+				w.WriteHeader(503)
+				return
+			}
+		}
+		_ = json.NewEncoder(w).Encode(v)
+	}
 	deny := func() { w.WriteHeader(409); send(map[string]string{"error": "fixture authority rejected"}) }
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	if r.URL.Path == "/fixture/finish" {
@@ -972,4 +1010,13 @@ func clientHTTPTransport(ca string) *http.Transport {
 	roots := x509.NewCertPool()
 	roots.AppendCertsFromPEM([]byte(ca))
 	return &http.Transport{TLSClientConfig: &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12}}
+}
+
+func mustPhaseFBoot(t *testing.T) []byte {
+	t.Helper()
+	raw, err := os.ReadFile("/proc/sys/kernel/random/boot_id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
 }
