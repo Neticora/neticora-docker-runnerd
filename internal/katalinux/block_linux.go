@@ -578,7 +578,7 @@ func (p *Profile) releaseBlock(ctx context.Context, plan dockerengine.Plan, guar
 	if err = verifyOwners(); err != nil {
 		return err
 	}
-	if err = p.removeBlockNode(plan.Name, r.LoopDevice); err != nil {
+	if err = p.removeBlockNode(plan.Name, r.LoopDevice, r.BootID); err != nil {
 		return err
 	}
 	if openErr == nil {
@@ -747,7 +747,12 @@ func (p *Profile) checkBlockNode(name string, dev uint64, absentOK bool) error {
 	}
 	return nil
 }
-func (p *Profile) removeBlockNode(name string, dev uint64) error {
+func (p *Profile) removeBlockNode(name string, dev uint64, originalBoot string) error {
+	if p.cleanupOnly {
+		if _, err := os.Lstat(p.Manifest.Storage.Block.DeviceDirectory); errors.Is(err, os.ErrNotExist) {
+			return verifyBootTmpfsAbsence(p.Manifest.Storage.Block.DeviceDirectory, originalBoot)
+		}
+	}
 	if err := p.checkBlockNode(name, dev, true); err != nil {
 		return err
 	}

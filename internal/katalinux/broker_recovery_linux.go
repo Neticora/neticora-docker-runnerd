@@ -9,6 +9,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
@@ -112,11 +113,11 @@ func (p *Profile) ObserveBrokerRecovery(ctx context.Context, id string, plan doc
 	}
 	raw, err := hostfs.ReadPrivate(filepath.Join(p.EvidenceDirectory, plan.Name+".json"), 32768)
 	var record Evidence
-	if err != nil || readEvidence(raw, &record) != nil || record.Profile != p.ID || record.Container != id || record.SpecHash != plan.Config.Labels[dockerengine.LabelPrefix+"spec"] || record.Generation != plan.Config.Labels[dockerengine.LabelPrefix+"generation"] || record.Block == nil || !sameAllocation(*record.Block, block) {
+	if err != nil || readEvidence(raw, &record) != nil || record.Profile != p.ID || record.Container != id || record.SpecHash != plan.Config.Labels[dockerengine.LabelPrefix+"spec"] || record.Generation != plan.Config.Labels[dockerengine.LabelPrefix+"generation"] || record.Block == nil || record.Block.BootID != block.BootID || !sameAllocation(*record.Block, block) {
 		return ErrQualification
 	}
 	group, err := p.cgroupRecord(plan)
-	if err != nil || record.Cgroup == nil || !sameHostCgroup(record.Cgroup, &group) {
+	if err != nil || record.Cgroup == nil || record.Cgroup.BootID != block.BootID || !sameHostCgroup(record.Cgroup, &group) {
 		return ErrQualification
 	}
 	return ctx.Err()
@@ -162,4 +163,31 @@ func (p *Profile) BrokerRecoverDispose(ctx context.Context, id string, plan dock
 		return ErrQualification
 	}
 	return nil
+}
+
+// A reboot may remove the complete private device directory. Validate every
+// surviving ancestor and its tmpfs before accepting absence; never recreate it.
+// This is only a node-absence check: original pool/index, raw inode, process,
+// mount, loop and cgroup disposal remain independently mandatory.
+func verifyBootTmpfsAbsence(path, originalBoot string) error {
+	boot, err := os.ReadFile("/proc/sys/kernel/random/boot_id")
+	if err != nil || originalBoot == "" || strings.TrimSpace(string(boot)) == originalBoot || !strings.HasPrefix(path, "/run/") || filepath.Clean(path) != path {
+		return ErrQualification
+	}
+	current := path
+	for {
+		info, err := os.Lstat(current)
+		if err == nil {
+			st, ok := info.Sys().(*syscall.Stat_t)
+			var fs syscall.Statfs_t
+			if !ok || st.Uid != 0 || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || hostfs.CheckAncestors(current) != nil || syscall.Statfs(current, &fs) != nil || uint64(fs.Type) != 0x01021994 {
+				return ErrQualification
+			}
+			return nil
+		}
+		if !errors.Is(err, os.ErrNotExist) || current == "/run" {
+			return ErrQualification
+		}
+		current = filepath.Dir(current)
+	}
 }

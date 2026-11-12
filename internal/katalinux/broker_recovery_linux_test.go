@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Neticora/neticora-docker-runnerd/agent"
@@ -100,5 +101,22 @@ func TestBrokerCleanupRejectsChangedOriginalDirectoryOrManifest(t *testing.T) {
 				t.Fatal("historical ownership adopted")
 			}
 		})
+	}
+}
+
+func TestBootDeviceAbsenceRequiresChangedBootAndProtectedTmpfs(t *testing.T) {
+	boot, err := os.ReadFile("/proc/sys/kernel/random/boot_id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range []struct{ path, boot string }{
+		{"/run/neticora-missing-recovery-test/devices", ""},
+		{"/run/neticora-missing-recovery-test/devices", strings.TrimSpace(string(boot))},
+		{"/var/lib/neticora-missing-recovery-test/devices", "other-boot"},
+		{"/run/../tmp/neticora-missing-recovery-test/devices", "other-boot"},
+	} {
+		if verifyBootTmpfsAbsence(v.path, v.boot) == nil {
+			t.Fatal("unverified node absence accepted", v)
+		}
 	}
 }
