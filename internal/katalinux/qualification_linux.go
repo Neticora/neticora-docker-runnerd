@@ -109,7 +109,10 @@ func validLabBinding(b LabBinding) bool {
 	if err != nil || (!ip.IsLoopback() && !ip.IsPrivate()) || u.Port() == "" {
 		return false
 	}
-	if !regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,47}$`).MatchString(b.CaseID) || b.InstallationID != "runnerd09-lab-"+b.CaseID || b.HostID != b.InstallationID || b.TenantID != b.InstallationID || b.PoolID != b.InstallationID || b.Repository == "" || b.BootID == "" || b.MachineUUID == "" || b.ServiceUID < 1 {
+	legacy := b.InstallationID == "runnerd09-lab-"+b.CaseID && b.HostID == b.InstallationID && b.TenantID == b.InstallationID && b.PoolID == b.InstallationID
+	uuid := regexp.MustCompile(`^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$`)
+	enrolled := uuid.MatchString(b.HostID) && uuid.MatchString(b.TenantID) && uuid.MatchString(b.PoolID) && strings.HasPrefix(b.InstallationID, "enrollment:") && uuid.MatchString(strings.TrimPrefix(b.InstallationID, "enrollment:"))
+	if !regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,47}$`).MatchString(b.CaseID) || (!legacy && !enrolled) || b.Repository == "" || b.BootID == "" || b.MachineUUID == "" || b.ServiceUID < 1 {
 		return false
 	}
 	for _, value := range []string{b.DaemonConfigSHA256, b.ObserverConfigSHA256, b.PolicySHA256, b.CapabilitiesSHA256} {

@@ -15,6 +15,7 @@ import (
 const MaxConfigBytes = 65536
 
 type Config struct {
+	SourceFile            string     `json:"-"`
 	ControlPlaneURL       string     `json:"controlPlaneUrl"`
 	StateDir              string     `json:"stateDir"`
 	RuntimeEndpoint       string     `json:"runtimeEndpoint"`
@@ -49,10 +50,12 @@ type Execution struct {
 // Kata is a dedicated-host opt-in; no default runtime or unqualified tuple is
 // inferred. The descriptor is independently signed, private and immutable.
 type Kata struct {
-	ObserverSocket    string `json:"observerSocket"`
-	ProfileFile       string `json:"profileFile"`
-	PublicKeyFile     string `json:"publicKeyFile"`
-	EvidenceDirectory string `json:"evidenceDirectory"`
+	QualificationBindingFile  string `json:"qualificationBindingFile,omitempty"`
+	QualificationAuthorityPin string `json:"qualificationAuthorityPin,omitempty"`
+	ObserverSocket            string `json:"observerSocket"`
+	ProfileFile               string `json:"profileFile"`
+	PublicKeyFile             string `json:"publicKeyFile"`
+	EvidenceDirectory         string `json:"evidenceDirectory"`
 }
 
 func Parse(data []byte) (Config, error) {
@@ -94,10 +97,24 @@ func Parse(data []byte) (Config, error) {
 			return Config{}, errors.New("broker mode requires an absolute clean socket path")
 		}
 		if x.Kata != nil {
+			q := x.Kata
+			if q.QualificationBindingFile != "" || q.QualificationAuthorityPin != "" {
+				if x.BrokerSocket == "" || !filepath.IsAbs(q.QualificationBindingFile) || filepath.Clean(q.QualificationBindingFile) != q.QualificationBindingFile || len(q.QualificationAuthorityPin) != 64 || strings.ContainsAny(q.QualificationAuthorityPin, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
+					return Config{}, errors.New("qualification requires broker mode, protected binding and authority pin")
+				}
+				for _, c := range q.QualificationAuthorityPin {
+					if !strings.ContainsRune("0123456789abcdef", c) {
+						return Config{}, errors.New("invalid qualification authority pin")
+					}
+				}
+			}
 			if x.BrokerSocket != "" && x.Kata.ObserverSocket != "" {
 				return Config{}, errors.New("broker mode forbids the legacy Kata observer")
 			}
 			paths := []string{x.Kata.ProfileFile, x.Kata.PublicKeyFile, x.Kata.EvidenceDirectory}
+			if x.Kata.QualificationBindingFile != "" {
+				paths = append(paths, x.Kata.QualificationBindingFile)
+			}
 			if x.BrokerSocket == "" {
 				paths = append(paths, x.Kata.ObserverSocket)
 			}

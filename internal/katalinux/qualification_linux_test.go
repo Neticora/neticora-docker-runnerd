@@ -34,6 +34,44 @@ func labFixture(t *testing.T) (LabEnvelope, ed25519.PrivateKey, []byte, string) 
 	return e, key, pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}), hex.EncodeToString(sum[:])
 }
 
+func TestLabEnvelopeBindsRealEnrolledCampaignWithoutProductionClaims(t *testing.T) {
+	e, key, pub, pin := labFixture(t)
+	e.Binding.HostID = "11111111-1111-4111-8111-111111111111"
+	e.Binding.TenantID = "22222222-2222-4222-8222-222222222222"
+	e.Binding.PoolID = "33333333-3333-4333-8333-333333333333"
+	e.Binding.InstallationID = "enrollment:44444444-4444-4444-8444-444444444444"
+	signed, err := SignLabEnvelope(e, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := profile(e.Manifest)
+	if err = ValidateLabPlan(signed, pub, pin, p.EvidenceDirectory, p.JournalDirectory, p.Base); err != nil {
+		t.Fatal(err)
+	}
+	for name, change := range map[string]func(*LabEnvelope){
+		"mixed legacy identity": func(v *LabEnvelope) { v.Binding.TenantID = "runnerd09-lab-unit" },
+		"unbound installation":  func(v *LabEnvelope) { v.Binding.InstallationID = "any-installation" },
+		"public control plane":  func(v *LabEnvelope) { v.Binding.ControlPlaneURL = "https://platform.example.com/api/v1/runner-hosts" },
+		"production claim":      func(v *LabEnvelope) { v.Manifest.Qualified = true },
+		"invented acceptance": func(v *LabEnvelope) {
+			v.Manifest.Acceptance = map[string]string{"original-01": "not-yet-run acceptance reference"}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			v := e
+			change(&v)
+			if _, err := SignLabEnvelope(v, key); err == nil {
+				t.Fatal("invalid campaign signed")
+			}
+		})
+	}
+	changed := signed
+	changed.Binding.HostID = "55555555-5555-4555-8555-555555555555"
+	if ValidateLabPlan(changed, pub, pin, p.EvidenceDirectory, p.JournalDirectory, p.Base) == nil {
+		t.Fatal("signed host binding substituted")
+	}
+}
+
 func TestLabAuthorityNeverManufacturesAcceptance(t *testing.T) {
 	e, key, pub, pin := labFixture(t)
 	e, err := SignLabEnvelope(e, key)

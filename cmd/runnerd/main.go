@@ -44,6 +44,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	c.SourceFile = *file
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if *kataCheck {

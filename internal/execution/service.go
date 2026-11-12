@@ -54,6 +54,9 @@ func (p *PolicyFile) Get() *standardlinux.Policy {
 }
 
 func Open(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drained func() bool) (*Controller, func(), error) {
+	if c.Execution != nil && c.Execution.Kata != nil && (c.Execution.Kata.QualificationBindingFile != "" || c.Execution.Kata.QualificationAuthorityPin != "") {
+		return openConfiguredQualification(c, store, policy, drained)
+	}
 	return openWithKataLoader(c, store, policy, drained, katalinux.Load)
 }
 
