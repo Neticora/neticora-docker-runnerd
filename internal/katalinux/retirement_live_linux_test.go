@@ -38,7 +38,7 @@ func TestRunnerd09LiveRetirementAcquisitionDomain(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
 	defer cancel()
-	for _, mode := range []string{"empty", "fd", "opath", "dir", "cwd", "root", "mmap", "namespace-hidden-bind"} {
+	for _, mode := range []string{"empty", "fd", "opath", "dir", "cwd", "root", "mmap", "namespace-hidden-bind", "acquire"} {
 		t.Run(mode, func(t *testing.T) {
 			p, id, plan, op, stamp := liveRetirementFixture(t, ctx)
 			if err := p.BeginRetirement(id, plan, op); err != nil {
@@ -64,6 +64,17 @@ func TestRunnerd09LiveRetirementAcquisitionDomain(t *testing.T) {
 				}
 				if p.RequireAcquisition(plan) == nil {
 					t.Fatal("quarantine granted reuse")
+				}
+				if mode == "acquire" {
+					before, err := os.ReadFile(target + ".progress")
+					if err != nil {
+						t.Fatal(err)
+					}
+					time.Sleep(25 * time.Millisecond)
+					after, err := os.ReadFile(target + ".progress")
+					if err != nil || string(before) != string(after) {
+						t.Fatal("kernel freezer did not stop concurrent acquisitions", err)
+					}
 				}
 				retireWorker()
 			}
@@ -172,7 +183,11 @@ func liveRetirementFixture(t *testing.T, ctx context.Context) (*Profile, string,
 func liveRetirementWorker(t *testing.T, ctx context.Context, p *Profile, plan dockerengine.Plan, mode, target string) func() {
 	t.Helper()
 	binary := filepath.Join(t.TempDir(), "worker")
-	if raw, err := exec.Command("cc", "-Wall", "-Wextra", "-Werror", "-pthread", "testdata/surviving_worker.c", "-o", binary).CombinedOutput(); err != nil {
+	source := "testdata/surviving_worker.c"
+	if mode == "acquire" {
+		source = "testdata/retirement_acquirer.c"
+	}
+	if raw, err := exec.Command("cc", "-Wall", "-Wextra", "-Werror", "-pthread", source, "-o", binary).CombinedOutput(); err != nil {
 		t.Fatalf("compile: %v %s", err, raw)
 	}
 	unit := "neticora-retirement-worker-" + plan.Name[4:20] + ".service"
