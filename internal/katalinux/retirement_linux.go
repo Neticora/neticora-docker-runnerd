@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
@@ -251,8 +252,8 @@ func (p *Profile) observeEmptyFrozen(ctx context.Context, plan dockerengine.Plan
 	if err != nil || be != nil || group.Phase != "ready" || group.BootID != boot || !sameHostCgroup(group, &expected) {
 		return ErrQualification
 	}
-	_, populated, err := inspectCgroup(*group)
-	if err != nil || populated {
+	stat, populated, err := inspectCgroup(*group)
+	if err != nil || populated || uint64(stat.Dev) != expected.Device || stat.Ino != expected.Inode {
 		return ErrQualification
 	}
 	root, err := os.OpenRoot(hostCgroupRoot + group.Path)
@@ -260,6 +261,14 @@ func (p *Profile) observeEmptyFrozen(ctx context.Context, plan dockerengine.Plan
 		return ErrQualification
 	}
 	defer root.Close()
+	info, err := root.Stat(".")
+	if err != nil {
+		return ErrQualification
+	}
+	opened, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || uint64(opened.Dev) != expected.Device || opened.Ino != expected.Inode || opened.Uid != 0 {
+		return ErrQualification
+	}
 	freeze, err := root.ReadFile("cgroup.freeze")
 	events, e := root.ReadFile("cgroup.events")
 	if err != nil || e != nil || strings.TrimSpace(string(freeze)) != "1" || len(events) > 4096 {

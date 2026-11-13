@@ -38,7 +38,7 @@ func TestRunnerd09LiveRetirementAcquisitionDomain(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
 	defer cancel()
-	for _, mode := range []string{"empty", "fd", "opath", "dir", "cwd", "root", "mmap", "namespace-hidden-bind", "acquire"} {
+	for _, mode := range []string{"empty", "fd", "opath", "dir", "cwd", "root", "mmap", "namespace-hidden-bind", "acquire", "fork-dir", "fd-pass"} {
 		t.Run(mode, func(t *testing.T) {
 			p, id, plan, op, stamp := liveRetirementFixture(t, ctx)
 			if err := p.BeginRetirement(id, plan, op); err != nil {
@@ -187,6 +187,9 @@ func liveRetirementWorker(t *testing.T, ctx context.Context, p *Profile, plan do
 	if mode == "acquire" {
 		source = "testdata/retirement_acquirer.c"
 	}
+	if mode == "fork-dir" || mode == "fd-pass" {
+		source = "testdata/retirement_transfer.c"
+	}
 	if raw, err := exec.Command("cc", "-Wall", "-Wextra", "-Werror", "-pthread", source, "-o", binary).CombinedOutput(); err != nil {
 		t.Fatalf("compile: %v %s", err, raw)
 	}
@@ -218,7 +221,7 @@ func liveRetirementWorker(t *testing.T, ctx context.Context, p *Profile, plan do
 		if _, err = fmt.Sscanf(line, "READY %d", &tid); err != nil {
 			t.Fatalf("worker readiness %q %s", line, stderr.String())
 		}
-		// The leader is gone while the permitted reference-holding thread survives.
+		// The reference holder survives the original leader (thread or fork).
 		stat, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(tid), "cgroup"))
 		if err != nil || !strings.Contains(string(stat), hostCgroupPath(plan.Name)+"/") {
 			t.Fatal("worker escaped original reference domain", err)
@@ -243,6 +246,52 @@ func liveRetirementWorker(t *testing.T, ctx context.Context, p *Profile, plan do
 	}
 	t.Cleanup(stop)
 	return stop
+}
+
+func TestRunnerd09LiveRetirementFenceIdentity(t *testing.T) {
+	if os.Getenv("RUNNERD09_LIVE_LAB") != "1" {
+		nativeUnavailable(t, "explicit disposable root/systemd retirement lab required")
+	}
+	if os.Geteuid() != 0 {
+		t.Fatal("root required")
+	}
+	if _, err := os.Stat("/etc/neticora-runnerd-lab"); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	p, id, plan, op, stamp := liveRetirementFixture(t, ctx)
+	if err := p.BeginRetirement(id, plan, op); err != nil {
+		t.Fatal(err)
+	}
+	r, err := p.FenceRetirement(ctx, id, plan, op, func() error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Agreeing durable records cannot substitute for the original kernel inode.
+	// Simulate a persisted claim which no longer names the live object. There is
+	// no real runtime mutation, block slot or disposal authority in this fixture.
+	r.Cgroup.Inode++
+	if err = p.persistCgroup(r.Cgroup); err != nil {
+		t.Fatal(err)
+	}
+	if err = p.persistRetirement(r); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = p.FenceRetirement(ctx, id, plan, op, func() error { return nil }); err == nil {
+		t.Fatal("matching durable records hid a foreign live cgroup inode")
+	}
+	r, err = p.retirementRecord(plan)
+	if err != nil || r.Phase != "FENCED" || !r.Quarantined {
+		t.Fatal("identity uncertainty lost original phase and quarantine", r, err)
+	}
+	if actual, err := sandboxStamp(p.Manifest.Storage.Runtime.Root, stamp.Root, id); err != nil || actual != stamp {
+		t.Fatal("foreign cgroup identity permitted metadata mutation", err)
+	}
+	if p.RequireAcquisition(plan) == nil {
+		t.Fatal("identity quarantine granted reuse")
+	}
+	t.Log("foreign live cgroup identity rejected; original metadata and quarantine retained; no disposal or capacity authority")
 }
 func liveDeniedAcquisitions(t *testing.T, target string) func() {
 	t.Helper()
