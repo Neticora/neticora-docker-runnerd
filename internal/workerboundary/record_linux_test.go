@@ -36,6 +36,9 @@ func TestPublicIdentityCannotDischargeLifetime(t *testing.T) {
 func TestAmbiguousIntentNeverAdoptsSocketOrReleases(t *testing.T) {
 	b := Binding{InstallationID: "fixture-installation", TenantID: "fixture-tenant", HostID: "fixture-host", SessionEpoch: "1", Endpoint: "fixture-endpoint", ExecutionID: "fixture-execution", Generation: "1", SpecHash: strings.Repeat("a", 64), Profile: "fixture-profile", Name: "nrd-" + strings.Repeat("b", 64)}
 	g := Registry{Directory: t.TempDir()}
+	if err := os.Chmod(g.Directory, 0700); err != nil {
+		t.Fatal(err)
+	}
 	r := Record{Version: RecordVersion, Binding: b, CreationOperationID: strings.Repeat("c", 64), Owner: strings.Repeat("d", 64), HelperSHA256: strings.Repeat("e", 64), PolicySHA256: strings.Repeat("f", 64), Phase: "INTENT", Quarantined: true}
 	if e := g.write(r); e != nil {
 		t.Fatal(e)

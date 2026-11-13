@@ -5,6 +5,7 @@ package katalinux
 import (
 	"context"
 	"crypto/sha256"
+	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -21,9 +22,25 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+var workerBoundaryCandidateCommit string // Set from committed HEAD at build.
+
+//go:embed testdata/boundary_probe.c
+var workerBoundaryProbeSource []byte
+
+// This nonprivileged stamp is checked before staging any native effects. Both
+// C sources are inside the executable; a failed build cannot reuse an old probe.
+func TestRunnerd09BoundaryBuildStamp(t *testing.T) {
+	helper := sha256.Sum256(workerboundary.NativeSource)
+	probe := sha256.Sum256(workerBoundaryProbeSource)
+	fmt.Printf("RUNNERD09_BOUNDARY_BUILD %s %x %x\n", workerBoundaryCandidateCommit, helper, probe)
+}
+
 func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 	if os.Getenv("RUNNERD09_LIVE_LAB") != "1" {
 		nativeUnavailable(t, "explicit dedicated namespace boundary lab required")
+	}
+	if len(workerBoundaryCandidateCommit) != 40 || workerBoundaryCandidateCommit != os.Getenv("RUNNERD09_EXPECTED_CANDIDATE") {
+		t.Fatal("native executable candidate differs from expected committed source")
 	}
 	if os.Geteuid() != 0 {
 		t.Fatal("root required")
@@ -45,7 +62,11 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 	}
 	keeper := filepath.Join(transient, "keeper")
 	probe := filepath.Join(transient, "probe")
-	for _, command := range [][]string{{"cc", "-Wall", "-Wextra", "-Werror", "-std=gnu11", source, "-o", keeper}, {"cc", "-Wall", "-Wextra", "-Werror", "-std=gnu11", "testdata/boundary_probe.c", "-o", probe}} {
+	probeSource := filepath.Join(transient, "probe.c")
+	if err = os.WriteFile(probeSource, workerBoundaryProbeSource, 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, command := range [][]string{{"cc", "-Wall", "-Wextra", "-Werror", "-std=gnu11", source, "-o", keeper}, {"cc", "-Wall", "-Wextra", "-Werror", "-std=gnu11", probeSource, "-o", probe}} {
 		raw, e := exec.CommandContext(ctx, command[0], command[1:]...).CombinedOutput()
 		if e != nil {
 			t.Fatalf("compile: %v %s", e, raw)
