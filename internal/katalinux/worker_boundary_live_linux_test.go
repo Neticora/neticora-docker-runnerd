@@ -72,6 +72,14 @@ func TestRunnerd09WorkerBoundaryCrashHelper(t *testing.T) {
 }
 
 func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
+	liveWorkerBoundary(t, false)
+}
+
+func TestRunnerd09LiveProtectedWorkerBoundary(t *testing.T) {
+	liveWorkerBoundary(t, true)
+}
+
+func liveWorkerBoundary(t *testing.T, protected bool) {
 	if os.Getenv("RUNNERD09_LIVE_LAB") != "1" {
 		nativeUnavailable(t, "explicit dedicated namespace boundary lab required")
 	}
@@ -89,6 +97,10 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 	p, _, plan, op, stamp := liveRetirementFixture(t, ctx)
 	transient, err := os.MkdirTemp("/run", "nr9-boundary-")
 	if err != nil {
+		t.Fatal(err)
+	}
+	scratch := filepath.Join(transient, "scratch")
+	if err = os.Mkdir(scratch, 0700); err != nil {
 		t.Fatal(err)
 	}
 	// Retained root-private fixture. No original resource index is changed.
@@ -113,6 +125,19 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 	// Native ABI fixture only. This broad filesystem profile deliberately does
 	// not qualify Kata's production write/IPC policy or a runtime integration.
 	policy := fmt.Sprintf("profile %s flags=(attach_disconnected,mediate_deleted) {\n file,\n network,\n capability,\n mount,\n umount,\n signal,\n /** ix,\n deny capability mac_admin,\n deny capability mac_override,\n ptrace (readby, tracedby) peer=unconfined,\n ptrace (read) peer=%s,\n}\n", label, label)
+	if protected {
+		probeBytes, e := os.ReadFile(probe)
+		if e != nil {
+			t.Fatal(e)
+		}
+		digest := sha256.Sum256(probeBytes)
+		candidate := workerboundary.PreflightPolicy{Domain: plan.Name, WorkRoot: transient, MetadataRoot: stamp.Root, StateRoot: p.EvidenceDirectory, Executables: []workerboundary.PinnedExecutable{{Path: probe, SHA256: hex.EncodeToString(digest[:])}}}
+		policyBytes, e := candidate.Render()
+		if e != nil {
+			t.Fatal("protected policy render failed", e)
+		}
+		label, policy = candidate.Name(), string(policyBytes)
+	}
 	if err = os.WriteFile(profile, []byte(policy), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -200,6 +225,22 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 	}
 	defer in.Close()
 	stdio := [3]*os.File{in, out, out}
+	if protected {
+		canary := filepath.Join(p.EvidenceDirectory, "worker-policy-canary")
+		if err = os.WriteFile(canary, []byte(plan.Name), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = os.Stat("/run/runnerd09-docker.sock"); err != nil {
+			t.Fatal("real dedicated Docker socket unavailable for negative control", err)
+		}
+		if err = id.Run(ctx, []string{probe, "confinement", canary, transient, stamp.Root, "/run/runnerd09-docker.sock", label}, stdio); err != nil {
+			t.Fatal("restrictive policy negative/positive control failed", err)
+		}
+		content, e := os.ReadFile(canary)
+		if e != nil || string(content) != plan.Name {
+			t.Fatal("worker altered protected broker-state canary", e)
+		}
+	}
 	if err = id.Run(ctx, []string{probe, "internal-transfer", filepath.Join(stamp.Root, strings.Repeat("a", 64))}, stdio); err != nil {
 		t.Fatal("verified internal FD transfer or sealed relay negative control failed", err)
 	}
@@ -260,13 +301,15 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 	if err = id.Run(ctx, []string{probe, "escape", ancestor}, stdio); err != nil {
 		t.Fatal(err)
 	}
-	if err = id.Run(ctx, []string{probe, "keeper-control", id.Socket}, stdio); err != nil {
-		t.Fatal(err)
+	if !protected {
+		if err = id.Run(ctx, []string{probe, "keeper-control", id.Socket}, stdio); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if id.Check() != nil {
 		t.Fatal("inner-root request changed original namespace-init ownership")
 	}
-	report := filepath.Join(transient, "holder")
+	report := filepath.Join(scratch, "holder")
 	if err = id.Run(ctx, []string{probe, "hold", filepath.Join(stamp.Root, strings.Repeat("a", 64)), report}, stdio); err != nil {
 		t.Fatal(err)
 	}
@@ -375,7 +418,7 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 	if id.Check() != nil || id.CheckRetired() == nil {
 		t.Fatal("migrated live worker escaped lifetime obligation")
 	}
-	if profileFile := os.Getenv("RUNNERD09_KATA_COMPONENT_PROFILE"); profileFile != "" {
+	if profileFile := os.Getenv("RUNNERD09_KATA_COMPONENT_PROFILE"); profileFile != "" && !protected {
 		raw, e := hostfs.ReadPrivate(profileFile, 262144)
 		var artifact struct {
 			Manifest Manifest `json:"manifest"`
@@ -418,7 +461,7 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 		// Shim start creates only its task-service endpoint. No TaskCreate RPC,
 		// Docker lifecycle request, guest bootstrap, block allocation or VM is used.
 		// A fresh containerd namespace/SID cannot adopt any original execution.
-		bundle := filepath.Join(transient, "abi-bundle")
+		bundle := filepath.Join(scratch, "abi-bundle")
 		if e = os.Mkdir(bundle, 0700); e != nil {
 			t.Fatal(e)
 		}
@@ -476,12 +519,12 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 	// Start bounded acquisition concurrently with an interrupted retirement.
 	// Every new helper inherits the namespace/filter; none is reconstructed from
 	// a post-hoc process scan as disposal authority.
-	acquiring := filepath.Join(transient, "acquiring")
+	acquiring := filepath.Join(scratch, "acquiring")
 	if err = id.Run(ctx, []string{probe, "acquire-loop", filepath.Join(stamp.Root, strings.Repeat("a", 64)), acquiring}, stdio); err != nil {
 		t.Fatal(err)
 	}
 	settleSandboxTest(t, func() error { _, e := os.Stat(acquiring); return e })
-	lossReport := filepath.Join(transient, "guardian-loss")
+	lossReport := filepath.Join(scratch, "guardian-loss")
 	if err = id.Run(ctx, []string{probe, "guardian-loss", outside, filepath.Join(stamp.Root, strings.Repeat("a", 64)), lossReport}, stdio); err != nil {
 		t.Fatal(err)
 	}

@@ -206,6 +206,37 @@ int main(int argc,char **argv){
         if(atomic_report(done,"GUARDIAN_LOSS_ENOSYS_NO_OUTWARD_RIGHTS\n"))_exit(85);
         close(fd);close(socket);_exit(0);
     }
+    if(!strcmp(argv[1],"confinement")) {
+        if(argc!=7)return 2;
+        char label[256]={0};int current=open("/proc/self/attr/current",O_RDONLY|O_CLOEXEC);
+        if(current<0||read(current,label,sizeof(label)-1)<1)return 86;
+        close(current);
+        char expected[256];snprintf(expected,sizeof(expected),"%s (enforce)",argv[6]);
+        if(strncmp(label,expected,strlen(expected)))return 87;
+        errno=0;int fd=open(argv[2],O_RDONLY|O_CLOEXEC);
+        if(fd!=-1||errno!=EACCES)return 88;
+        errno=0;fd=open(argv[2],O_WRONLY|O_TRUNC|O_CLOEXEC);
+        if(fd!=-1||errno!=EACCES)return 89;
+        errno=0;if(unlink(argv[2])!=-1||errno!=EACCES)return 90;
+        errno=0;if(chmod(argv[3],0777)!=-1||errno!=EACCES)return 91;
+        errno=0;if(chmod(argv[4],0777)!=-1||errno!=EACCES)return 92;
+        char positive[4096];snprintf(positive,sizeof(positive),"%s/scratch/owned",argv[3]);
+        fd=open(positive,O_CREAT|O_EXCL|O_WRONLY|O_CLOEXEC,0600);
+        if(fd<0||write(fd,"owned",5)!=5)return 93;
+        close(fd);
+        int sock=socket(AF_UNIX,SOCK_STREAM|SOCK_CLOEXEC,0);
+        struct sockaddr_un address={.sun_family=AF_UNIX};
+        if(sock<0||strlen(argv[5])>=sizeof(address.sun_path))return 94;
+        memcpy(address.sun_path,argv[5],strlen(argv[5])+1);
+        errno=0;if(connect(sock,(struct sockaddr *)&address,sizeof(address))!=-1||errno!=EACCES)return 95;
+        close(sock);
+        pid_t child=fork();if(child<0)return 96;
+        if(!child) {execl("/usr/bin/true","true",NULL);_exit(errno==EACCES?97:98);}
+        int status;while(waitpid(child,&status,0)<0)if(errno!=EINTR)return 99;
+        if(!WIFEXITED(status)||WEXITSTATUS(status)!=97)return 100;
+        printf("CONFINEMENT_ENFORCED_STATE_READ_WRITE_DELETE_GUARD_CHMOD_DOCKER_SOCKET_UNAPPROVED_EXEC_DENIED\n");
+        return 0;
+    }
     if(!strcmp(argv[1],"transfer")) {
         if(argc!=4)return 2;
         denied_transfer(argv[2],argv[3]);
