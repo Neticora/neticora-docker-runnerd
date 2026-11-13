@@ -257,6 +257,17 @@ func (g Registry) Create(ctx context.Context, b Binding, operation, helper, help
 
 func (g Registry) Load(b Binding) (Record, error) { return g.read(b) }
 
+// Quarantine preserves the exact original phase and ownership. It cannot mint
+// new execution authority or turn a failed guardian into disposal evidence.
+func (g Registry) Quarantine(b Binding) (Record, error) {
+	r, err := g.read(b)
+	if err != nil || r.Phase == "RETIRED" {
+		return r, ErrBoundary
+	}
+	r.Quarantined = true
+	return r, g.write(r)
+}
+
 // BeginRetirement is the durable ordering point before signaling the original
 // namespace. Keeping it explicit also permits recovery to observe an interrupted
 // kernel effect without replaying it or changing its authority.

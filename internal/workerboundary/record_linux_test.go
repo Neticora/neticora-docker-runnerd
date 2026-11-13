@@ -39,7 +39,7 @@ func TestAmbiguousIntentNeverAdoptsSocketOrReleases(t *testing.T) {
 	if err := os.Chmod(g.Directory, 0700); err != nil {
 		t.Fatal(err)
 	}
-	r := Record{Version: RecordVersion, Binding: b, CreationOperationID: strings.Repeat("c", 64), Owner: strings.Repeat("d", 64), HelperSHA256: strings.Repeat("e", 64), PolicySHA256: strings.Repeat("f", 64), Phase: "INTENT", Quarantined: true}
+	r := Record{Version: RecordVersion, Binding: b, CreationOperationID: strings.Repeat("c", 64), Owner: strings.Repeat("d", 64), HelperSHA256: strings.Repeat("e", 64), PolicySHA256: strings.Repeat("f", 64), Phase: "INTENT"}
 	if e := g.write(r); e != nil {
 		t.Fatal(e)
 	}
@@ -66,5 +66,15 @@ func TestAmbiguousIntentNeverAdoptsSocketOrReleases(t *testing.T) {
 	foreign.SpecHash = strings.Repeat("0", 64)
 	if _, e = g.Load(foreign); e == nil {
 		t.Fatal("substituted execution adopted lifetime ownership")
+	}
+	if _, e = g.Quarantine(b); e != nil {
+		t.Fatal(e)
+	}
+	held, e := g.Load(b)
+	if e != nil || !held.Quarantined || held.Phase != "INTENT" || !held.SameOriginal(r) {
+		t.Fatal("quarantine lost original phase or ownership", e)
+	}
+	if _, e = g.Retire(context.Background(), b, strings.Repeat("1", 64)); e == nil {
+		t.Fatal("quarantine invented retirement authority")
 	}
 }

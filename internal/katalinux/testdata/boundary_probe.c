@@ -59,6 +59,13 @@ static int pass_fd(int socket,int fd) {
     c->cmsg_level=SOL_SOCKET;c->cmsg_type=SCM_RIGHTS;c->cmsg_len=CMSG_LEN(sizeof(int));
     memcpy(CMSG_DATA(c),&fd,sizeof(fd));return sendmsg(socket,&message,0);
 }
+static int atomic_report(const char *path,const char *value) {
+    char temporary[4096];
+    if(snprintf(temporary,sizeof(temporary),"%s.pending",path)>=(int)sizeof(temporary))return -1;
+    FILE *out=fopen(temporary,"wx");if(!out)return -1;
+    if(fputs(value,out)==EOF||fflush(out)||fsync(fileno(out))||fclose(out)||rename(temporary,path))return -1;
+    return 0;
+}
 struct thread_args {int socket,fd,result;};
 static void *thread_transfer(void *opaque) {
     struct thread_args *a=opaque;
@@ -168,7 +175,36 @@ int main(int argc,char **argv){
         if(prctl(PR_GET_NO_NEW_PRIVS,0,0,0,0)!=1||prctl(PR_GET_SECCOMP,0,0,0,0)!=2)return 33;
         errno=0;if(syscall(SYS_finit_module,-1,"",0)!=-1||errno!=EPERM)return 34;
         errno=0;if(syscall(SYS_io_uring_enter,-1,0,0,0,NULL,0)!=-1||errno!=EPERM)return 35;
+        uid_t real,effective,saved;
+        if(getresuid(&real,&effective,&saved)||real||effective||saved)return 71;
+        errno=0;if(setuid(10003)!=-1||errno!=EPERM)return 72;
+        errno=0;if(setreuid(10003,10003)!=-1||errno!=EPERM)return 73;
+        errno=0;if(setresuid(10003,10003,10003)!=-1||errno!=EPERM)return 74;
+        errno=0;if(prctl(PR_SET_PTRACER,PR_SET_PTRACER_ANY,0,0,0)!=-1||errno!=EPERM)return 75;
+        errno=0;if(unshare(CLONE_NEWUSER)!=-1||errno!=EPERM)return 76;
+        pid_t next=syscall(SYS_clone,CLONE_NEWUSER|SIGCHLD,NULL,NULL,NULL,0);
+        if(!next)_exit(77);
+        if(next!=-1||errno!=EPERM)return 77;
+        printf("UID_TRIPLET_SEALED_AFTER_EXEC dumpable=%d\n",prctl(PR_GET_DUMPABLE,0,0,0,0));
         printf("PRIVILEGE_AND_FILTER_SEAL_VERIFIED\n");return 0;
+    }
+    if(!strcmp(argv[1],"guardian-loss")) {
+        if(argc!=5)return 2;
+        pid_t guardian=getppid(),child=fork();if(child<0)return 78;
+        if(child)return 0;
+        char value[128];snprintf(value,sizeof(value),"%ld %ld\n",(long)getpid(),(long)guardian);
+        if(atomic_report(argv[4],value))_exit(79);
+        char trigger[4096],done[4096];
+        if(snprintf(trigger,sizeof(trigger),"%s.trigger",argv[4])>=(int)sizeof(trigger)||
+           snprintf(done,sizeof(done),"%s.done",argv[4])>=(int)sizeof(done))_exit(80);
+        int i;for(i=0;i<10000&&access(trigger,F_OK);i++)usleep(1000);
+        if(i==10000)_exit(81);
+        int socket=connect_to(argv[2]),fd=open(argv[3],O_PATH|O_CLOEXEC);
+        if(fd<0)_exit(82);
+        errno=0;if(pass_fd(socket,fd)!=-1||errno!=ENOSYS)_exit(83);
+        if(write(socket,"plain-byte-stream",17)!=17)_exit(84);
+        if(atomic_report(done,"GUARDIAN_LOSS_ENOSYS_NO_OUTWARD_RIGHTS\n"))_exit(85);
+        close(fd);close(socket);_exit(0);
     }
     if(!strcmp(argv[1],"transfer")) {
         if(argc!=4)return 2;
@@ -184,6 +220,7 @@ int main(int argc,char **argv){
         int fd=open(argv[2],O_RDONLY|O_CLOEXEC);if(fd<0)return 3;
         errno=0;if(setns(fd,CLONE_NEWPID)!=-1 || errno!=EPERM)return 4;
         errno=0;if(setns(fd,0)!=-1 || errno!=EPERM)return 5;
+        errno=0;if(setns(fd,CLONE_NEWUSER)!=-1 || errno!=EPERM)return 5;
         errno=0;if(prctl(PR_SET_DUMPABLE,1)!=-1 || errno!=EPERM)return 6;
         close(fd);printf("PID_NAMESPACE_ESCAPE_DENIED\n");return 0;
     }

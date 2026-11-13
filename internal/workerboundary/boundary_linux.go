@@ -78,6 +78,9 @@ func Start(ctx context.Context, helper, socket, profile string, cgroupFD int) (I
 	if _, err := os.Lstat(socket); !errors.Is(err, os.ErrNotExist) {
 		return id, ErrBoundary
 	}
+	if _, err := os.Lstat(socket + ".fault"); !errors.Is(err, os.ErrNotExist) {
+		return id, ErrBoundary
+	}
 	cmd := exec.Command(helper, "init", socket, profile)
 	cmd.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "HOME=/"}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Cloneflags: unix.CLONE_NEWPID | unix.CLONE_NEWNS, UseCgroupFD: true, CgroupFD: cgroupFD}
@@ -133,6 +136,18 @@ func Start(ctx context.Context, helper, socket, profile string, cgroupFD int) (I
 }
 
 func (id Identity) Check() error {
+	if err := id.checkBirth(); err != nil {
+		return err
+	}
+	if _, err := os.Lstat(id.Socket + ".fault"); !errors.Is(err, os.ErrNotExist) {
+		return ErrBoundary
+	}
+	return nil
+}
+
+// The original birth remains addressable for authorized retirement even when
+// its trusted guardian has failed. Faults never grant new acquisition authority.
+func (id Identity) checkBirth() error {
 	if !id.verified {
 		return ErrBoundary
 	}
@@ -258,7 +273,7 @@ func (id Identity) Retire(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if id.Check() != nil {
+	if id.checkBirth() != nil {
 		return ErrBoundary
 	}
 	pidfd, err := unix.PidfdOpen(id.PID, 0)
@@ -266,7 +281,7 @@ func (id Identity) Retire(ctx context.Context) error {
 		return err
 	}
 	defer unix.Close(pidfd)
-	if id.Check() != nil {
+	if id.checkBirth() != nil {
 		return ErrBoundary
 	}
 	if err := ctx.Err(); err != nil {

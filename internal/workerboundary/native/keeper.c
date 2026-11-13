@@ -6,6 +6,7 @@
 #include <linux/filter.h>
 #include <linux/magic.h>
 #include <linux/seccomp.h>
+#include <limits.h>
 #include <sched.h>
 #include <poll.h>
 #include <signal.h>
@@ -40,6 +41,7 @@
 #define BOOTSTRAP_FD 198
 #define TRANSFER_BYTES (1024U*1024U)
 #define TRANSFER_FDS 64
+#define GUARDIANS 128
 
 static void reply(int socket,int status);
 
@@ -101,6 +103,21 @@ static int restrict_worker(void) {
         DENY(__NR_pidfd_getfd), DENY(__NR_bpf), DENY(__NR_perf_event_open),
         DENY(__NR_init_module), DENY(__NR_finit_module), DENY(__NR_delete_module),
         DENY(__NR_kexec_load), DENY(__NR_kexec_file_load),
+        /* Keep real/effective/saved UID zero across exec. Dumpability is reset
+         * by execve, so a pre-exec PR_SET_DUMPABLE is not an identity fence.
+         * Filesystem credentials remain available for virtiofsd; they cannot
+         * make a nonroot controller match this UID triplet for ptrace access. */
+        DENY(__NR_setuid), DENY(__NR_setreuid), DENY(__NR_setresuid),
+        BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, __NR_clone, 0, 3),
+        BPF_STMT(BPF_LD|BPF_W|BPF_ABS, offsetof(struct seccomp_data, args[0])),
+        BPF_JUMP(BPF_JMP|BPF_JSET|BPF_K, CLONE_NEWUSER, 0, 1),
+        BPF_STMT(BPF_RET|BPF_K, SECCOMP_RET_ERRNO|EPERM),
+        BPF_STMT(BPF_LD|BPF_W|BPF_ABS, offsetof(struct seccomp_data, nr)),
+        BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, __NR_unshare, 0, 3),
+        BPF_STMT(BPF_LD|BPF_W|BPF_ABS, offsetof(struct seccomp_data, args[0])),
+        BPF_JUMP(BPF_JMP|BPF_JSET|BPF_K, CLONE_NEWUSER, 0, 1),
+        BPF_STMT(BPF_RET|BPF_K, SECCOMP_RET_ERRNO|EPERM),
+        BPF_STMT(BPF_LD|BPF_W|BPF_ABS, offsetof(struct seccomp_data, nr)),
         /* clone3's pointer-based CLONE_INTO_CGROUP cannot bypass this policy.
          * ENOSYS permits libc's ordinary clone fallback, which inherits the ns. */
         BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, __NR_clone3, 0, 1),
@@ -110,14 +127,16 @@ static int restrict_worker(void) {
         BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, __NR_setns, 0, 6),
         BPF_STMT(BPF_LD|BPF_W|BPF_ABS, offsetof(struct seccomp_data, args[1])),
         BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, 0, 3, 0),
-        BPF_JUMP(BPF_JMP|BPF_JSET|BPF_K, CLONE_NEWPID, 2, 0),
+        BPF_JUMP(BPF_JMP|BPF_JSET|BPF_K, CLONE_NEWPID|CLONE_NEWUSER, 2, 0),
         BPF_STMT(BPF_RET|BPF_K, SECCOMP_RET_ALLOW),
         BPF_STMT(BPF_RET|BPF_K, SECCOMP_RET_ERRNO|EPERM),
         BPF_STMT(BPF_RET|BPF_K, SECCOMP_RET_ERRNO|EPERM),
         /* A worker cannot make a changed-credential process dumpable to an
          * external nonroot peer after creating a user namespace. */
-        BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, __NR_prctl, 0, 5),
+        BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, __NR_prctl, 0, 7),
         BPF_STMT(BPF_LD|BPF_W|BPF_ABS, offsetof(struct seccomp_data, args[0])),
+        BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, PR_SET_PTRACER, 0, 1),
+        BPF_STMT(BPF_RET|BPF_K, SECCOMP_RET_ERRNO|EPERM),
         BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, PR_SET_DUMPABLE, 0, 3),
         BPF_STMT(BPF_LD|BPF_W|BPF_ABS, offsetof(struct seccomp_data, args[1])),
         BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, 0, 1, 0),
@@ -270,8 +289,8 @@ static int receive_listener(int bootstrap) {
     int fd;memcpy(&fd,CMSG_DATA(c),sizeof(fd));return fd;
 }
 
-static void supervise_transfers(int listener,pid_t child,int client) {
-    int replied=0;
+static int supervise_transfers(int listener,pid_t child,int client) {
+    int replied=0,failed=1;
     for(;;) {
         if(!replied) {
             int status;pid_t ready=waitpid(child,&status,WNOHANG);
@@ -305,12 +324,14 @@ static void supervise_transfers(int listener,pid_t child,int client) {
                     replied=1;
                 }
             }
+            if(replied)failed=0;
             break;
         }
         if(event.revents&(POLLERR|POLLNVAL))break;
     }
     if(!replied)reply(client,ERROR_EXIT);
     close(listener);
+    return failed;
 }
 
 static void reply(int socket, int status) {
@@ -401,7 +422,22 @@ static void run_child(int client, char *request, size_t size, int *fds, size_t c
         close(bootstrap[0]);reply(client,ERROR_EXIT);return;
     }
     close(bootstrap[0]);
-    supervise_transfers(notifications,child,client);
+    if(supervise_transfers(notifications,child,client))_exit(ERROR_EXIT);
+}
+
+static void child_signal(int signal_number) { (void)signal_number; }
+
+static void persist_fault(const char *socket_path) {
+    char path[PATH_MAX],directory[PATH_MAX];
+    if(snprintf(path,sizeof(path),"%s.fault",socket_path)>=(int)sizeof(path))return;
+    int fd=open(path,O_WRONLY|O_CREAT|O_EXCL|O_CLOEXEC|O_NOFOLLOW,0600);
+    if(fd<0)return;
+    (void)all_write(fd,"guardian-lifetime-failed-v1\n",28);
+    (void)fsync(fd);close(fd);
+    memcpy(directory,socket_path,strlen(socket_path)+1);
+    char *last=strrchr(directory,'/');if(!last)return;
+    *last=0;fd=open(directory,O_RDONLY|O_DIRECTORY|O_CLOEXEC|O_NOFOLLOW);
+    if(fd>=0){(void)fsync(fd);close(fd);}
 }
 
 int main(int argc, char **argv) {
@@ -409,6 +445,10 @@ int main(int argc, char **argv) {
     const char *path = argv[2], *profile = argv[3];
     if (strlen(path) >= sizeof(((struct sockaddr_un *)0)->sun_path) || path[0] != '/') return ERROR_EXIT;
     umask(0077);
+    if(prctl(PR_SET_DUMPABLE,0,0,0,0))return ERROR_EXIT;
+    struct sigaction child_action={.sa_handler=child_signal,.sa_flags=SA_NOCLDSTOP};
+    sigemptyset(&child_action.sa_mask);
+    if(sigaction(SIGCHLD,&child_action,NULL))return ERROR_EXIT;
     if (mount(NULL, "/", NULL, MS_REC|MS_PRIVATE, NULL) ||
         umount2("/proc", MNT_DETACH) ||
         mount("proc", "/proc", "proc", MS_NOSUID|MS_NODEV|MS_NOEXEC, NULL)) return ERROR_EXIT;
@@ -419,8 +459,18 @@ int main(int argc, char **argv) {
     struct sockaddr_un address = {.sun_family=AF_UNIX};
     memcpy(address.sun_path, path, strlen(path)+1);
     if (bind(listener, (struct sockaddr *)&address, sizeof(address)) || chmod(path, 0600) || listen(listener, 8)) return ERROR_EXIT;
+    pid_t guardians[GUARDIANS]={0};int poisoned=0;
     for (;;) {
-        while (waitpid(-1, NULL, WNOHANG) > 0) {}
+        int status;pid_t ended;
+        while((ended=waitpid(-1,&status,WNOHANG))>0) {
+            for(int i=0;i<GUARDIANS;i++)if(guardians[i]==ended) {
+                guardians[i]=0;
+                if(!WIFEXITED(status)||WEXITSTATUS(status)) {
+                    poisoned=1;persist_fault(path);
+                }
+                break;
+            }
+        }
         int client = accept4(listener, NULL, NULL, SOCK_CLOEXEC);
         if (client < 0) { if (errno==EINTR) continue; return ERROR_EXIT; }
         struct ucred peer; socklen_t length = sizeof(peer);
@@ -454,13 +504,19 @@ int main(int argc, char **argv) {
              * peer checks and retirement control responsive while a trusted
              * request handler waits for that worker. Handlers remain inside
              * the same kernel lifetime boundary and never execute user code. */
+            int slot=0;while(slot<GUARDIANS&&guardians[slot])slot++;
+            if(poisoned||slot==GUARDIANS) {
+                reply(client,ERROR_EXIT);
+                for(size_t i=0;i<count;i++)close(fds[i]);
+                close(client);continue;
+            }
             pid_t handler = fork();
             if (handler < 0) reply(client, ERROR_EXIT);
             else if (!handler) {
                 run_child(client,request,(size_t)size,fds,count,listener,profile);
                 for (size_t i=0;i<count;i++) close(fds[i]);
                 close(client); close(listener); _exit(0);
-            }
+            }else guardians[slot]=handler;
         }
         for (size_t i=0;i<count;i++) close(fds[i]);
         close(client);

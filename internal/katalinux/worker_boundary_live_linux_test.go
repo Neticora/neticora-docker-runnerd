@@ -226,7 +226,7 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 	defer listener.Close()
 	received := make(chan error, 1)
 	go func() {
-		for i := 0; i < 2; i++ {
+		for i := 0; i < 3; i++ {
 			c, e := listener.AcceptUnix()
 			if e != nil {
 				received <- e
@@ -481,6 +481,91 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 	settleSandboxTest(t, func() error { _, e := os.Stat(acquiring); return e })
+	lossReport := filepath.Join(transient, "guardian-loss")
+	if err = id.Run(ctx, []string{probe, "guardian-loss", outside, filepath.Join(stamp.Root, strings.Repeat("a", 64)), lossReport}, stdio); err != nil {
+		t.Fatal(err)
+	}
+	var guardianNamespacePID string
+	settleSandboxTest(t, func() error {
+		b, e := os.ReadFile(lossReport)
+		fields := strings.Fields(string(b))
+		if e != nil || len(fields) != 2 || fields[1] == "1" {
+			return workerboundary.ErrBoundary
+		}
+		guardianNamespacePID = fields[1]
+		return nil
+	})
+	guardianPID := 0
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		pid, e := strconv.Atoi(entry.Name())
+		if e != nil {
+			continue
+		}
+		path := filepath.Join("/proc", entry.Name())
+		exe, e := os.Readlink(filepath.Join(path, "exe"))
+		if e != nil || exe != keeper {
+			continue
+		}
+		info, e := os.Stat(filepath.Join(path, "ns/pid"))
+		if e != nil {
+			continue
+		}
+		s := info.Sys().(*syscall.Stat_t)
+		if s.Ino != id.PIDNamespaceInode || uint64(s.Dev) != id.PIDNamespaceDevice {
+			continue
+		}
+		status, e := os.ReadFile(filepath.Join(path, "status"))
+		if e != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(status), "\n") {
+			f := strings.Fields(line)
+			if len(f) == 3 && f[0] == "NSpid:" && f[2] == guardianNamespacePID {
+				guardianPID = pid
+			}
+		}
+	}
+	if guardianPID < 2 || guardianPID == id.PID || id.Check() != nil {
+		t.Fatal("original fixture guardian unavailable")
+	}
+	guardianFD, err := unix.PidfdOpen(guardianPID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unix.Close(guardianFD)
+	// This exact trusted child cannot exit while its daemon still holds the
+	// filter; pin its task before injecting SIGKILL. Never signal by numeric PID.
+	if err = unix.PidfdSendSignal(guardianFD, unix.SIGKILL, nil, 0); err != nil {
+		t.Fatal(err)
+	}
+	settleSandboxTest(t, func() error { _, e := os.Stat(id.Socket + ".fault"); return e })
+	if id.Check() == nil || id.CheckRetired() == nil {
+		t.Fatal("lost guardian admitted acquisition or discharged live domain")
+	}
+	if _, err = registry.Quarantine(binding); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(lossReport+".trigger", []byte("test"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	settleSandboxTest(t, func() error {
+		b, e := os.ReadFile(lossReport + ".done")
+		if e != nil || string(b) != "GUARDIAN_LOSS_ENOSYS_NO_OUTWARD_RIGHTS\n" {
+			return workerboundary.ErrBoundary
+		}
+		return nil
+	})
+	if err = <-received; err != nil {
+		t.Fatal("guardian loss leaked outward rights", err)
+	}
+	if id.Run(ctx, []string{probe, "privileges", "check"}, stdio) == nil {
+		t.Fatal("failed guardian domain accepted replacement acquisition")
+	}
+	t.Log("Guardian SIGKILL: kernel ENOSYS, no outward rights, durable fault latch and original-owner quarantine; new acquisition denied")
 	crashRequest := workerBoundaryCrashRequest{Directory: registry.Directory, Binding: binding, Operation: removeOperation, Ready: filepath.Join(transient, "retirement-ready")}
 	requestBytes, err := json.Marshal(crashRequest)
 	if err != nil {
