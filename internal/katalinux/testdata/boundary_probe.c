@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
+#include <linux/capability.h>
 #include <sched.h>
 #include <signal.h>
 #include <stdint.h>
@@ -45,6 +46,23 @@ static void denied_transfer(const char *path,const char *target) {
 }
 int main(int argc,char **argv){
     if(argc<3)return 2;
+    if(!strcmp(argv[1],"privileges")) {
+        struct __user_cap_header_struct header={.version=_LINUX_CAPABILITY_VERSION_3,.pid=0};
+        struct __user_cap_data_struct caps[2];
+        if(syscall(SYS_capget,&header,caps))return 30;
+        const int denied[]={CAP_SYS_MODULE,CAP_SYS_RAWIO,CAP_SYS_PTRACE,CAP_SYS_BOOT,
+            CAP_MAC_ADMIN,CAP_MAC_OVERRIDE,CAP_SYSLOG,CAP_SETPCAP,CAP_BPF,CAP_PERFMON,
+            CAP_CHECKPOINT_RESTORE,CAP_AUDIT_CONTROL,CAP_AUDIT_WRITE,CAP_AUDIT_READ};
+        for(size_t i=0;i<sizeof(denied)/sizeof(denied[0]);i++) {
+            unsigned index=(unsigned)denied[i]/32,mask=1U<<((unsigned)denied[i]%32);
+            if((caps[index].permitted|caps[index].effective|caps[index].inheritable)&mask)return 31;
+            if(prctl(PR_CAPBSET_READ,denied[i])!=0)return 32;
+        }
+        if(prctl(PR_GET_NO_NEW_PRIVS,0,0,0,0)!=1||prctl(PR_GET_SECCOMP,0,0,0,0)!=2)return 33;
+        errno=0;if(syscall(SYS_finit_module,-1,"",0)!=-1||errno!=EPERM)return 34;
+        errno=0;if(syscall(SYS_io_uring_enter,-1,0,0,0,NULL,0)!=-1||errno!=EPERM)return 35;
+        printf("PRIVILEGE_AND_FILTER_SEAL_VERIFIED\n");return 0;
+    }
     if(!strcmp(argv[1],"transfer")) {
         if(argc!=4)return 2;
         denied_transfer(argv[2],argv[3]);

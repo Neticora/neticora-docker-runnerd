@@ -164,6 +164,21 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 	}
 	defer in.Close()
 	stdio := [3]*os.File{in, out, out}
+	if err = id.Run(ctx, []string{probe, "privileges", "check"}, stdio); err != nil {
+		t.Fatal(err)
+	}
+	// A privileged API/socket cannot be smuggled into standard input before the
+	// worker filter starts. Known ordinary stdio remains a positive control.
+	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unsafeInput := os.NewFile(uintptr(pair[0]), "fixture-privileged-socket")
+	defer unsafeInput.Close()
+	defer unix.Close(pair[1])
+	if err = id.Run(ctx, []string{probe, "privileges", "check"}, [3]*os.File{unsafeInput, out, out}); err == nil {
+		t.Fatal("socket in stdio bypassed worker entry controls")
+	}
 	outside := filepath.Join(transient, "outside.sock")
 	listener, err := net.ListenUnix("unixpacket", &net.UnixAddr{Name: outside, Net: "unixpacket"})
 	if err != nil {

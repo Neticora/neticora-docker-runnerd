@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -68,7 +69,10 @@ func stamp(path string) (uint64, uint64, error) {
 // MUST be durably recorded before Run is called. There is no adoption fallback.
 func Start(ctx context.Context, helper, socket, profile string, cgroupFD int) (Identity, error) {
 	var id Identity
-	if os.Geteuid() != 0 || !filepath.IsAbs(helper) || !filepath.IsAbs(socket) || filepath.Clean(socket) != socket || len(socket) > 100 || profile == "" || strings.ContainsAny(profile, " \n\x00") || cgroupFD < 0 {
+	if err := ctx.Err(); err != nil {
+		return id, err
+	}
+	if runtime.GOARCH != "amd64" || os.Geteuid() != 0 || !filepath.IsAbs(helper) || !filepath.IsAbs(socket) || filepath.Clean(socket) != socket || len(socket) > 100 || profile == "" || strings.ContainsAny(profile, " \n\x00") || cgroupFD < 0 {
 		return id, ErrBoundary
 	}
 	if _, err := os.Lstat(socket); !errors.Is(err, os.ErrNotExist) {
@@ -218,6 +222,8 @@ func (id Identity) Run(ctx context.Context, argv []string, stdio [3]*os.File) er
 		return err
 	}
 	defer c.Close()
+	stopCancellation := context.AfterFunc(ctx, func() { _ = c.Close() })
+	defer stopCancellation()
 	descriptors := make([]int, 3)
 	for i, f := range stdio {
 		if f == nil {
@@ -245,8 +251,14 @@ func (id Identity) Run(ctx context.Context, argv []string, stdio [3]*os.File) er
 // every descendant regardless of its cgroup; pidfd readiness is the barrier.
 // A missing or changed original identity cannot mint positive retirement proof.
 func (id Identity) Retire(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if id.Check() != nil {
 		return ErrBoundary
+	}
+	if err = ctx.Err(); err != nil {
+		return err
 	}
 	pidfd, err := unix.PidfdOpen(id.PID, 0)
 	if err != nil {

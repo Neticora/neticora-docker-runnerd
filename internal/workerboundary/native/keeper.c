@@ -2,7 +2,9 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/audit.h>
+#include <linux/capability.h>
 #include <linux/filter.h>
+#include <linux/magic.h>
 #include <linux/seccomp.h>
 #include <sched.h>
 #include <signal.h>
@@ -18,6 +20,8 @@
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/un.h>
+#include <sys/sysmacros.h>
+#include <sys/vfs.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -54,6 +58,25 @@ static int restrict_worker(void) {
 #if !defined(__x86_64__)
 #error qualified architecture is amd64 only
 #endif
+    /* Namespace/mount/network privileges needed by the runtime are qualified
+     * separately. Workers must never gain kernel-module, policy-administration
+     * or cross-process-injection authority that could remove this boundary. */
+    const int drop[] = {CAP_SYS_MODULE, CAP_SYS_RAWIO, CAP_SYS_PTRACE, CAP_SYS_BOOT,
+        CAP_MAC_ADMIN, CAP_MAC_OVERRIDE, CAP_SYSLOG, CAP_SETPCAP,
+        CAP_BPF, CAP_PERFMON, CAP_CHECKPOINT_RESTORE,
+        CAP_AUDIT_CONTROL, CAP_AUDIT_WRITE, CAP_AUDIT_READ};
+    struct __user_cap_header_struct header = {.version = _LINUX_CAPABILITY_VERSION_3, .pid = 0};
+    struct __user_cap_data_struct caps[2];
+    if (syscall(SYS_capget, &header, caps) ||
+        prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0)) return -1;
+    for (size_t i=0;i<sizeof(drop)/sizeof(drop[0]);i++) {
+        if (prctl(PR_CAPBSET_DROP, drop[i], 0, 0, 0)) return -1;
+        unsigned index=(unsigned)drop[i]/32, bit=1U<<((unsigned)drop[i]%32);
+        caps[index].effective &= ~bit;
+        caps[index].permitted &= ~bit;
+        caps[index].inheritable &= ~bit;
+    }
+    if (syscall(SYS_capset, &header, caps)) return -1;
     struct sock_filter filter[] = {
         BPF_STMT(BPF_LD|BPF_W|BPF_ABS, offsetof(struct seccomp_data, arch)),
         BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, AUDIT_ARCH_X86_64, 1, 0),
@@ -65,6 +88,8 @@ static int restrict_worker(void) {
         DENY(__NR_io_uring_setup), DENY(__NR_io_uring_register), DENY(__NR_io_uring_enter),
         DENY(__NR_ptrace), DENY(__NR_process_vm_readv), DENY(__NR_process_vm_writev),
         DENY(__NR_pidfd_getfd), DENY(__NR_bpf), DENY(__NR_perf_event_open),
+        DENY(__NR_init_module), DENY(__NR_finit_module), DENY(__NR_delete_module),
+        DENY(__NR_kexec_load), DENY(__NR_kexec_file_load),
         /* clone3's pointer-based CLONE_INTO_CGROUP cannot bypass this policy.
          * ENOSYS permits libc's ordinary clone fallback, which inherits the ns. */
         BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, __NR_clone3, 0, 1),
@@ -114,11 +139,27 @@ static int enter_profile(const char *profile) {
     return result;
 }
 
+static int safe_stdio(int fd) {
+    struct stat s; struct statfs fs;
+    int flags = fcntl(fd,F_GETFL);
+    if (flags < 0 || flags&O_PATH || fstat(fd,&s) || fstatfs(fd,&fs)) return 0;
+    if (S_ISCHR(s.st_mode)) return major(s.st_rdev)==1 && minor(s.st_rdev)==3;
+    if (!S_ISREG(s.st_mode) && !S_ISFIFO(s.st_mode)) return 0;
+    switch ((unsigned long)fs.f_type) {
+    case PROC_SUPER_MAGIC: case SYSFS_MAGIC: case CGROUP_SUPER_MAGIC:
+    case CGROUP2_SUPER_MAGIC: case BPF_FS_MAGIC: case NSFS_MAGIC:
+    case SECURITYFS_MAGIC: case DEBUGFS_MAGIC: case TRACEFS_MAGIC:
+        return 0;
+    default: return 1;
+    }
+}
+
 static void run_child(int client, char *request, size_t size, int *fds, size_t count,
                       int listener, const char *profile) {
     if (count != 3 || size < 6 || memcmp(request, "RUN\0", 4) || request[size-1]) {
         reply(client, ERROR_EXIT); return;
     }
+    for (size_t i=0;i<count;i++) if (!safe_stdio(fds[i])) { reply(client,ERROR_EXIT); return; }
     char *argv[ARGS]; size_t argc = 0, offset = 4;
     while (offset < size && argc < ARGS-1) {
         size_t length = strnlen(request+offset, size-offset);
