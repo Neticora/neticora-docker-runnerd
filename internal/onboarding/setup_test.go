@@ -16,6 +16,7 @@ import (
 
 	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
 	"github.com/Neticora/neticora-docker-runnerd/internal/execution"
+	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
 	"github.com/Neticora/neticora-docker-runnerd/transport"
 )
 
@@ -60,6 +61,19 @@ func (p *platform) Installation(context.Context, string) (transport.Installation
 func fixture(t *testing.T) (Options, *platform) {
 	t.Helper()
 	dir := t.TempDir()
+	if e := os.Chmod(dir, 0700); e != nil {
+		t.Fatal(e)
+	}
+	if e := hostfs.CheckAncestors(dir); e != nil {
+		for path := dir; ; path = filepath.Dir(path) {
+			info, _ := os.Stat(path)
+			t.Logf("ancestor %s: %v", path, info)
+			if path == "/" {
+				break
+			}
+		}
+		t.Fatal(e)
+	}
 	for _, d := range []string{"setup", "state", "etc"} {
 		if e := os.Mkdir(filepath.Join(dir, d), 0700); e != nil {
 			t.Fatal(e)
