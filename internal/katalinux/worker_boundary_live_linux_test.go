@@ -312,6 +312,25 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 			t.Fatal("protected historical Kata tuple unavailable", e)
 		}
 		m := artifact.Manifest
+		if digestFile(m.DockerConfig, m.Files[m.DockerConfig]) != nil {
+			t.Fatal("dedicated daemon configuration differs from pinned tuple")
+		}
+		configBytes, e := os.ReadFile(m.DockerConfig)
+		var daemonConfig struct {
+			ExecRoot   string `json:"exec-root"`
+			Containerd string `json:"containerd"`
+		}
+		if e != nil || json.Unmarshal(configBytes, &daemonConfig) != nil {
+			t.Fatal("protected dedicated daemon addresses unavailable", e)
+		}
+		address := daemonConfig.Containerd
+		if address == "" && filepath.IsAbs(daemonConfig.ExecRoot) {
+			address = filepath.Join(daemonConfig.ExecRoot, "containerd/containerd.sock")
+		}
+		addressInfo, e := os.Stat(address)
+		if e != nil || !filepath.IsAbs(address) || addressInfo.Mode()&os.ModeSocket == 0 {
+			t.Fatal("dedicated containerd socket unavailable", e)
+		}
 		for _, binary := range []string{m.ShimBinary, m.QEMUBinary, "/opt/kata/libexec/virtiofsd"} {
 			if digestFile(binary, m.Files[binary]) != nil {
 				t.Fatal("actual Kata binary differs from pinned historical tuple")
@@ -336,7 +355,7 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 		}
 		sidHash := sha256.Sum256([]byte(plan.Name + " native shim ABI"))
 		sid := hex.EncodeToString(sidHash[:])
-		args := []string{"/usr/bin/env", "-C", bundle, "KATA_CONF_FILE=" + m.RuntimeConfig, m.ShimBinary, "-namespace", "neticora-f5a2-native", "-address", "/run/runnerd09-docker/containerd/containerd.sock", "-id", sid, "start"}
+		args := []string{"/usr/bin/env", "-C", bundle, "KATA_CONF_FILE=" + m.RuntimeConfig, m.ShimBinary, "-namespace", "neticora-f5a2-native", "-address", address, "-id", sid, "start"}
 		if e = id.Run(ctx, args, stdio); e != nil {
 			t.Fatal("filtered real shim start ABI failed; no runtime qualification", e)
 		}
