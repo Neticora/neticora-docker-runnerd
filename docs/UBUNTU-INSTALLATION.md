@@ -131,6 +131,12 @@ If it is running, replacement/removal is rejected. Explicitly drain using
 the service before installing a compatible package. Do not stop Docker or remove
 original workloads. Restart only through the existing supported recovery path.
 
+The service-state check also rejects startup/shutdown/reload transitions, a live
+main/control process and failed or incomplete systemd queries. Restore systemd
+connectivity and establish a stopped service before retrying; a query error is
+never evidence that replacement is safe. Unattended updates must not stop the
+daemon automatically to bypass this check.
+
 Reinstall, remove and even purge preserve the service account, original identity,
 configuration, SQLite journal, cleanup records and recovery evidence. Package purge
 is not decommissioning authorization. Destructive decommissioning requires separate

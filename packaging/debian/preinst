@@ -6,10 +6,8 @@ set -eu
 }
 # Preserve running executables/workloads during replacement. An operator must
 # explicitly drain and stop the daemon using the qualified recovery procedure.
-if [ -d /run/systemd/system ] && systemctl is-active --quiet neticora-runnerd.service; then
-  echo 'Drain and stop Runnerd explicitly before package replacement; workloads and state must be preserved.' >&2
-  exit 1
-fi
+# RUNNERD_SERVICE_GUARD
+if [ -d /run/systemd/system ]; then runnerd_require_stopped; fi
 if getent passwd neticora-runnerd >/dev/null; then
   [ "$(id -u neticora-runnerd)" != 0 ] || exit 1
   [ "$(id -G neticora-runnerd | wc -w)" = 1 ] || { echo 'Unexpected supplementary service groups.' >&2; exit 1; }

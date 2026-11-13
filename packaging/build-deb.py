@@ -30,6 +30,16 @@ def write_json(path, data):
     path.write_text(json.dumps(data, indent=2, sort_keys=True) + '\n')
 
 
+def maintainer_script(source, name):
+    content = (source / 'packaging/debian' / name).read_text()
+    if name in ('preinst', 'prerm'):
+        marker = '# RUNNERD_SERVICE_GUARD\n'
+        if content.count(marker) != 1:
+            raise ValueError('Expected one package service guard marker')
+        content = content.replace(marker, (source / 'packaging/debian/service-state.sh').read_text() + '\n')
+    return content
+
+
 def build():
     # Never inherit an operator's permissive umask into root-owned package files.
     os.umask(0o022)
@@ -100,7 +110,7 @@ def build():
         metadata.mkdir()
         (metadata / 'control').write_text(f'Package: neticora-runnerd\nVersion: {version}\nArchitecture: amd64\nMaintainer: Neticora Engineering <engineering@neticora.com>\nDepends: systemd (>= 255), passwd\nSection: admin\nPriority: optional\nDescription: Neticora Linux Standard runner (local engineering)\n Customer-provisioned Docker required. No production signing or admission.\n')
         for name in ('preinst', 'postinst', 'prerm', 'postrm'):
-            shutil.copyfile(source / 'packaging/debian' / name, metadata / name)
+            (metadata / name).write_text(maintainer_script(source, name))
             (metadata / name).chmod(0o755)
         hashes = []
         for path in sorted(stage.rglob('*')):
