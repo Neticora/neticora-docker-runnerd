@@ -26,6 +26,11 @@ func qualificationCheckpoint(file string) func(string, ExecutionGrantRequest) er
 		} else if !os.IsNotExist(err) {
 			return err
 		}
+		if _, err := os.Lstat(file); os.IsNotExist(err) {
+			return nil
+		} else if err != nil {
+			return err
+		}
 		raw, err := hostfs.ReadPrivate(file, 4096)
 		if os.IsNotExist(err) {
 			return nil

@@ -202,6 +202,13 @@ func (e *physicalExecutor) State(ctx context.Context, q Lookup, reconcile bool) 
 				if errors.Is(inspectErr, dockerengine.ErrAbsent) && e.unstartedAbsence(ctx, state, p) == nil {
 					phase = "NEVER_CREATED"
 				}
+			case "PrepareImage":
+				observer, ok := e.runtime.(interface {
+					ObservePreparedImage(context.Context, dockerengine.Plan) error
+				})
+				if ok && errors.Is(inspectErr, dockerengine.ErrAbsent) && state.ResourceID == "" && original.ResourceID == "" && e.originalConsumption(state, original) == nil && e.verifyImage(ctx, state.Spec) == nil && observer.ObservePreparedImage(ctx, p) == nil && e.endpoint(ctx) == nil {
+					phase = "ALLOCATED"
+				}
 			case "CreateExecution":
 				if inspectErr == nil {
 					if object.State == "prepared" {

@@ -230,11 +230,19 @@ func (e *Engine) PrepareImageAuthorized(ctx context.Context, p Plan, authorize f
 	return e.prepareImage(ctx, p, authorize)
 }
 
+// ObservePreparedImage only inspects the original immutable image and network.
+// A missing image stays missing: no pull, replacement or new authority is issued.
+func (e *Engine) ObservePreparedImage(ctx context.Context, p Plan) error {
+	return e.inspectOrPrepareImage(ctx, p, false, nil)
+}
 func (e *Engine) prepareImage(ctx context.Context, p Plan, authorize func() error) error {
-	if p.RecoveryOnly {
+	return e.inspectOrPrepareImage(ctx, p, true, authorize)
+}
+func (e *Engine) inspectOrPrepareImage(ctx context.Context, p Plan, allowPull bool, authorize func() error) error {
+	if allowPull && p.RecoveryOnly {
 		return ErrRecoveryPlan
 	}
-	if e.readOnly {
+	if allowPull && e.readOnly {
 		return ErrRecoveryApprovalRequired
 	}
 	if err := e.check(ctx); err != nil {
@@ -249,6 +257,9 @@ func (e *Engine) prepareImage(ctx context.Context, p Plan, authorize func() erro
 	}
 	i, err := e.api.ImageInspect(ctx, p.Config.Image)
 	if err != nil && errdefs.IsNotFound(err) {
+		if !allowPull {
+			return ErrAbsent
+		}
 		if authorize != nil {
 			if err = authorize(); err != nil {
 				return err

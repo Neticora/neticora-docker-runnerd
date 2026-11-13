@@ -36,30 +36,10 @@ func (e *physicalExecutor) ResumeDisposal(ctx context.Context, q Lookup) error {
 	if original.ExpectedRevision != state.Revision || state.Completed[original.OperationID] {
 		return ErrQuarantined
 	}
-	receipt, err := l.read(original.OperationID)
-	if err != nil {
+	if err = e.originalConsumption(state, original); err != nil {
 		return err
 	}
-	payload, err := (ExecutionGrant{Version: ExecutionGrantVersion, Operation: original.Operation, OperationID: original.OperationID, ExpectedRevision: original.ExpectedRevision, ExpectedState: executionState(original.Operation), ResourceID: original.ResourceID, Binding: state.Binding, Spec: state.Spec}).IntentPayload()
-	if err != nil {
-		return err
-	}
-	sum := sha256.Sum256(payload)
-	if receipt.Operation != original.Operation || receipt.Binding != state.Binding || receipt.PayloadHash != hex.EncodeToString(sum[:]) {
-		return ErrQuarantined
-	}
-	// Read the original challenge as well: a historical receipt alone must not
-	// promote a foundation-only intent into physical authority.
-	root, err := l.records("challenges")
-	if err != nil {
-		return err
-	}
-	var challenge Challenge
-	err = readRecord(root, original.OperationID, &challenge)
-	root.Close()
-	if err != nil || challenge.Version != challengeVersion || challenge.State != "CONSUMED" || challenge.Request != original || challenge.Binding == nil || *challenge.Binding != state.Binding || !digest(challenge.GrantHash) {
-		return ErrQuarantined
-	}
+
 	if original.Operation == "RemoveExecution" {
 		if original.ResourceID != state.ResourceID || !digest(state.ResourceID) {
 			return ErrQuarantined
@@ -108,10 +88,41 @@ func (e *physicalExecutor) ResumeDisposal(ctx context.Context, q Lookup) error {
 	state.Completed[original.OperationID] = true
 	state.Pending = ""
 	state.Revision = strconv.FormatUint(revision+1, 10)
-	root, err = l.records("resources")
+	root, err := l.records("resources")
 	if err != nil {
 		return err
 	}
 	defer root.Close()
 	return l.writeRecord(root, recordID(state.Binding), state)
+}
+
+// A consumed original grant/commit and durable receipt are prerequisites for
+// reconciliation. Current observations cannot promote a foundation-only intent.
+func (e *physicalExecutor) originalConsumption(state physicalRecord, original ExecutionGrantRequest) error {
+	l := e.ledger
+	receipt, err := l.read(original.OperationID)
+	if err != nil {
+		return err
+	}
+	payload, err := (ExecutionGrant{Version: ExecutionGrantVersion, Operation: original.Operation, OperationID: original.OperationID, ExpectedRevision: original.ExpectedRevision, ExpectedState: executionState(original.Operation), ResourceID: original.ResourceID, Binding: state.Binding, Spec: state.Spec}).IntentPayload()
+	if err != nil {
+		return err
+	}
+	sum := sha256.Sum256(payload)
+	if receipt.Operation != original.Operation || receipt.Binding != state.Binding || receipt.PayloadHash != hex.EncodeToString(sum[:]) {
+		return ErrQuarantined
+	}
+	// Read the original challenge as well: a historical receipt alone must not
+	// promote a foundation-only intent into physical authority.
+	root, err := l.records("challenges")
+	if err != nil {
+		return err
+	}
+	var challenge Challenge
+	err = readRecord(root, original.OperationID, &challenge)
+	root.Close()
+	if err != nil || challenge.Version != challengeVersion || challenge.State != "CONSUMED" || challenge.Request != original || challenge.Binding == nil || *challenge.Binding != state.Binding || !digest(challenge.GrantHash) {
+		return ErrQuarantined
+	}
+	return nil
 }

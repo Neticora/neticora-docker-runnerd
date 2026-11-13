@@ -226,3 +226,43 @@ func TestEndpointChangeInvalidatesContinuity(t *testing.T) {
 		t.Fatal("replacement retained old binding", err)
 	}
 }
+
+func TestImagePreparationRecoveryCannotPullOrCreate(t *testing.T) {
+	for _, mode := range []string{"present", "absent", "substituted"} {
+		t.Run(mode, func(t *testing.T) {
+			var plan Plan
+			mutations := 0
+			e, p, _, _, _, _ := fakeEngineWithResponder(t, nil, func(w http.ResponseWriter, r *http.Request, path string) bool {
+				if r.Method != http.MethodGet && r.Method != http.MethodHead {
+					mutations++
+					http.Error(w, "mutation forbidden", 500)
+					return true
+				}
+				if strings.HasPrefix(path, "/networks/") {
+					_ = json.NewEncoder(w).Encode(map[string]any{"Id": "approved-network", "Driver": "bridge", "Scope": "local"})
+					return true
+				}
+				if strings.HasPrefix(path, "/images/") {
+					if mode == "absent" {
+						http.Error(w, `{"message":"absent"}`, 404)
+						return true
+					}
+					digest := plan.Config.Image
+					if mode == "substituted" {
+						digest = "other@sha256:" + strings.Repeat("c", 64)
+					}
+					_ = json.NewEncoder(w).Encode(map[string]any{"Id": "sha256:" + strings.Repeat("b", 64), "Os": "linux", "Architecture": "amd64", "RepoDigests": []string{digest}, "Config": map[string]any{"Labels": plan.Config.Labels}})
+					return true
+				}
+				return false
+			})
+			p.HostConfig.NetworkMode = "approved-network"
+			p.Config.Labels[LabelPrefix+"template"] = "approved-template"
+			plan = p
+			err := e.ObservePreparedImage(t.Context(), p)
+			if (mode == "present") != (err == nil) || mutations != 0 {
+				t.Fatalf("unsafe observation: mode=%s error=%v mutations=%d", mode, err, mutations)
+			}
+		})
+	}
+}
