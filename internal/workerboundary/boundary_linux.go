@@ -252,12 +252,12 @@ func (id Identity) Run(ctx context.Context, argv []string, stdio [3]*os.File) er
 	}
 	n, _, err := c.WriteMsgUnix(payload, unix.UnixRights(descriptors...), nil)
 	if err != nil || n != len(payload) {
-		return ErrBoundary
+		return fmt.Errorf("%w: request write bytes=%d expected=%d error=%v", ErrBoundary, n, len(payload), err)
 	}
 	var result [4]byte
 	n, err = c.Read(result[:])
 	if err != nil || n != 4 {
-		return ErrBoundary
+		return fmt.Errorf("%w: reply read bytes=%d error=%v", ErrBoundary, n, err)
 	}
 	status := int32(binary.LittleEndian.Uint32(result[:]))
 	if status != 0 {

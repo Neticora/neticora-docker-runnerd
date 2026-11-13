@@ -240,6 +240,10 @@ func liveWorkerBoundary(t *testing.T, protected bool) {
 		if err = os.WriteFile(canary, []byte(plan.Name), 0600); err != nil {
 			t.Fatal(err)
 		}
+		canaryInfo, e := os.Stat(canary)
+		if e != nil || uint64(canaryInfo.Sys().(*syscall.Stat_t).Dev) != stamp.Device {
+			t.Fatal("hardlink negative control requires same filesystem", e)
+		}
 		if _, err = os.Stat("/run/runnerd09-docker.sock"); err != nil {
 			t.Fatal("real dedicated Docker socket unavailable for negative control", err)
 		}
@@ -325,6 +329,30 @@ func liveWorkerBoundary(t *testing.T, protected bool) {
 	if id.Check() != nil {
 		t.Fatal("inner-root request changed original namespace-init ownership")
 	}
+	// Losing a client response must not SIGPIPE-kill the original guardian.
+	// Wait for the original holder before disconnecting; never replay this RUN.
+	lostReport := filepath.Join(scratch, "lost-response")
+	lostCtx, stopLost := context.WithCancel(ctx)
+	defer stopLost()
+	lostResult := make(chan error, 1)
+	go func() {
+		lostResult <- id.Run(lostCtx, []string{probe, "reply-loss", filepath.Join(stamp.Root, strings.Repeat("a", 64)), lostReport}, stdio)
+	}()
+	settleSandboxTest(t, func() error { _, e := os.Stat(lostReport); return e })
+	stopLost()
+	if err = <-lostResult; err == nil {
+		t.Fatal("lost-response request unexpectedly completed before trigger")
+	}
+	if err = os.WriteFile(lostReport+".trigger", []byte("test"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 5; i++ {
+		if err = id.Run(ctx, []string{probe, "privileges", "check"}, stdio); err != nil {
+			t.Fatal("client disconnect poisoned original namespace", err)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Log("Lost client response retained original namespace/holder without RUN replay or false guardian fault")
 	report := filepath.Join(scratch, "holder")
 	if err = id.Run(ctx, []string{probe, "hold", filepath.Join(stamp.Root, strings.Repeat("a", 64)), report}, stdio); err != nil {
 		t.Fatal(err)

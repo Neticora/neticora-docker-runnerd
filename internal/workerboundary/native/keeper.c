@@ -56,6 +56,12 @@ static int all_write(int fd, const void *data, size_t size) {
     return 0;
 }
 
+static int packet_write(int fd,const void *data,size_t size) {
+    ssize_t n;
+    do{n=send(fd,data,size,MSG_NOSIGNAL);}while(n<0&&errno==EINTR);
+    return n==(ssize_t)size?0:-1;
+}
+
 #define DENY(n) BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, (n), 0, 1), \
                 BPF_STMT(BPF_RET|BPF_K, SECCOMP_RET_ERRNO|EPERM)
 
@@ -283,7 +289,12 @@ done:
 static int receive_listener(int bootstrap) {
     char byte=0,control[CMSG_SPACE(sizeof(int))]={0};struct iovec data={.iov_base=&byte,.iov_len=1};
     struct msghdr message={.msg_iov=&data,.msg_iovlen=1,.msg_control=control,.msg_controllen=sizeof(control)};
-    if(recvmsg(bootstrap,&message,MSG_CMSG_CLOEXEC)!=1||byte!='L'||message.msg_flags&(MSG_TRUNC|MSG_CTRUNC))return -1;
+    ssize_t received;
+    do {
+        message.msg_controllen=sizeof(control);message.msg_flags=0;
+        received=recvmsg(bootstrap,&message,MSG_CMSG_CLOEXEC);
+    }while(received<0&&errno==EINTR);
+    if(received!=1||byte!='L'||message.msg_flags&(MSG_TRUNC|MSG_CTRUNC))return -1;
     struct cmsghdr *c=CMSG_FIRSTHDR(&message);
     if(!c||c->cmsg_level!=SOL_SOCKET||c->cmsg_type!=SCM_RIGHTS||c->cmsg_len!=CMSG_LEN(sizeof(int)))return -1;
     int fd;memcpy(&fd,CMSG_DATA(c),sizeof(fd));return fd;
@@ -297,7 +308,7 @@ static int supervise_transfers(int listener,pid_t child,int client) {
             if(ready==child) {
                 reply(client,WIFEXITED(status)?WEXITSTATUS(status):128+WTERMSIG(status));
                 close(client);replied=1;
-            }else if(ready<0)break;
+            }else if(ready<0){if(errno==EINTR)continue;break;}
         }
         struct pollfd event={.fd=listener,.events=POLLIN};
         int n=poll(&event,1,20);
@@ -336,7 +347,9 @@ static int supervise_transfers(int listener,pid_t child,int client) {
 
 static void reply(int socket, int status) {
     int32_t value = status;
-    (void)all_write(socket, &value, sizeof(value));
+    /* A lost broker response is not a guardian failure. Never let SIGPIPE
+     * destroy the original domain when the trusted caller disconnects. */
+    (void)packet_write(socket, &value, sizeof(value));
 }
 
 static int enter_profile(const char *profile) {
@@ -417,7 +430,7 @@ static void run_child(int client, char *request, size_t size, int *fds, size_t c
      * mount authority must not replace the monitor's descriptor-inspection
      * filesystem. Both remain descendants of the original PID namespace. */
     if(notifications<0||unshare(CLONE_NEWNS)||mount(NULL,"/",NULL,MS_REC|MS_PRIVATE,NULL)||
-       all_write(bootstrap[0],"R",1)) {
+       packet_write(bootstrap[0],"R",1)) {
         if(notifications>=0)close(notifications);
         close(bootstrap[0]);reply(client,ERROR_EXIT);return;
     }
@@ -454,7 +467,7 @@ int main(int argc, char **argv) {
         mount("proc", "/proc", "proc", MS_NOSUID|MS_NODEV|MS_NOEXEC, NULL)) return ERROR_EXIT;
     /* The parent deliberately supplies no inherited descriptor above stdio. */
     if (syscall(SYS_close_range, 3U, ~0U, 0)) return ERROR_EXIT;
-    int listener = socket(AF_UNIX, SOCK_SEQPACKET|SOCK_CLOEXEC, 0);
+    int listener = socket(AF_UNIX, SOCK_SEQPACKET|SOCK_CLOEXEC|SOCK_NONBLOCK, 0);
     if (listener < 0) return ERROR_EXIT;
     struct sockaddr_un address = {.sun_family=AF_UNIX};
     memcpy(address.sun_path, path, strlen(path)+1);
@@ -462,7 +475,10 @@ int main(int argc, char **argv) {
     pid_t guardians[GUARDIANS]={0};int poisoned=0;
     for (;;) {
         int status;pid_t ended;
-        while((ended=waitpid(-1,&status,WNOHANG))>0) {
+        for(;;) {
+            ended=waitpid(-1,&status,WNOHANG);
+            if(ended<0&&errno==EINTR)continue;
+            if(ended<=0)break;
             for(int i=0;i<GUARDIANS;i++)if(guardians[i]==ended) {
                 guardians[i]=0;
                 if(!WIFEXITED(status)||WEXITSTATUS(status)) {
@@ -471,18 +487,33 @@ int main(int argc, char **argv) {
                 break;
             }
         }
+        /* A child can exit after reaping but before accept. Bounded polling
+         * avoids losing that wakeup and delaying the durable fault forever. */
+        struct pollfd incoming={.fd=listener,.events=POLLIN};
+        int available=poll(&incoming,1,20);
+        if(available<0){if(errno==EINTR)continue;return ERROR_EXIT;}
+        if(!available)continue;
+        if(!(incoming.revents&POLLIN))return ERROR_EXIT;
         int client = accept4(listener, NULL, NULL, SOCK_CLOEXEC);
-        if (client < 0) { if (errno==EINTR) continue; return ERROR_EXIT; }
+        if (client < 0) { if (errno==EINTR||errno==EAGAIN||errno==EWOULDBLOCK) continue; return ERROR_EXIT; }
         struct ucred peer; socklen_t length = sizeof(peer);
         if (getsockopt(client, SOL_SOCKET, SO_PEERCRED, &peer, &length) ||
             length != sizeof(peer) || peer.uid || peer.pid != 0) {
             reply(client, ERROR_EXIT); close(client); continue;
         }
-        char request[LIMIT], ancillary[CMSG_SPACE(3*sizeof(int))];
+        char request[LIMIT], ancillary[CMSG_SPACE(3*sizeof(int))]={0};
         struct iovec data = {.iov_base=request, .iov_len=sizeof(request)};
         struct msghdr msg = {.msg_iov=&data, .msg_iovlen=1,
             .msg_control=ancillary, .msg_controllen=sizeof(ancillary)};
-        ssize_t size = recvmsg(client, &msg, MSG_CMSG_CLOEXEC);
+        ssize_t size;
+        do {
+            msg.msg_controllen=sizeof(ancillary);msg.msg_flags=0;
+            size=recvmsg(client,&msg,MSG_CMSG_CLOEXEC);
+        }while(size<0&&errno==EINTR);
+        /* A failed receive created no descriptors. Never parse stale ancillary
+         * stack bytes or close invented descriptors after an interrupted call.
+         * Zero-payload successful packets still need their actual FDs closed. */
+        if(size<0){reply(client,ERROR_EXIT);close(client);continue;}
         int fds[3]; size_t count=0; int bad=0;
         for (struct cmsghdr *c=CMSG_FIRSTHDR(&msg); c; c=CMSG_NXTHDR(&msg,c)) {
             if (c->cmsg_level!=SOL_SOCKET || c->cmsg_type!=SCM_RIGHTS || c->cmsg_len<CMSG_LEN(0)) { bad=1; continue; }

@@ -223,7 +223,7 @@ int main(int argc,char **argv){
         errno=0;if(chmod(argv[4],0777)!=-1||errno!=EACCES)return 92;
         errno=0;if(chown(argv[3],10003,10003)!=-1||errno!=EACCES)return 106;
         errno=0;if(chown(argv[4],10003,10003)!=-1||errno!=EACCES)return 107;
-        char alias[4096];snprintf(alias,sizeof(alias),"%s/scratch/state-alias",argv[3]);
+        char alias[4096];snprintf(alias,sizeof(alias),"%s/state-alias",argv[4]);
         errno=0;if(link(argv[2],alias)!=-1||errno!=EACCES)return 108;
         if(symlink(argv[2],alias))return 109;
         errno=0;fd=open(alias,O_RDONLY|O_CLOEXEC);
@@ -293,10 +293,18 @@ int main(int argc,char **argv){
         } else if(n>=0)return 7;
         close(fd);printf("INNER_ROOT_CONTROL_DENIED\n");return 0;
     }
-    if(!strcmp(argv[1],"hold")||!strcmp(argv[1],"acquire-loop")) {
+    if(!strcmp(argv[1],"hold")||!strcmp(argv[1],"acquire-loop")||!strcmp(argv[1],"reply-loss")) {
         if(argc!=4)return 2;
         pid_t child=fork();if(child<0)return 9;
-        if(child)return 0;
+        if(child) {
+            if(!strcmp(argv[1],"reply-loss")) {
+                char trigger[4096];
+                if(snprintf(trigger,sizeof(trigger),"%s.trigger",argv[3])>=(int)sizeof(trigger))return 112;
+                int i;for(i=0;i<10000&&access(trigger,F_OK);i++)usleep(1000);
+                if(i==10000)return 113;
+            }
+            return 0;
+        }
         int fd=open(argv[2],O_PATH|O_DIRECTORY|O_CLOEXEC);if(fd<0)_exit(10);
         char temporary[4096];
         if(snprintf(temporary,sizeof(temporary),"%s.pending",argv[3])>=(int)sizeof(temporary))_exit(11);
