@@ -288,45 +288,107 @@ production admission. Lab proofs do not authorize customer execution.
 
 ## Bounded resource-retirement qualification
 
-The signed `broker-frozen-empty-v1` contract is defined in
-[SANDBOX-CLEANUP.md](SANDBOX-CLEANUP.md). It covers malicious guests, the nonroot
-controller and the original execution's lifecycle-controlled workers. Host
-administrators and privileged Docker/containerd remain trusted. It does not
-promise preservation of references deliberately acquired by arbitrary host root.
-Explicit review of this bounded contract and its evidence is required before
-counting revised #328 acceptance. Retain the original unrestricted-root failure.
+The engineering requirements are defined in [SANDBOX-CLEANUP.md](SANDBOX-CLEANUP.md).
+The acquisition domain follows original ownership throughout worker and recipient
+lifetimes; it is not limited to processes currently inside one cgroup. Host administration
+and privileged Docker/containerd remain trusted. This does not exclude known migrated
+execution helpers or recipients from the domain. No universal arbitrary-host-root
+reference guarantee is required. Preserve the original unrestricted-root failure.
 
-F5-A is a separate engineering gate. Build a frozen Linux test executable with
+The existing `broker-frozen-empty-v1` policy and F5-A results do not establish all of
+these requirements. Before the F5-B physical campaign, demonstrate an enforceable,
+complete boundary for shim, QEMU, virtiofsd, descendants, helpers and descriptor recipients.
+Record exact runtime privileges, cgroup/mount/delegation controls, reference-transfer
+channels and the mechanism which prevents escape or makes it durably fail closed.
+A policy string, two-process witness or frozen-empty snapshot is insufficient.
+
+### Existing native controls
+
+Build an immutable Linux test executable with
 `go test -c -tags runnerd_kata ./internal/katalinux`. Stage it and
-`testdata/surviving_worker.c`, `testdata/retirement_acquirer.c` root-owned beneath
-a protected executable directory on the dedicated marked VM. Use a fresh private
-`TMPDIR` on the actual Kata metadata filesystem and preserve all failed fixtures.
-Run with `RUNNERD09_REQUIRE_NATIVE_TESTS=1`, `RUNNERD09_LIVE_LAB=1` and the selector
-`^TestRunnerd09LiveRetirement(AcquisitionDomain|CrashRecovery)$`. Require both
-parent tests and every subcase to execute with no skips. Record source, executable,
-boot/DMI, filesystem device and original owner identities.
+`testdata/surviving_worker.c`, `testdata/retirement_acquirer.c`,
+`testdata/retirement_transfer.c` root-owned beneath a protected executable directory on
+the dedicated marked VM. Use a fresh private `TMPDIR` on the actual Kata metadata
+filesystem and preserve all failed fixtures. Run with `RUNNERD09_REQUIRE_NATIVE_TESTS=1`,
+`RUNNERD09_LIVE_LAB=1` and selector
+`^TestRunnerd09LiveRetirement(AcquisitionDomain|CrashRecovery|FenceIdentity)$`.
+Require all three parent tests and every subcase to execute with no skips. Record source,
+executable hash, boot/DMI, filesystem device and original owner identities.
 
-These component/native controls exercise descriptors, O_PATH, directories,
-cwd/root, mmap, private namespaces, surviving threads, concurrent acquisitions,
-positive hierarchical freezing, quarantine and SIGKILL persistence of the same
-intent/fence/reclamation record. Their private fixtures deliberately lack a real
-block allocation and platform commitment. They retain their frozen empty slices
-and ownership records; they cannot issue disposal evidence or claim released
-execution capacity. A helper-process crash is not an installed broker crash.
+These controls exercise descriptors, O_PATH, directories, cwd/root, mmap, private
+namespaces, surviving threads, forks, in-domain SCM_RIGHTS recipients, concurrent
+acquisition, hierarchical freezing, original kernel cgroup identity, quarantine and
+helper SIGKILL persistence. A forked holder or in-domain recipient must block retirement
+while it survives, including after the opener/leader exits. This does not prove prevention
+or tracking of transfers outside the domain.
 
-The installed-product gate must additionally prove ordinary daemon entry rejects
-inherited metadata handles (including stdio), real workloads cannot acquire host
-metadata, all tuple-associated runtime workers occupy the original cgroup, exact
-committed authority is consumed once, and a broker crash reconciles the original
-resource. Require real signed retirement/disposal verification and the native
-final ACK before release. Correlate provider, platform, broker and native evidence.
-Do not substitute guest assertions or synthetic native fixtures for these facts.
+Private native fixtures lack real block allocations/platform commitments. Retain their
+empty frozen slices and ownership records; they cannot issue disposal evidence or claim
+released execution capacity. A helper-process crash is not an installed broker crash.
 
-Only after F5-A passes may F5-B qualify the complete real VM, shim, namespace,
-mount, raw device, reclamation, disposal-publication and finalization interruption
-matrix. Cross-boot retirement for this new policy is intentionally quarantined;
-the old Docker/Kata recovery path cannot silently authorize it. Production
-admission and the revised #328/#315 release requirements remain open.
+### Required migration and transfer negative controls
+
+Run these boundary controls on fresh, owned qualification resources before the physical
+F5-B matrix. A test which cannot exercise its transition is incomplete, not a pass.
+Use only recorded test workers and recipients; never move or kill unrelated processes.
+Host-root orchestration may simulate a worker transition within these fixtures without
+making arbitrary host-root references part of the product guarantee.
+
+| Control | Required observation and result |
+| --- | --- |
+| Fork, exec, reparent, surviving thread | Establish each resource-capable descendant/recipient remains in the verified lifetime boundary; leader exit does not discharge ownership. |
+| Migration before retirement | Attempt moving a recorded helper outside the original hierarchy while retaining an original reference; enforce denial, or durably quarantine before reclamation even if the old cgroup is empty. |
+| Migration concurrent with fencing | Race an authorized fixture worker's attempted escape with retirement; either the control prevents migration or retirement fails closed. A return to the original group cannot erase uncertainty. |
+| Descriptor transfer to known recipient | Pass original regular, directory and O_PATH handles using SCM_RIGHTS/inheritance; record actual receiver identity and original inode. If outside the original hierarchy, deny transfer or verify that receiver's separate enforced retirement boundary. |
+| Unknown recipient | Exercise an untracked/delegated recipient and sender exit; unknown identity or handoff history must retain original ownership/quarantine and prohibit metadata/block reuse and successful disposal. |
+| Transfer after controller startup | Exercise a controlled privileged sender and nonroot receiver after entry checks have run; root-private pathname denial or initial FD rejection alone cannot satisfy this test. |
+| Namespace and mapping delegation | Retain references through private/hidden mounts, namespace handles and mappings; retirement must account for every permitted recipient/path, or preserve the original hold. |
+| Concurrent acquisition | Overlap creation/fork/delegation/reference acquisition with the fence and actual reclamation; prove enforceable closure, not a quiet scan window. |
+| Lost boundary evidence | If a monitor/tracker is used, inject missing events, overflow, unavailable state and broker restart; uncertainty must block reclamation, disposal and reuse. |
+| Repeated recovery | Resume the same consumed Remove operation repeatedly with an unresolved worker/recipient; no new grant, replacement object, rewritten owner or successful certificate. |
+
+For prevention, retain the exact attempted operation, process identity and enforcement
+result. For tracked recipients, retain verifiable handoff provenance, birth/start identity,
+original resource binding and the recipient boundary's retirement evidence. Do not use
+PID alone, a one-time worker snapshot, guest assertions or repeated reference scans as
+the lifetime authority. Any unknown recipient must remain a durable unresolved obligation.
+
+Component negative controls must preserve original metadata inodes, raw/block owners,
+allocation index and immutable VM/execution identity. Verify inability to reuse the
+original identities/slots under uncertainty. Integrated controls must additionally verify
+native/platform reservations remain held and the broker refuses successful disposal
+publication. Only positive closure of every original boundary and independent physical
+checks permits finalization. Test a legitimate subsequent execution separately; never
+"repair" an uncertain original by replacing it.
+
+### Physical interruption and finalization gate
+
+After the boundary requirements and negative controls are satisfied, F5-B qualifies the
+complete real VM, shim/helper, namespace, mount, block/loop/raw/index, reclamation,
+disposal-publication and native-finalization matrix. Inject interruptions immediately
+before and after every durable retirement transition, after metadata reclamation before
+block disposal, after physical disposal before proof publication, and around lost final
+acknowledgments. Include repeated broker restart and changed network policy during
+execution/cleanup. No duplicate effects, false absence, replacement authority or premature
+capacity release is allowed.
+
+The installed-product gate uses the actual daemon/broker, original enrollment/journal,
+platform transactions and real provider jobs. Verify lifetime worker completeness,
+nonroot socket/metadata/cgroup/descriptor containment, exact committed operation
+consumption, root-signed domain/disposal evidence and original native final ACK. Correlate
+provider, platform, broker and native identities. Run the complete relevant campaign
+against one immutable set of recorded executable hashes; historical candidates do not
+qualify a later binary automatically.
+
+Broker crashes/reboots must preserve original retirement state and ownership. Unsupported
+boot/endpoint/boundary-monitor transitions retain quarantine/reservations. Extend existing
+independent cleanup-only recovery authority when adding support; neither container absence
+nor a vanished old cgroup permits adoption or release. Historical signed v1 artifacts stay
+immutable; stronger domain semantics need explicitly versioned evidence.
+
+Engineering threat-model direction alone is not implementation or production approval.
+Production admission and revised #328/#315 acceptance remain open. No additional completed
+release cases follow from these requirements or from native fixtures alone.
 
 ## Legacy native metadata cleanup stress
 
