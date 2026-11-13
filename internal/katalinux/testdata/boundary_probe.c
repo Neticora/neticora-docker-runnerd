@@ -221,6 +221,14 @@ int main(int argc,char **argv){
         errno=0;if(unlink(argv[2])!=-1||errno!=EACCES)return 90;
         errno=0;if(chmod(argv[3],0777)!=-1||errno!=EACCES)return 91;
         errno=0;if(chmod(argv[4],0777)!=-1||errno!=EACCES)return 92;
+        errno=0;if(chown(argv[3],10003,10003)!=-1||errno!=EACCES)return 106;
+        errno=0;if(chown(argv[4],10003,10003)!=-1||errno!=EACCES)return 107;
+        char alias[4096];snprintf(alias,sizeof(alias),"%s/scratch/state-alias",argv[3]);
+        errno=0;if(link(argv[2],alias)!=-1||errno!=EACCES)return 108;
+        if(symlink(argv[2],alias))return 109;
+        errno=0;fd=open(alias,O_RDONLY|O_CLOEXEC);
+        if(fd!=-1||errno!=EACCES)return 110;
+        if(unlink(alias))return 111;
         char positive[4096];snprintf(positive,sizeof(positive),"%s/scratch/owned",argv[3]);
         fd=open(positive,O_CREAT|O_EXCL|O_WRONLY|O_CLOEXEC,0600);
         if(fd<0||write(fd,"owned",5)!=5)return 93;
@@ -252,7 +260,7 @@ int main(int argc,char **argv){
         if(!child) {execl("/usr/bin/true","true",NULL);_exit(errno==EACCES?97:98);}
         int status;while(waitpid(child,&status,0)<0)if(errno!=EINTR)return 99;
         if(!WIFEXITED(status)||WEXITSTATUS(status)!=97)return 100;
-        printf("CONFINEMENT_ENFORCED_STATE_POLICY_WRITE_GUARD_CHMOD_DOCKER_ABSTRACT_SUPERVISOR_SOCKET_UNAPPROVED_EXEC_DENIED\n");
+        printf("CONFINEMENT_ENFORCED_STATE_ALIAS_POLICY_WRITE_GUARD_CHMOD_CHOWN_DOCKER_ABSTRACT_SUPERVISOR_SOCKET_UNAPPROVED_EXEC_DENIED\n");
         return 0;
     }
     if(!strcmp(argv[1],"transfer")) {

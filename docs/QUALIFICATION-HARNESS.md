@@ -509,6 +509,34 @@ broker units must not silently gain privileges or enable this backend. Complete
 per-domain policy, original broker lifecycle integration and real VM verification
 before accepting acquisition-domain conformance or starting full F5-B.
 
+`TestRunnerd09LiveProtectedWorkerBoundary` repeats the boundary controls with the
+separately versioned default-deny preflight policy. It checks actual enforcing
+label, broker-state read/write/delete denial, policy-file write denial, immutable
+directory guards, real dedicated Docker socket denial, abstract/supervisor socket
+denial, unapproved exec denial and a positive owned-file write. An actual outside
+UID 10003 process must fail to acquire the original held descriptor. Both fixtures
+SIGKILL a verified original guardian: existing filtered tasks must get `ENOSYS`
+without outward rights, the protected fault latch must reject new acquisition,
+and original-owner quarantine/retirement must survive the separate owner crash.
+The broad fixture remains synthetic; no untrusted image runs under that profile.
+
+The native shim-start fixture also reads the pinned shim's `shim.pid` and compares
+it with host and namespace PID witnesses. The current tuple writes a namespace PID.
+This diagnostic is an integration gate: never pass that raw number to a host
+signaling API or treat it as a verified host-process identity. Starting a shim
+successfully does not establish containerd PID-file/Connect/cleanup compatibility.
+An integration adapter must preserve original process ownership and prevent
+worker-writable metadata from becoming authority over arbitrary host processes.
+
+Before real runtime integration, independently review the helper and confinement
+candidate, provide narrowly scoped event IPC bound to the original execution, and
+qualify the real runtime's required filesystem, device, mount and credential ABI.
+Do not grant general Docker/containerd access to make event publication work.
+The preflight policy deliberately lacks those runtime permissions and cannot be
+substituted into a signed Kata admission profile. Preserve the original broker
+commitment, creation/start journal, lost-response reconciliation and disposal/ACK
+ordering when implementing that adapter. Full F5-A3 and F5-B remain separate gates.
+
 ### Existing broker lifecycle fixture
 
 The separately tagged `TestPhaseDControllerRealDocker` fixture also exercises

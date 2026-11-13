@@ -156,7 +156,29 @@ are limited to immutable connected Unix stream/seqpacket peers visible inside th
 original namespace. Socket, namespace, pidfd and unknown anonymous-descriptor relay
 are denied; supported ordinary files, directories, pipes and eventfds may remain
 inside the domain. Losing a guardian leaves kernel notification failure, not an
-unfiltered syscall fallback. Guardians remain inside the same lifetime boundary.
+unfiltered syscall fallback. A failed guardian latches a protected, durable fault
+and the original namespace refuses replacement acquisition. Quarantine preserves
+the original phase/owner. Authorized retirement checks the original birth even
+when acquisition health has failed; it cannot substitute another namespace.
+Guardians remain inside the same lifetime boundary.
+
+`execve` resets dumpability. The helper therefore seals the worker's real,
+effective and saved UID at zero, denies user-namespace entry/creation and rejects
+ptracer delegation. Filesystem UID/GID operations are not silently treated as
+proof of a changed process identity. This is a narrow host-worker ABI, not a claim
+that every Kata/virtiofsd configuration supports it. The guest has its own kernel.
+An outside unprivileged controller must not acquire worker descriptors through
+procfs or process-extraction APIs after exec or filesystem credential changes.
+
+`runnerd09-worker-preflight-apparmor-v1` is a separate native confinement policy.
+It pins explicit executables, keeps private directory guards read-only, restricts
+writes to owned metadata/scratch/logs, and denies broker state, privileged runtime
+sockets, abstract connect and unapproved exec. Pathname Unix sockets use file
+mediation; abstract/anonymous sockets have separate rules. Root-directory read
+needed by the qualified namespace-inode representation is not recursive host
+filesystem read. The policy grants no mounts, VM devices or runtime admission.
+Its negative fixtures cannot approve an untrusted Kata workload or replace an
+independent security review.
 
 This component is not connected to installed broker admission or disposal. Native
 fixtures deliberately use a broad AppArmor profile to isolate kernel mechanism
