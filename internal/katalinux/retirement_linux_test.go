@@ -151,3 +151,43 @@ func retirementFixtureLimits(p *Profile, g CgroupRecord) CgroupRecord {
 	g.MemoryBytes = memory
 	return g
 }
+
+func TestRetirementReclaimedRevokesReclamation(t *testing.T) {
+	p, id, plan, op := retirementFixture(t)
+	if err := p.BeginRetirement(id, plan, op); err != nil {
+		t.Fatal(err)
+	}
+	r, err := p.retirementRecord(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Phase = "RECLAIMED"
+	r.FencedAt = "2026-11-12T00:00:00Z"
+	if err = p.persistRetirement(r); err != nil {
+		t.Fatal(err)
+	}
+	f := &retirementFence{profile: p, plan: plan, record: r}
+	if f.reclaim(t.Context()) == nil {
+		t.Fatal("released barrier regained reclamation authority")
+	}
+	if p.RequireAcquisition(plan) == nil {
+		t.Fatal("reclaimed attempt gained launch authority")
+	}
+	if err = p.BeginRetirement(id, plan, op); err != nil {
+		t.Fatal(err)
+	}
+	after, err := p.retirementRecord(plan)
+	if err != nil || after.Phase != "RECLAIMED" {
+		t.Fatal("idempotent begin regressed phase", err)
+	}
+	if p.ReclaimRetired(t.Context(), id, plan, op, nil) == nil {
+		t.Fatal("missing independent runtime guard accepted")
+	}
+	if p.quarantineRetirement(plan, id, op) != nil {
+		t.Fatal("quarantine persistence failed")
+	}
+	after, err = p.retirementRecord(plan)
+	if err != nil || after.Phase != "RECLAIMED" || !after.Quarantined {
+		t.Fatal("quarantine regressed durable reclamation", err)
+	}
+}

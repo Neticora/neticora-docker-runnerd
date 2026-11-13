@@ -108,7 +108,7 @@ func (p *Profile) captureSandboxDirectories(id string) ([]SandboxDirectory, erro
 func (p *Profile) removeSandboxResidue(ctx context.Context, id string, directories []SandboxDirectory, guard func() error) error {
 	ctx = context.WithValue(ctx, procDecodeKey{}, &procDecoder{})
 	if f, ok := ctx.Value(retirementFenceKey{}).(*retirementFence); ok {
-		if f.profile != p || f.record.Container != id || f.verify(ctx) != nil {
+		if f.profile != p || f.record.Container != id || f.reclaim(ctx) != nil {
 			return ErrQualification
 		}
 	}

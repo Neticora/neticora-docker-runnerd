@@ -36,7 +36,7 @@ the owner, boot, kernel inode and hard limits, `cgroup.freeze=1`,
 `cgroup.events:frozen=1` and hierarchical `populated=0`. Frozen populated groups
 remain quarantined; the broker does not kill or adopt unidentified workers. The
 trusted original runtime/operator must retire those workers before the same
-operation can resume. No thaw is issued by the retirement path.
+operation can resume. No thaw is issued before durable `RECLAIMED` has revoked reclamation authority.
 
 Successful kernel observation is persisted as `FENCED`, followed by durable
 `RECLAIMING` before unlink or storage release. Reclamation uses the live fence and
@@ -51,9 +51,10 @@ requires its original owner, mount, loop, raw inode and physical release checks.
 Any uncertainty retains original ownership, the last durable phase, a quarantine
 flag and the native/platform reservation. A missing path never grants capacity.
 
-The frozen empty slice is stopped only after metadata and block disposal. Systemd
-may thaw a unit when stopping it; no reclamation is allowed after this barrier
-is removed. A lost response after slice release permits only read-only verification
+After metadata and block disposal, durable `RECLAIMED` revokes reclamation
+authority. Only then may the original empty slice be explicitly thawed and
+stopped (systemd 259 refuses to stop a frozen unit). No reclamation is allowed
+after this barrier is removed. A lost response after slice release permits only read-only verification
 that the original metadata, block allocation and cgroup are already absent.
 `DISPOSED` is durable only after all physical checks succeed. Tombstones remain
 permanent; compaction must preserve their replay fences.

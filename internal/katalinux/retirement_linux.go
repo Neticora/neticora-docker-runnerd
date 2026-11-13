@@ -23,9 +23,10 @@ const retirementVersion = "runnerd09-retirement-v1"
 
 type retirementFenceKey struct{}
 type retirementFence struct {
-	profile *Profile
-	plan    dockerengine.Plan
-	record  RetirementRecord
+	profile      *Profile
+	plan         dockerengine.Plan
+	record       RetirementRecord
+	runtimeGuard func() error
 }
 
 func (p *Profile) retirementRecord(plan dockerengine.Plan) (RetirementRecord, error) {
@@ -50,7 +51,7 @@ func (p *Profile) retirementRecord(plan dockerengine.Plan) (RetirementRecord, er
 		if r.FencedAt != "" || r.DisposedAt != "" {
 			return r, ErrQualification
 		}
-	case "FENCED", "RECLAIMING":
+	case "FENCED", "RECLAIMING", "RECLAIMED":
 		if !retirementTime(r.FencedAt) || r.DisposedAt != "" {
 			return r, ErrQualification
 		}
@@ -139,11 +140,6 @@ func (f *retirementFence) verify(ctx context.Context) error {
 	if err != nil || ge != nil || boot != r.Cgroup.BootID || !sameHostCgroup(&group, &r.Cgroup) {
 		return ErrQualification
 	}
-	if group.Phase == "released" && current.Phase == "RECLAIMING" {
-		// Lost final response: observe only. Never reclaim anything after the
-		// kernel barrier has been removed, even if a matching pathname reappears.
-		return p.retiredPhysicalAbsence(ctx, r.Container, f.plan, group)
-	}
 	if group.Phase != "ready" {
 		return ErrQualification
 	}
@@ -169,6 +165,9 @@ func (p *Profile) retiredPhysicalAbsence(ctx context.Context, id string, plan do
 // Unknown/surviving workers leave a frozen, owned quarantine. Their descriptors,
 // mappings and private namespaces cannot authorize a successful disposal.
 func (p *Profile) ReclaimRetired(ctx context.Context, id string, plan dockerengine.Plan, operationID string, guard func() error) (err error) {
+	if guard == nil {
+		return ErrQualification
+	}
 	r, err := p.retirementRecord(plan)
 	if err != nil || r.Container != id || r.OperationID != operationID {
 		return ErrQualification
@@ -183,14 +182,19 @@ func (p *Profile) ReclaimRetired(ctx context.Context, id string, plan dockerengi
 	}
 	defer func() {
 		if err != nil {
-			r.Quarantined = true
-			err = errors.Join(err, p.persistRetirement(r))
+			err = errors.Join(err, p.quarantineRetirement(plan, id, operationID))
 		}
 	}()
 	if err = guard(); err != nil {
 		return err
 	}
-	f := &retirementFence{profile: p, plan: plan, record: r}
+	if r.Phase == "RECLAIMED" {
+		if err = p.finishRetired(ctx, id, plan, guard); err != nil {
+			return err
+		}
+		return p.completeRetirement(ctx, id, plan, operationID, guard)
+	}
+	f := &retirementFence{profile: p, plan: plan, record: r, runtimeGuard: guard}
 	r, err = p.FenceRetirement(ctx, id, plan, operationID, guard)
 	if err != nil {
 		return err
@@ -223,10 +227,7 @@ func (p *Profile) ReclaimRetired(ctx context.Context, id string, plan dockerengi
 	if err = p.BrokerAbsence(ctx, id, plan); err != nil {
 		return err
 	}
-	r.Phase = "DISPOSED"
-	r.Quarantined = false
-	r.DisposedAt = time.Now().UTC().Format(time.RFC3339Nano)
-	return p.persistRetirement(r)
+	return p.completeRetirement(ctx, id, plan, operationID, guard)
 }
 
 func (p *Profile) observeEmptyFrozen(ctx context.Context, plan dockerengine.Plan, expected CgroupRecord) error {
@@ -308,6 +309,9 @@ func (p *Profile) RetirementEvidence(ctx context.Context, id string, plan docker
 // FenceRetirement can only advance an existing original retirement. It cannot
 // create resources, issue authority, signal unknown workers or reclaim storage.
 func (p *Profile) FenceRetirement(ctx context.Context, id string, plan dockerengine.Plan, operationID string, guard func() error) (r RetirementRecord, err error) {
+	if guard == nil {
+		return r, ErrQualification
+	}
 	r, err = p.retirementRecord(plan)
 	if err != nil || r.Container != id || r.OperationID != operationID {
 		return r, ErrQualification
@@ -317,8 +321,7 @@ func (p *Profile) FenceRetirement(ctx context.Context, id string, plan dockereng
 	}
 	defer func() {
 		if err != nil {
-			r.Quarantined = true
-			err = errors.Join(err, p.persistRetirement(r))
+			err = errors.Join(err, p.quarantineRetirement(plan, id, operationID))
 		}
 	}()
 	if err = guard(); err != nil {
@@ -355,4 +358,117 @@ func (p *Profile) FenceRetirement(ctx context.Context, id string, plan dockereng
 		return r, err
 	}
 	return r, nil
+}
+
+func (p *Profile) quarantineRetirement(plan dockerengine.Plan, id, op string) error {
+	r, err := p.retirementRecord(plan)
+	if err != nil {
+		return err
+	}
+	if r.Container != id || r.OperationID != op || r.Phase == "DISPOSED" {
+		return ErrQualification
+	}
+	r.Quarantined = true
+	return p.persistRetirement(r)
+}
+func (f *retirementFence) reclaim(ctx context.Context) error {
+	r, err := f.profile.retirementRecord(f.plan)
+	if err != nil || r.Phase != "RECLAIMING" {
+		return ErrQualification
+	}
+	return f.verify(ctx)
+}
+
+// seal removes acquisition authority before the kernel barrier can be thawed.
+// After RECLAIMED no path may unlink metadata or release a new block allocation.
+func (f *retirementFence) seal(ctx context.Context) error {
+	if err := f.reclaim(ctx); err != nil {
+		return err
+	}
+	p := f.profile
+	r, err := p.retirementRecord(f.plan)
+	if err != nil {
+		return err
+	}
+	if err = p.retiredStorageAbsent(r.Container, f.plan); err != nil {
+		return err
+	}
+	r.Phase = "RECLAIMED"
+	r.Quarantined = false
+	return p.persistRetirement(r)
+}
+func (p *Profile) retiredStorageAbsent(id string, plan dockerengine.Plan) error {
+	for _, root := range p.Manifest.SandboxRoots {
+		if _, err := os.Lstat(filepath.Join(root, id)); !errors.Is(err, os.ErrNotExist) {
+			return ErrQualification
+		}
+	}
+	block, err := p.blockRecord(plan)
+	if err != nil || p.blockReleased(plan, block) != nil {
+		return ErrQualification
+	}
+	return nil
+}
+
+// finishRetired is read-only with respect to metadata and block storage. Only the
+// positively empty original systemd unit may be thawed/stopped. This is also the
+// sole retry path after a crash removes the kernel fence.
+func (p *Profile) finishRetired(ctx context.Context, id string, plan dockerengine.Plan, guard func() error) error {
+	r, err := p.retirementRecord(plan)
+	if err != nil || r.Container != id || r.Phase != "RECLAIMED" {
+		return ErrQualification
+	}
+	if err = guard(); err != nil {
+		return err
+	}
+	if err = p.priorProcessesAbsent(r.Processes); err != nil {
+		return err
+	}
+	if err = p.retiredStorageAbsent(id, plan); err != nil {
+		return err
+	}
+	raw, err := hostfs.ReadPrivate(filepath.Join(p.EvidenceDirectory, plan.Name+".json"), 32768)
+	var original Evidence
+	if err != nil || readEvidence(raw, &original) != nil || original.Profile != r.Profile || original.Container != id || original.SpecHash != r.SpecHash || original.Generation != r.Generation || !sameHostCgroup(original.Cgroup, &r.Cgroup) || !reflect.DeepEqual(original.Sandboxes, r.Sandboxes) || !reflect.DeepEqual(original.Processes, r.Processes) {
+		return ErrQualification
+	}
+	group, err := p.releaseHostCgroup(ctx, plan)
+	if err != nil {
+		return err
+	}
+	if err = guard(); err != nil {
+		return err
+	}
+	if err = p.retiredPhysicalAbsence(ctx, id, plan, *group); err != nil {
+		return err
+	}
+	block, err := p.blockRecord(plan)
+	if err != nil {
+		return err
+	}
+	original.Cgroup = group
+	original.Block = &block
+	original.Absence = &PhysicalAbsence{CgroupRemoved: true, DeviceDetached: true, MountsRemoved: true, ContainerAbsent: true, SandboxAbsent: true, VMAbsent: true, NetworkRemoved: true, StorageRemoved: true, VerifiedAt: time.Now().UTC().Format(time.RFC3339Nano), ObservationSource: "qualified-host-procfs-runtime-state-v1"}
+	root, err := hostfs.OpenState(p.EvidenceDirectory)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	return persist(root, plan.Name+".json", original)
+}
+func (p *Profile) completeRetirement(ctx context.Context, id string, plan dockerengine.Plan, op string, guard func() error) error {
+	r, err := p.retirementRecord(plan)
+	if err != nil || r.Phase != "RECLAIMED" || r.Container != id || r.OperationID != op {
+		return ErrQualification
+	}
+	if err = guard(); err != nil {
+		return err
+	}
+	if err = p.BrokerAbsence(ctx, id, plan); err != nil {
+		return err
+	}
+	r.Phase = "DISPOSED"
+	r.Quarantined = false
+	r.DisposedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	return p.persistRetirement(r)
 }

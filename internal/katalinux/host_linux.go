@@ -658,7 +658,7 @@ func (p *Profile) cleanupSandboxGuard(ctx context.Context, plan dockerengine.Pla
 func (p *Profile) VerifyAbsent(ctx context.Context, id string, plan dockerengine.Plan, guards ...func() error) error {
 	if p.Manifest.RetirementPolicy != "" {
 		f, ok := ctx.Value(retirementFenceKey{}).(*retirementFence)
-		if !ok || f.profile != p || f.record.Container != id || f.plan.Name != plan.Name || f.verify(ctx) != nil {
+		if !ok || f.profile != p || f.record.Container != id || f.plan.Name != plan.Name || f.reclaim(ctx) != nil {
 			return ErrQualification
 		}
 	}
@@ -749,6 +749,16 @@ func (p *Profile) VerifyAbsent(ctx context.Context, id string, plan dockerengine
 				return ErrQualification
 			}
 		}
+	}
+
+	if p.Manifest.RetirementPolicy != "" {
+		f := ctx.Value(retirementFenceKey{}).(*retirementFence)
+		if e = f.seal(ctx); e != nil {
+			return e
+		}
+		// The outer broker guard remains necessary after sealing; f.reclaim is
+		// deliberately revoked now, so recheck the original runtime directly.
+		return p.finishRetired(ctx, id, plan, f.runtimeGuard)
 	}
 
 	record.Cgroup, e = p.releaseHostCgroup(ctx, plan)

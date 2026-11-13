@@ -459,6 +459,22 @@ func (p *Profile) releaseHostCgroup(ctx context.Context, plan dockerengine.Plan)
 		if err := p.persistCgroup(record); err != nil {
 			return nil, err
 		}
+		if p.Manifest.RetirementPolicy != "" {
+			retirement, re := p.retirementRecord(plan)
+			if re != nil || retirement.Phase != "RECLAIMED" || !sameHostCgroup(&retirement.Cgroup, &record) || p.retiredStorageAbsent(retirement.Container, plan) != nil || p.priorProcessesAbsent(retirement.Processes) != nil {
+				return nil, ErrQualification
+			}
+			// systemd 259 rejects stop on a frozen unit. Durable RECLAIMED forbids
+			// all subsequent metadata/block mutations before this explicit thaw.
+			if _, err = p.cgroupCommand(ctx, p.Manifest.HostCgroup.SystemctlBinary, "--no-pager", "--no-ask-password", "thaw", "--", record.Unit); err != nil {
+				return nil, ErrQualification
+			}
+			current, populated, ce := inspectCgroup(record)
+			if ce != nil || populated || uint64(current.Dev) != record.Device || current.Ino != record.Inode {
+				return nil, ErrQualification
+			}
+		}
+
 		if _, err = p.cgroupCommand(ctx, p.Manifest.HostCgroup.SystemctlBinary, "--no-pager", "--no-ask-password", "stop", "--", record.Unit); err != nil {
 			return nil, ErrQualification
 		}

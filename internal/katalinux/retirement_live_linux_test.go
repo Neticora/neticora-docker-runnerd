@@ -79,6 +79,10 @@ func TestRunnerd09LiveRetirementAcquisitionDomain(t *testing.T) {
 			// Same uid/groups/capability boundary as the installed nonroot controller.
 			// Repeated attempts overlap actual reclamation; successful acquisition is fatal.
 			denied := liveDeniedAcquisitions(t, filepath.Join(stamp.Root, id))
+			r.Phase = "RECLAIMING"
+			if err := p.persistRetirement(r); err != nil {
+				t.Fatal(err)
+			}
 			f := &retirementFence{profile: p, plan: plan, record: r}
 			fenced := context.WithValue(ctx, retirementFenceKey{}, f)
 			if err := p.removeSandboxResidue(fenced, id, []SandboxDirectory{stamp}, func() error { return f.verify(ctx) }); err != nil {
@@ -94,14 +98,7 @@ func TestRunnerd09LiveRetirementAcquisitionDomain(t *testing.T) {
 			if err := p.prepareHostCgroup(ctx, plan); err != nil {
 				t.Fatal("kernel identity unexpectedly changed", err)
 			}
-			// This fixture has no physical block allocation and cannot issue a disposal
-			// proof. Release only this positively empty owned unit after metadata checks.
-			if _, err := p.releaseHostCgroup(ctx, plan); err != nil {
-				t.Fatal(err)
-			}
-			if f.verify(ctx) == nil {
-				t.Fatal("released kernel fence authorized fresh reclamation")
-			}
+			t.Log("Acquisition-only fixture retains frozen empty owned slice; no block allocation or disposal certificate exists")
 			t.Log("original identity retained; hierarchical worker quarantine, positive frozen-empty fence and nonroot acquisition denial verified")
 		})
 	}
@@ -318,15 +315,16 @@ func TestRunnerd09LiveRetirementCrashRecovery(t *testing.T) {
 			if e != nil || resumed.Cgroup != original.Cgroup || resumed.OperationID != op {
 				t.Fatal("same-operation recovery failed", e)
 			}
+			resumed.Phase = "RECLAIMING"
+			if err = p.persistRetirement(resumed); err != nil {
+				t.Fatal(err)
+			}
 			f := &retirementFence{profile: p, plan: plan, record: resumed}
 			if err = p.removeSandboxResidue(context.WithValue(ctx, retirementFenceKey{}, f), id, []SandboxDirectory{stamp}, func() error { return f.verify(ctx) }); err != nil {
 				t.Fatal(err)
 			}
 			if p.RequireAcquisition(plan) == nil {
 				t.Fatal("crash reopened acquisition")
-			}
-			if _, err = p.releaseHostCgroup(ctx, plan); err != nil {
-				t.Fatal(err)
 			}
 			t.Log("SIGKILL retained exact retirement phase, cgroup owner, metadata inode and original remove authority")
 		})

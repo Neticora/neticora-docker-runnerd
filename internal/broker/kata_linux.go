@@ -114,6 +114,9 @@ func (k *protectedKata) Check(ctx context.Context) (string, error) {
 
 func (k *protectedKata) Origin() (json.RawMessage, error) { return k.profile.BrokerOrigin() }
 func (k *protectedKata) Observe(ctx context.Context, id string, p dockerengine.Plan) error {
+	if k.profile.Manifest.RetirementPolicy != "" {
+		return ErrQuarantined
+	}
 	return k.profile.ObserveBrokerRecovery(ctx, id, p)
 }
 func (k *protectedKata) RecoverDispose(ctx context.Context, id string, p dockerengine.Plan, guard func() error) error {
