@@ -47,12 +47,14 @@ def build():
     if not re.fullmatch(r'[0-9][A-Za-z0-9.+~:-]{0,100}', version):
         raise SystemExit('Invalid Debian package version')
     expected = re.search(r'^toolchain (go\S+)$', (ROOT / 'go.mod').read_text(), re.M).group(1)
-    toolchain = run('go', 'version').split()[2]
+    # User workspaces/modfiles and GOFLAGS must not substitute source or embed
+    # local linker data while provenance claims a clean, tracked Git checkout.
+    env = dict(os.environ, GOTOOLCHAIN='local', GOENV='off', GOWORK='off', GOFLAGS='', GOEXPERIMENT='', GOPROXY='off', GOSUMDB='off', GOOS='linux', GOARCH='amd64', GOAMD64='v1', CGO_ENABLED='0', SOURCE_DATE_EPOCH=str(epoch))
+    toolchain = run('go', 'version', env=env).split()[2]
     if toolchain != expected:
         raise SystemExit(f'Required toolchain {expected}; found {toolchain}')
     output = args.output.resolve() / version
     output.mkdir(parents=True, exist_ok=False)
-    env = dict(os.environ, GOTOOLCHAIN='local', GOPROXY='off', GOSUMDB='off', GOOS='linux', GOARCH='amd64', CGO_ENABLED='0', SOURCE_DATE_EPOCH=str(epoch))
     with tempfile.TemporaryDirectory(prefix='runnerd-deb-') as work:
         work = Path(work)
         source = work / 'source'
