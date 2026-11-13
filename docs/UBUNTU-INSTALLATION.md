@@ -146,3 +146,21 @@ No arbitrary version pair is declared compatible. Record and test each exact pai
 including active-workload continuity and schema downgrade rejection, before use.
 Historical Runnerd08 rollback and power-loss evidence retains its original build
 identity and is not a new qualification of this Debian artifact.
+
+If APT/dpkg is interrupted, preserve all files, journals and the service account.
+Record `dpkg --audit` and
+`dpkg-query -W -f='${Status} ${Version}\n' neticora-runnerd` before changing anything.
+Restore systemd connectivity and verify a stopped service with no main/control
+process. For an already unpacked compatible candidate, use
+`sudo dpkg --configure neticora-runnerd`. For an interrupted unpack or a missing
+payload, reinstall the exact independently verified compatible `.deb`, then
+configure that package. Inspect its manifest, installed executable digest and
+original recovery obligations before an explicit restart. Do not repair by
+deleting package locks, replacing dpkg's database, clearing Runnerd state or
+forcing a downgrade. Investigate any live package-manager process first.
+
+Unattended updates must honor the stopped-service refusal. An APT failure is not
+permission to stop a job, discard state or release its reservation. Arrange a
+reviewed maintenance window and retry only after the normal drain/recovery checks.
+Local noninteractive APT tests do not qualify every unattended-update service,
+arbitrary binary/schema transitions, signed distribution or fleet rollout.
