@@ -165,6 +165,9 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 	if err = id.Run(ctx, []string{probe, "keeper-control", id.Socket}, stdio); err != nil {
 		t.Fatal(err)
 	}
+	if id.Check() != nil {
+		t.Fatal("inner-root request changed original namespace-init ownership")
+	}
 	report := filepath.Join(transient, "holder")
 	if err = id.Run(ctx, []string{probe, "hold", filepath.Join(stamp.Root, strings.Repeat("a", 64)), report}, stdio); err != nil {
 		t.Fatal(err)
@@ -216,15 +219,34 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer unix.Close(processFD)
-	// Controlled host-root orchestration moves ONLY this owned holder into a
-	// fresh test leaf. Its PID-namespace lifetime identity remains unchanged.
-	migrated := filepath.Join("/sys/fs/cgroup", group.Path, "migration-negative")
+	// Move only the original verified namespace init and reference holder into
+	// a DIFFERENT owned test slice. The complete original hierarchy must become
+	// empty while the reference remains alive; a sibling leaf is not this test.
+	other, _, otherPlan, _, _ := liveRetirementFixture(t, ctx)
+	otherGroup, err := other.cgroupRecord(otherPlan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	migrated := filepath.Join("/sys/fs/cgroup", otherGroup.Path, "migration-negative")
 	if err = os.Mkdir(migrated, 0755); err != nil {
 		t.Fatal(err)
 	}
 	if err = os.WriteFile(filepath.Join(migrated, "cgroup.procs"), []byte(strconv.Itoa(hostPID)), 0600); err != nil {
 		t.Fatal(err)
 	}
+	if id.Check() != nil {
+		t.Fatal("original init identity changed before controlled migration")
+	}
+	if err = os.WriteFile(filepath.Join(migrated, "cgroup.procs"), []byte(strconv.Itoa(id.PID)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	settleSandboxTest(t, func() error {
+		_, populated, e := inspectCgroup(group)
+		if e != nil || populated {
+			return ErrQualification
+		}
+		return nil
+	})
 	if id.Check() != nil || id.CheckRetired() == nil {
 		t.Fatal("migrated live worker escaped lifetime obligation")
 	}

@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <sched.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -57,9 +58,15 @@ int main(int argc,char **argv){
         close(fd);printf("PID_NAMESPACE_ESCAPE_DENIED\n");return 0;
     }
     if(!strcmp(argv[1],"keeper-control")) {
+        signal(SIGPIPE,SIG_IGN);
         int fd=connect_to(argv[2]);
-        if(write(fd,"STOP\0",5)!=5)return 7;
-        int32_t reply=0;if(read(fd,&reply,sizeof(reply))!=sizeof(reply)||reply!=125)return 8;
+        ssize_t n=write(fd,"STOP\0",5);
+        if(n<0 && errno!=EPIPE && errno!=ECONNRESET)return 7;
+        if(n==5) {
+            int32_t reply=0;n=read(fd,&reply,sizeof(reply));
+            if(!((n==(ssize_t)sizeof(reply)&&reply==125)||n==0||
+                 (n<0&&(errno==ECONNRESET||errno==EPIPE))))return 8;
+        } else if(n>=0)return 7;
         close(fd);printf("INNER_ROOT_CONTROL_DENIED\n");return 0;
     }
     if(!strcmp(argv[1],"hold")) {
