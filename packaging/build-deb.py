@@ -31,6 +31,8 @@ def write_json(path, data):
 
 
 def build():
+    # Never inherit an operator's permissive umask into root-owned package files.
+    os.umask(0o022)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--version', help='Debian version; defaults to commit version')
     parser.add_argument('--output', type=Path, default=ROOT / 'dist/ubuntu-amd64')
@@ -60,6 +62,8 @@ def build():
         bins = stage / 'usr/bin'
         bins.mkdir(parents=True)
         subprocess.run(['go', 'build', '-mod=readonly', '-trimpath', '-buildvcs=true', '-o', str(bins) + '/', './cmd/...'], cwd=source, env=env, check=True)
+        for binary in bins.iterdir():
+            binary.chmod(0o755)
         os.symlink('runnerd', bins / 'neticora-runnerd')
         binary_hashes = {p.name: sha(p) for p in sorted(bins.iterdir()) if not p.is_symlink()}
         contents = {
@@ -111,6 +115,7 @@ def build():
         subprocess.run(['dpkg-deb', '-x', str(package), str(extract)], check=True)
         for name, digest in binary_hashes.items():
             assert sha(extract / 'usr/bin' / name) == digest
+            assert (extract / 'usr/bin' / name).stat().st_mode & 0o7777 == 0o755
         provenance.update(packageSha256=sha(package), runnerdBinarySha256=binary_hashes['runnerd'])
         write_json(output / 'build-manifest.json', provenance)
         (output / 'verification.txt').write_text('Local engineering package; unsigned; productionApproved=false.\nAuthenticate the manifest/checksums through an independent trusted channel.\nA checksum verifies equality, not producer identity.\nRun: sha256sum -c SHA256SUMS\nRun: dpkg-deb --info *.deb; dpkg-deb --contents *.deb\nTarget: Ubuntu 26.04 amd64; customer-provisioned Docker; no Go on target.\n')
