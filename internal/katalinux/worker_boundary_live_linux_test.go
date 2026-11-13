@@ -78,7 +78,7 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 	profile := filepath.Join(transient, "apparmor")
 	// Native ABI fixture only. This broad filesystem profile deliberately does
 	// not qualify Kata's production write/IPC policy or a runtime integration.
-	policy := fmt.Sprintf("profile %s flags=(attach_disconnected,mediate_deleted) {\n file,\n network,\n capability,\n mount,\n umount,\n signal,\n /** ix,\n deny capability mac_admin,\n deny capability mac_override,\n ptrace (readby) peer=unconfined,\n ptrace (read) peer=%s,\n}\n", label, label)
+	policy := fmt.Sprintf("profile %s flags=(attach_disconnected,mediate_deleted) {\n file,\n network,\n capability,\n mount,\n umount,\n signal,\n /** ix,\n deny capability mac_admin,\n deny capability mac_override,\n ptrace (readby, tracedby) peer=unconfined,\n ptrace (read) peer=%s,\n}\n", label, label)
 	if err = os.WriteFile(profile, []byte(policy), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -166,6 +166,9 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 	}
 	defer in.Close()
 	stdio := [3]*os.File{in, out, out}
+	if err = id.Run(ctx, []string{probe, "internal-transfer", filepath.Join(stamp.Root, strings.Repeat("a", 64))}, stdio); err != nil {
+		t.Fatal("verified internal FD transfer or sealed relay negative control failed", err)
+	}
 	if err = id.Run(ctx, []string{probe, "privileges", "check"}, stdio); err != nil {
 		t.Fatal(err)
 	}

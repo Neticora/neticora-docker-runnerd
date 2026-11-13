@@ -2,6 +2,9 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/capability.h>
+#include <linux/filter.h>
+#include <linux/seccomp.h>
+#include <pthread.h>
 #include <sched.h>
 #include <signal.h>
 #include <stdint.h>
@@ -9,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/eventfd.h>
 #include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -41,8 +45,59 @@ static void denied_transfer(const char *path,const char *target) {
     errno=0;if(sendmmsg(socket,&multi,1,0)!=-1 || errno!=EPERM) exit(24);
     errno=0;if(syscall(SYS_io_uring_setup,1,NULL)!=-1 || errno!=EPERM) exit(25);
     /* Plain bytes cannot carry SCM_RIGHTS and must remain usable. */
-    if(write(socket,"plain-byte-stream",17)!=17) exit(26);
+    struct iovec plain={.iov_base="plain-byte-stream",.iov_len=17};
+    struct msghdr plainmsg={.msg_iov=&plain,.msg_iovlen=1};
+    if(sendmsg(socket,&plainmsg,0)!=17) exit(26);
     close(fd);close(socket);
+}
+static int pass_fd(int socket,int fd) {
+    char control[CMSG_SPACE(sizeof(int))]={0},byte='x';
+    struct iovec data={.iov_base=&byte,.iov_len=1};
+    struct msghdr message={.msg_iov=&data,.msg_iovlen=1,.msg_control=control,.msg_controllen=sizeof(control)};
+    struct cmsghdr *c=CMSG_FIRSTHDR(&message);
+    c->cmsg_level=SOL_SOCKET;c->cmsg_type=SCM_RIGHTS;c->cmsg_len=CMSG_LEN(sizeof(int));
+    memcpy(CMSG_DATA(c),&fd,sizeof(fd));return sendmsg(socket,&message,0);
+}
+struct thread_args {int socket,fd,result;};
+static void *thread_transfer(void *opaque) {
+    struct thread_args *a=opaque;
+    /* Deliberately diverge from the group leader's descriptor table. A
+     * mediator using a tgid instead of the notifying tid cannot pass this. */
+    if(unshare(CLONE_FILES)||dup2(a->fd,199)!=199){a->result=41;return NULL;}
+    a->result=pass_fd(a->socket,199)==1?0:42;
+    close(199);return NULL;
+}
+static int internal_transfer(const char *target) {
+    int pair[2];if(socketpair(AF_UNIX,SOCK_SEQPACKET|SOCK_CLOEXEC,0,pair))return 43;
+    int fd=open(target,O_PATH|O_CLOEXEC);if(fd<0)return 44;
+    int event=eventfd(0,EFD_CLOEXEC);if(event<0)return 45;
+    /* Positive controls ensure outward denial did not merely disable the
+     * mediator, ptrace permission, PIDFD_THREAD or every descriptor transfer. */
+    struct thread_args args={.socket=pair[0],.fd=fd,.result=46};pthread_t thread;
+    if(pthread_create(&thread,NULL,thread_transfer,&args)||pthread_join(thread,NULL)||args.result)return 46;
+    char byte=0,control[128]={0};struct iovec data={.iov_base=&byte,.iov_len=1};
+    struct msghdr message={.msg_iov=&data,.msg_iovlen=1,.msg_control=control,.msg_controllen=sizeof(control)};
+    if(recvmsg(pair[1],&message,MSG_CMSG_CLOEXEC)!=1)return 47;
+    struct cmsghdr *c=CMSG_FIRSTHDR(&message);int received=-1;
+    if(!c||c->cmsg_level!=SOL_SOCKET||c->cmsg_type!=SCM_RIGHTS||c->cmsg_len!=CMSG_LEN(sizeof(int)))return 48;
+    memcpy(&received,CMSG_DATA(c),sizeof(received));
+    struct stat a,b;if(fstat(fd,&a)||fstat(received,&b)||a.st_dev!=b.st_dev||a.st_ino!=b.st_ino)return 49;
+    close(received);
+    if(pass_fd(pair[0],event)!=1)return 50;
+    memset(control,0,sizeof(control));message.msg_controllen=sizeof(control);
+    if(recvmsg(pair[1],&message,MSG_CMSG_CLOEXEC)!=1)return 51;
+    c=CMSG_FIRSTHDR(&message);if(!c||c->cmsg_len!=CMSG_LEN(sizeof(int)))return 52;
+    memcpy(&received,CMSG_DATA(c),sizeof(received));close(received);
+    errno=0;if(pass_fd(pair[0],pair[1])!=-1||errno!=EPERM)return 53;
+    int ns=open("/proc/self/ns/pid",O_RDONLY|O_CLOEXEC);if(ns<0)return 54;
+    errno=0;if(pass_fd(pair[0],ns)!=-1||errno!=EPERM)return 55;
+    if(dup2(pair[0],198)!=198)return 56;
+    errno=0;if(pass_fd(198,fd)!=-1||errno!=EPERM)return 57;
+    struct sock_filter instructions[]={BPF_STMT(BPF_RET|BPF_K,SECCOMP_RET_USER_NOTIF)};
+    struct sock_fprog program={.len=1,.filter=instructions};
+    errno=0;if(syscall(SYS_seccomp,SECCOMP_SET_MODE_FILTER,SECCOMP_FILTER_FLAG_NEW_LISTENER,&program)!=-1||errno!=EPERM)return 58;
+    close(ns);close(198);close(event);close(fd);close(pair[0]);close(pair[1]);
+    printf("INTERNAL_THREAD_FD_EVENTFD_TRANSFER_VERIFIED_SOCKET_NAMESPACE_RELAY_DENIED\n");return 0;
 }
 int main(int argc,char **argv){
     if(argc<3)return 2;
@@ -68,6 +123,7 @@ int main(int argc,char **argv){
         denied_transfer(argv[2],argv[3]);
         printf("FD_TRANSFER_DENIED\n");return 0;
     }
+    if(!strcmp(argv[1],"internal-transfer"))return internal_transfer(argv[2]);
     if(!strcmp(argv[1],"escape")) {
         int fd=open(argv[2],O_RDONLY|O_CLOEXEC);if(fd<0)return 3;
         errno=0;if(setns(fd,CLONE_NEWPID)!=-1 || errno!=EPERM)return 4;
