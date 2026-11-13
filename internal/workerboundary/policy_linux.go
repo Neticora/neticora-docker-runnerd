@@ -98,8 +98,11 @@ func (p PreflightPolicy) Render() ([]byte, error) {
 		fmt.Fprintf(&b, "  %s rmix,\n  deny %s wkl,\n", path, path)
 	}
 	b.WriteString("  unix (create, getattr, setattr, getopt, setopt, shutdown) type=seqpacket,\n  unix (create, getattr, setattr, getopt, setopt, shutdown) type=stream,\n")
-	fmt.Fprintf(&b, "  unix (send, receive) type=seqpacket peer=(label=%s),\n", p.Name())
-	fmt.Fprintf(&b, "  unix (connect, send, receive) type=seqpacket peer=(addr=\"%s/outside.sock\" label=unconfined),\n", p.WorkRoot)
+	// Pathname sockets use the exact file rule above. Fine-grained unix addr
+	// rules cover abstract/anonymous sockets only; never grant abstract connect
+	// to unconfined peers merely to support a pathname diagnostic socket.
+	fmt.Fprintf(&b, "  unix (send, receive) type=seqpacket addr=none peer=(addr=none label=%s),\n", p.Name())
+	b.WriteString("  unix (receive) type=seqpacket addr=none peer=(addr=none label=unconfined),\n")
 	fmt.Fprintf(&b, "  ptrace (read) peer=%s,\n  ptrace (readby, tracedby) peer=unconfined,\n", p.Name())
 	fmt.Fprintf(&b, "  signal (send, receive) peer=%s,\n  signal (receive) peer=unconfined,\n}\n", p.Name())
 	return []byte(b.String()), nil
