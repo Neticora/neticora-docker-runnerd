@@ -46,6 +46,12 @@ func Run(ctx context.Context, c config.Config, socket string) error {
 	draining.Store(!executing || drainErr == nil)
 	controllerCtx, stopController := context.WithCancel(ctx)
 	defer stopController()
+	connection := &connectionStatus{state: "disabled"}
+	if !executing && c.Connection != nil {
+		done := make(chan struct{})
+		go func() { defer close(done); connect(controllerCtx, c, connection) }()
+		defer func() { stopController(); <-done }()
+	}
 	var controller *execution.Controller
 	recoveryReason := ""
 	if executing {
@@ -81,7 +87,8 @@ func Run(ctx context.Context, c config.Config, socket string) error {
 		if controller != nil {
 			reason = controller.Status()
 		}
-		return control.Snapshot{ExecutionReason: reason, ExecutionEnabled: executing, State: state, AdmissionEnabled: executing && !draining.Load() && health.Ready, RuntimeQualified: false, RecoveryReady: health.Ready, RecoveryReason: health.Reason}
+		platform, lastHeartbeat := connection.get()
+		return control.Snapshot{Platform: platform, LastHeartbeat: lastHeartbeat, ExecutionReason: reason, ExecutionEnabled: executing, State: state, AdmissionEnabled: executing && !draining.Load() && health.Ready, RuntimeQualified: false, RecoveryReady: health.Ready, RecoveryReason: health.Reason}
 	}, func() {
 		draining.Store(true)
 	}, func(event string) { log.Print(event) })

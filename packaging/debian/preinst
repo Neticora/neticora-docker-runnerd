@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+. /etc/os-release
+[ "$ID" = ubuntu ] && [ "$VERSION_ID" = 26.04 ] && [ "$(dpkg --print-architecture)" = amd64 ] || {
+  echo 'This engineering package supports Ubuntu 26.04 amd64 only.' >&2; exit 1;
+}
+# Preserve running executables/workloads during replacement. An operator must
+# explicitly drain and stop the daemon using the qualified recovery procedure.
+if [ -d /run/systemd/system ] && systemctl is-active --quiet neticora-runnerd.service; then
+  echo 'Drain and stop Runnerd explicitly before package replacement; workloads and state must be preserved.' >&2
+  exit 1
+fi
+if getent passwd neticora-runnerd >/dev/null; then
+  [ "$(id -u neticora-runnerd)" != 0 ] || exit 1
+  [ "$(id -G neticora-runnerd | wc -w)" = 1 ] || { echo 'Unexpected supplementary service groups.' >&2; exit 1; }
+fi

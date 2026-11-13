@@ -15,12 +15,22 @@ import (
 const MaxConfigBytes = 65536
 
 type Config struct {
-	ControlPlaneURL       string     `json:"controlPlaneUrl"`
-	StateDir              string     `json:"stateDir"`
-	RuntimeEndpoint       string     `json:"runtimeEndpoint"`
-	CredentialFile        string     `json:"credentialFile"`
-	RequestTimeoutSeconds int        `json:"requestTimeoutSeconds"`
-	Execution             *Execution `json:"execution,omitempty"`
+	ControlPlaneURL       string      `json:"controlPlaneUrl"`
+	StateDir              string      `json:"stateDir"`
+	RuntimeEndpoint       string      `json:"runtimeEndpoint"`
+	CredentialFile        string      `json:"credentialFile"`
+	RequestTimeoutSeconds int         `json:"requestTimeoutSeconds"`
+	Execution             *Execution  `json:"execution,omitempty"`
+	Connection            *Connection `json:"connection,omitempty"`
+}
+
+// Connection enables authenticated observations only. It cannot pull commands,
+// authorize starts, or promote the independent local execution policy.
+type Connection struct {
+	TenantID             string `json:"tenantId"`
+	RunnerDeploymentID   string `json:"runnerDeploymentId"`
+	EnrollmentRequestID  string `json:"enrollmentRequestId"`
+	PublicKeyFingerprint string `json:"publicKeyFingerprint"`
 }
 
 // Execution is an explicit operator opt-in. Old foundation configurations remain
@@ -77,6 +87,9 @@ func Parse(data []byte) (Config, error) {
 	}
 	if c.RequestTimeoutSeconds < 1 || c.RequestTimeoutSeconds > 60 {
 		return Config{}, errors.New("request timeout must be between 1 and 60 seconds")
+	}
+	if b := c.Connection; b != nil && (b.TenantID == "" || b.RunnerDeploymentID == "" || b.EnrollmentRequestID == "" || len(b.PublicKeyFingerprint) != 64) {
+		return Config{}, errors.New("incomplete onboarding binding")
 	}
 	if x := c.Execution; x != nil && x.Enabled {
 		if x.MinRuntimeFreeBytes != 0 && x.MinRuntimeFreeBytes < 64<<20 {

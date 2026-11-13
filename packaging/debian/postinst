@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+if [ "$1" = configure ]; then
+  systemd-sysusers /usr/lib/sysusers.d/neticora-runnerd.conf
+  systemd-tmpfiles --create /usr/lib/tmpfiles.d/neticora-runnerd.conf
+  if [ -d /run/systemd/system ]; then systemctl daemon-reload; fi
+  echo 'Runnerd installed; service was not started or enabled. Run sudo neticora-runnerd setup.'
+fi

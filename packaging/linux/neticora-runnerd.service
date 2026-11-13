@@ -2,6 +2,7 @@
 Description=Neticora Runnerd
 After=network-online.target
 Wants=network-online.target
+ConditionPathExists=/etc/neticora-runnerd/config.json
 
 [Service]
 Type=simple
@@ -29,6 +30,7 @@ ProtectControlGroups=yes
 RestrictSUIDSGID=yes
 LockPersonality=yes
 CapabilityBoundingSet=
+AmbientCapabilities=
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 
 [Install]

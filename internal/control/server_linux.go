@@ -15,6 +15,8 @@ import (
 
 type peerKey struct{}
 type Snapshot struct {
+	Platform         string `json:"platform,omitempty"`
+	LastHeartbeat    string `json:"lastHeartbeat,omitempty"`
 	ExecutionReason  string `json:"executionReason,omitempty"`
 	ExecutionEnabled bool   `json:"executionEnabled,omitempty"`
 	State            string `json:"state"`
