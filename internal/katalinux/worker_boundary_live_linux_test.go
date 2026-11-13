@@ -275,9 +275,10 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer unix.Close(processFD)
-	// Move only the original verified namespace init and reference holder into
-	// a DIFFERENT owned test slice. The complete original hierarchy must become
-	// empty while the reference remains alive; a sibling leaf is not this test.
+	// Move the original init, reference holder and all trusted transfer guardians
+	// into a DIFFERENT owned test slice. Freeze both owned leaves before reading
+	// their task IDs so no fixture task can exit/fork during numeric migration.
+	// The original hierarchy becomes empty while all references remain alive.
 	other, _, otherPlan, _, _ := liveRetirementFixture(t, ctx)
 	otherGroup, err := other.cgroupRecord(otherPlan)
 	if err != nil {
@@ -287,14 +288,40 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 	if err = os.Mkdir(migrated, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err = os.WriteFile(filepath.Join(migrated, "cgroup.procs"), []byte(strconv.Itoa(hostPID)), 0600); err != nil {
-		t.Fatal(err)
+	for _, path := range []string{leaf, migrated} {
+		if err = os.WriteFile(filepath.Join(path, "cgroup.freeze"), []byte("1"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		defer os.WriteFile(filepath.Join(path, "cgroup.freeze"), []byte("0"), 0600)
+		settleSandboxTest(t, func() error {
+			b, e := os.ReadFile(filepath.Join(path, "cgroup.events"))
+			if e != nil || !strings.Contains(string(b), "frozen 1") {
+				return ErrQualification
+			}
+			return nil
+		})
 	}
-	if id.Check() != nil {
-		t.Fatal("original init identity changed before controlled migration")
+	processes, err = os.ReadFile(filepath.Join(leaf, "cgroup.procs"))
+	if err != nil || id.Check() != nil {
+		t.Fatal("original namespace unavailable before frozen fixture migration", err)
 	}
-	if err = os.WriteFile(filepath.Join(migrated, "cgroup.procs"), []byte(strconv.Itoa(id.PID)), 0600); err != nil {
-		t.Fatal(err)
+	for _, pid := range strings.Fields(string(processes)) {
+		info, e := os.Stat(filepath.Join("/proc", pid, "ns/pid"))
+		if e != nil {
+			t.Fatal(e)
+		}
+		stat, ok := info.Sys().(*syscall.Stat_t)
+		if !ok || stat.Ino != id.PIDNamespaceInode || uint64(stat.Dev) != id.PIDNamespaceDevice {
+			t.Fatal("unowned task in native migration fixture")
+		}
+		if err = os.WriteFile(filepath.Join(migrated, "cgroup.procs"), []byte(pid), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, path := range []string{leaf, migrated} {
+		if err = os.WriteFile(filepath.Join(path, "cgroup.freeze"), []byte("0"), 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	settleSandboxTest(t, func() error {
 		_, populated, e := inspectCgroup(group)
