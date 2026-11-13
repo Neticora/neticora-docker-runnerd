@@ -15,9 +15,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
+	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
 	"github.com/Neticora/neticora-docker-runnerd/internal/workerboundary"
 	"golang.org/x/sys/unix"
 )
@@ -76,7 +78,7 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 	profile := filepath.Join(transient, "apparmor")
 	// Native ABI fixture only. This broad filesystem profile deliberately does
 	// not qualify Kata's production write/IPC policy or a runtime integration.
-	policy := fmt.Sprintf("profile %s flags=(attach_disconnected,mediate_deleted) {\n file,\n network,\n capability,\n mount,\n umount,\n signal,\n /** ix,\n deny capability mac_admin,\n deny capability mac_override,\n deny ptrace,\n}\n", label)
+	policy := fmt.Sprintf("profile %s flags=(attach_disconnected,mediate_deleted) {\n file,\n network,\n capability,\n mount,\n umount,\n signal,\n /** ix,\n deny capability mac_admin,\n deny capability mac_override,\n ptrace (readby) peer=unconfined,\n ptrace (read) peer=%s,\n}\n", label, label)
 	if err = os.WriteFile(profile, []byte(policy), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -300,6 +302,76 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 	})
 	if id.Check() != nil || id.CheckRetired() == nil {
 		t.Fatal("migrated live worker escaped lifetime obligation")
+	}
+	if profileFile := os.Getenv("RUNNERD09_KATA_COMPONENT_PROFILE"); profileFile != "" {
+		raw, e := hostfs.ReadPrivate(profileFile, 262144)
+		var artifact struct {
+			Manifest Manifest `json:"manifest"`
+		}
+		if e != nil || json.Unmarshal(raw, &artifact) != nil {
+			t.Fatal("protected historical Kata tuple unavailable", e)
+		}
+		m := artifact.Manifest
+		for _, binary := range []string{m.ShimBinary, m.QEMUBinary, "/opt/kata/libexec/virtiofsd"} {
+			if digestFile(binary, m.Files[binary]) != nil {
+				t.Fatal("actual Kata binary differs from pinned historical tuple")
+			}
+			if e = id.Run(ctx, []string{binary, "--version"}, stdio); e != nil {
+				t.Fatal("filtered Kata binary version ABI failed", binary, e)
+			}
+		}
+		// Shim start creates only its task-service endpoint. No TaskCreate RPC,
+		// Docker lifecycle request, guest bootstrap, block allocation or VM is used.
+		// A fresh containerd namespace/SID cannot adopt any original execution.
+		bundle := filepath.Join(transient, "abi-bundle")
+		if e = os.Mkdir(bundle, 0700); e != nil {
+			t.Fatal(e)
+		}
+		if e = os.Mkdir(filepath.Join(bundle, "rootfs"), 0700); e != nil {
+			t.Fatal(e)
+		}
+		oci := `{"ociVersion":"1.0.2","process":{"terminal":false,"args":["/bin/true"],"cwd":"/"},"root":{"path":"rootfs"},"linux":{"namespaces":[]}}`
+		if e = os.WriteFile(filepath.Join(bundle, "config.json"), []byte(oci), 0600); e != nil {
+			t.Fatal(e)
+		}
+		sidHash := sha256.Sum256([]byte(plan.Name + " native shim ABI"))
+		sid := hex.EncodeToString(sidHash[:])
+		args := []string{"/usr/bin/env", "-C", bundle, "KATA_CONF_FILE=" + m.RuntimeConfig, m.ShimBinary, "-namespace", "neticora-f5a2-native", "-address", "/run/runnerd09-docker/containerd/containerd.sock", "-id", sid, "start"}
+		if e = id.Run(ctx, args, stdio); e != nil {
+			t.Fatal("filtered real shim start ABI failed; no runtime qualification", e)
+		}
+		foundShim := false
+		entries, e := os.ReadDir("/proc")
+		if e != nil {
+			t.Fatal(e)
+		}
+		for _, entry := range entries {
+			if _, e = strconv.Atoi(entry.Name()); e != nil {
+				continue
+			}
+			path := filepath.Join("/proc", entry.Name())
+			args, e := os.ReadFile(filepath.Join(path, "cmdline"))
+			if e != nil || !strings.Contains(string(args), sid) {
+				continue
+			}
+			exe, e := os.Readlink(filepath.Join(path, "exe"))
+			if e != nil || exe != m.ShimBinary {
+				continue
+			}
+			info, e := os.Stat(filepath.Join(path, "ns/pid"))
+			if e != nil {
+				t.Fatal(e)
+			}
+			stat, ok := info.Sys().(*syscall.Stat_t)
+			if !ok || stat.Ino != id.PIDNamespaceInode || uint64(stat.Dev) != id.PIDNamespaceDevice {
+				t.Fatal("actual shim escaped original PID lifetime namespace")
+			}
+			foundShim = true
+		}
+		if !foundShim {
+			t.Fatal("real shim start returned without original namespace worker")
+		}
+		t.Log("Pinned real shim/QEMU/virtiofsd version ABI and real shim start passed inside original namespace; no TaskCreate, Docker job, VM or storage qualification")
 	}
 	if actual, e := sandboxStamp(p.Manifest.Storage.Runtime.Root, stamp.Root, strings.Repeat("a", 64)); e != nil || actual != stamp {
 		t.Fatal("metadata changed before domain retirement", e)
