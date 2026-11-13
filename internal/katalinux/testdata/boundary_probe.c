@@ -74,10 +74,12 @@ int main(int argc,char **argv){
         pid_t child=fork();if(child<0)return 9;
         if(child)return 0;
         int fd=open(argv[2],O_PATH|O_DIRECTORY|O_CLOEXEC);if(fd<0)_exit(10);
-        FILE *report=fopen(argv[3],"wx");if(!report)_exit(11);
+        char temporary[4096];
+        if(snprintf(temporary,sizeof(temporary),"%s.pending",argv[3])>=(int)sizeof(temporary))_exit(11);
+        FILE *report=fopen(temporary,"wx");if(!report)_exit(11);
         struct stat s;if(fstat(fd,&s))_exit(12);
         fprintf(report,"%ld %lu %lu\n",(long)getpid(),(unsigned long)s.st_dev,(unsigned long)s.st_ino);
-        if(fclose(report))_exit(13);
+        if(fflush(report)||fsync(fileno(report))||fclose(report)||rename(temporary,argv[3]))_exit(13);
         for(;;)pause();
     }
     return 2;
