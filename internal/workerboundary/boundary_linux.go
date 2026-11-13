@@ -87,7 +87,11 @@ func Start(ctx context.Context, helper, socket, profile string, cgroupFD int) (I
 		return id, err
 	}
 	id.PID = cmd.Process.Pid
-	_ = cmd.Process.Release()
+	// Reap only this child after its eventual exit. Command has no cancellation
+	// hook or parent-death signal: losing the broker preserves the original
+	// namespace/ownership. Release without Wait would leak zombies in a live
+	// long-running broker after successful retirement.
+	go func() { _ = cmd.Wait() }()
 	var err error
 	id.Start, err = processStart(id.PID)
 	if err != nil {

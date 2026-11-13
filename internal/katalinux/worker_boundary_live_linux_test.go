@@ -546,6 +546,13 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 	if err = id.CheckRetired(); err != nil {
 		t.Fatal(err)
 	}
+	settleSandboxTest(t, func() error {
+		_, e := os.Stat(fmt.Sprintf("/proc/%d", id.PID))
+		if os.IsNotExist(e) {
+			return nil
+		}
+		return workerboundary.ErrBoundary
+	})
 	polls := []unix.PollFd{{Fd: int32(processFD), Events: unix.POLLIN}}
 	if n, e := unix.Poll(polls, 0); e != nil || n != 1 || polls[0].Revents&unix.POLLIN == 0 {
 		t.Fatal("namespace retirement missed migrated reference holder", e)
