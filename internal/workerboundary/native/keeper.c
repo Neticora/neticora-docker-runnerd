@@ -293,7 +293,21 @@ static void supervise_transfers(int listener,pid_t child,int client) {
             struct seccomp_notif_resp response={.id=request.id,.val=value<0?0:value,.error=value<0?-errno:0};
             if(ioctl(listener,SECCOMP_IOCTL_NOTIF_SEND,&response)&&errno!=ENOENT)break;
         }
-        if(event.revents&(POLLHUP|POLLERR|POLLNVAL))break;
+        if(event.revents&POLLHUP) {
+            /* The last filtered task can exit between WNOHANG and poll. Reap
+             * that original child instead of converting successful completion
+             * into a supervisor error. No live filtered task remains at HUP. */
+            if(!replied) {
+                int status;pid_t ready;
+                do{ready=waitpid(child,&status,0);}while(ready<0&&errno==EINTR);
+                if(ready==child) {
+                    reply(client,WIFEXITED(status)?WEXITSTATUS(status):128+WTERMSIG(status));
+                    replied=1;
+                }
+            }
+            break;
+        }
+        if(event.revents&(POLLERR|POLLNVAL))break;
     }
     if(!replied)reply(client,ERROR_EXIT);
     close(listener);
