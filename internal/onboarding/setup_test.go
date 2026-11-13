@@ -33,7 +33,7 @@ func (p *platform) Post(_ context.Context, path, _ string, m protocol.Outbound, 
 		return nil, errors.New("request rejected")
 	}
 	if path == "/token" {
-		return json.Marshal(map[string]string{"accessToken": strings.Repeat("a", 43), "expiresAt": time.Now().Add(time.Minute).UTC().Format(time.RFC3339Nano)})
+		return json.Marshal(map[string]string{"accessToken": strings.Repeat("a", 43), "expiresAt": time.Now().Add(time.Minute).UTC().Format("2006-01-02T15:04:05.000Z")})
 	}
 	p.calls++
 	if len(p.request) > 0 && string(p.request) != string(m.Bytes()) {
