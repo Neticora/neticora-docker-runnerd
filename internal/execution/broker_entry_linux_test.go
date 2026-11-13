@@ -13,11 +13,11 @@ import (
 )
 
 func TestBrokerEntryRejectsInheritedResourceDescriptors(t *testing.T) {
-	for _, kind := range []string{"regular", "directory", "opath"} {
+	for _, kind := range []string{"regular", "directory", "opath", "opath-stdin"} {
 		t.Run(kind, func(t *testing.T) {
 			path := t.TempDir()
 			flags := unix.O_RDONLY | unix.O_DIRECTORY | unix.O_CLOEXEC
-			if kind == "opath" {
+			if strings.HasPrefix(kind, "opath") {
 				flags = unix.O_PATH | unix.O_DIRECTORY | unix.O_CLOEXEC
 			}
 			if kind == "regular" {
@@ -38,10 +38,16 @@ func TestBrokerEntryRejectsInheritedResourceDescriptors(t *testing.T) {
 				t.Fatal(err)
 			}
 			cmd := exec.Command(binary, "-test.run=^TestBrokerEntryDescriptorChild$", "-test.v")
-			cmd.Env = append(os.Environ(), "RUNNERD09_ENTRY_FD_CHILD=1")
-			cmd.ExtraFiles = []*os.File{file}
+			expected := "inherited descriptor 3"
+			if kind == "opath-stdin" {
+				cmd.Stdin = file
+				expected = "privileged standard descriptor 0"
+			} else {
+				cmd.ExtraFiles = []*os.File{file}
+			}
+			cmd.Env = append(os.Environ(), "RUNNERD09_ENTRY_FD_CHILD=1", "RUNNERD09_ENTRY_FD_EXPECT="+expected)
 			output, err := cmd.CombinedOutput()
-			if err != nil || !strings.Contains(string(output), "inherited descriptor 3 rejected") {
+			if err != nil || !strings.Contains(string(output), expected+" rejected") {
 				t.Fatalf("entry guard failed: %v %s", err, output)
 			}
 		})
@@ -51,9 +57,10 @@ func TestBrokerEntryDescriptorChild(t *testing.T) {
 	if os.Getenv("RUNNERD09_ENTRY_FD_CHILD") != "1" {
 		t.Skip("subprocess only")
 	}
+	expected := os.Getenv("RUNNERD09_ENTRY_FD_EXPECT")
 	err := CheckBrokerEntryDescriptors()
-	if err == nil || !strings.Contains(err.Error(), "inherited descriptor 3") {
+	if err == nil || !strings.Contains(err.Error(), expected) {
 		t.Fatal("privileged inherited resource accepted", err)
 	}
-	t.Log("inherited descriptor 3 rejected")
+	t.Log(expected + " rejected")
 }
