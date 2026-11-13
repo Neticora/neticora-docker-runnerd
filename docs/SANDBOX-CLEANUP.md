@@ -15,6 +15,8 @@ processes outside the execution domain.
 Only the broker may request privileged runtime lifecycle operations. The controller
 must have no Docker/containerd socket, inherited privileged descriptor, host
 metadata descriptor, cgroup delegation or ability to thaw/migrate host workers.
+Daemon entry rejects inherited descriptors before opening its own journal or
+transport; this includes regular, directory and O_PATH handles as well as sockets.
 The signed runtime tuple must place all execution workers in the original owned
 cgroup. A runtime that transfers resource handles to uncontrolled workers does not
 satisfy this contract. Runtime and metadata roots remain protected by a root-owned
