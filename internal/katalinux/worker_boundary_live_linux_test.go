@@ -331,6 +331,10 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 		if e != nil || !filepath.IsAbs(address) || addressInfo.Mode()&os.ModeSocket == 0 {
 			t.Fatal("dedicated containerd socket unavailable", e)
 		}
+		publisher := os.Getenv("RUNNERD09_CONTAINERD_PUBLISH_BINARY")
+		if !filepath.IsAbs(publisher) || digestFile(publisher, os.Getenv("RUNNERD09_CONTAINERD_PUBLISH_SHA256")) != nil {
+			t.Fatal("independently pinned dedicated containerd publisher unavailable")
+		}
 		for _, binary := range []string{m.ShimBinary, m.QEMUBinary, "/opt/kata/libexec/virtiofsd"} {
 			if digestFile(binary, m.Files[binary]) != nil {
 				t.Fatal("actual Kata binary differs from pinned historical tuple")
@@ -355,7 +359,7 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 		}
 		sidHash := sha256.Sum256([]byte(plan.Name + " native shim ABI"))
 		sid := hex.EncodeToString(sidHash[:])
-		args := []string{"/usr/bin/env", "-C", bundle, "KATA_CONF_FILE=" + m.RuntimeConfig, m.ShimBinary, "-namespace", "neticora-f5a2-native", "-address", address, "-id", sid, "start"}
+		args := []string{"/usr/bin/env", "-C", bundle, "KATA_CONF_FILE=" + m.RuntimeConfig, m.ShimBinary, "-namespace", "neticora-f5a2-native", "-address", address, "-publish-binary", publisher, "-id", sid, "start"}
 		if e = id.Run(ctx, args, stdio); e != nil {
 			t.Fatal("filtered real shim start ABI failed; no runtime qualification", e)
 		}
