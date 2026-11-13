@@ -26,6 +26,7 @@ import (
 var ErrBoundary = errors.New("worker acquisition boundary unavailable; retain ownership")
 
 type Identity struct {
+	verified             bool   // Only a checked birth or protected original record can mint it.
 	PID                  int    `json:"pid"`
 	Start                string `json:"start"`
 	Boot                 string `json:"boot"`
@@ -115,10 +116,18 @@ func Start(ctx context.Context, helper, socket, profile string, cgroupFD int) (I
 	if err != nil {
 		return id, ErrBoundary
 	}
-	return id, id.Check()
+	id.verified = true
+	if err = id.Check(); err != nil {
+		id.verified = false
+		return id, err
+	}
+	return id, nil
 }
 
 func (id Identity) Check() error {
+	if !id.verified {
+		return ErrBoundary
+	}
 	boot, err := bootID()
 	if err != nil || boot != id.Boot || id.PID < 2 || id.Start == "" || id.PIDNamespaceInode == 0 || id.MountNamespaceInode == 0 {
 		return ErrBoundary
@@ -275,6 +284,9 @@ func (id Identity) Retire(ctx context.Context) error {
 // missing shim PID or an empty cgroup. Boot/identity uncertainty still fails
 // closed. The enclosing broker record must authenticate the original Identity.
 func (id Identity) CheckRetired() error {
+	if !id.verified {
+		return ErrBoundary
+	}
 	boot, err := bootID()
 	if err != nil || boot != id.Boot || id.PID < 2 || id.Start == "" || id.PIDNamespaceInode == 0 || id.MountNamespaceInode == 0 {
 		return ErrBoundary

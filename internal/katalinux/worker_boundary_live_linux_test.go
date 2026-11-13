@@ -4,6 +4,8 @@ package katalinux
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -31,7 +33,7 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 	defer cancel()
-	p, _, plan, _, stamp := liveRetirementFixture(t, ctx)
+	p, _, plan, op, stamp := liveRetirementFixture(t, ctx)
 	transient, err := os.MkdirTemp("/run", "nr9-boundary-")
 	if err != nil {
 		t.Fatal(err)
@@ -88,7 +90,20 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer cg.Close()
-	id, err := workerboundary.Start(ctx, keeper, filepath.Join(transient, "d.sock"), label, int(cg.Fd()))
+	helperBytes, err := os.ReadFile(keeper)
+	if err != nil {
+		t.Fatal(err)
+	}
+	helperDigest := sha256.Sum256(helperBytes)
+	policyDigest := sha256.Sum256([]byte(policy))
+	binding := workerboundary.Binding{InstallationID: "native-installation", TenantID: "native-tenant", HostID: "native-host", SessionEpoch: "1", Endpoint: "native-endpoint", ExecutionID: plan.Name, Generation: "1", SpecHash: plan.Config.Labels["com.neticora.runnerd.spec"], Profile: p.ID, Name: plan.Name}
+	registry := workerboundary.Registry{Directory: p.EvidenceDirectory}
+	domain, err := registry.Create(ctx, binding, op, keeper, hex.EncodeToString(helperDigest[:]), hex.EncodeToString(policyDigest[:]), filepath.Join(transient, "d.sock"), label, int(cg.Fd()))
+	var id workerboundary.Identity
+	if domain.Identity != nil {
+		id = *domain.Identity
+	}
+
 	if err != nil {
 		t.Fatalf("namespace start (retain original): %+v %v", id, err)
 	}
@@ -253,8 +268,33 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 	if actual, e := sandboxStamp(p.Manifest.Storage.Runtime.Root, stamp.Root, strings.Repeat("a", 64)); e != nil || actual != stamp {
 		t.Fatal("metadata changed before domain retirement", e)
 	}
+	removeOperation := strings.Repeat("4", 64)
+	original := domain
+	if _, err = registry.BeginRetirement(binding, removeOperation); err != nil {
+		t.Fatal(err)
+	}
 	if err = id.Retire(ctx); err != nil {
 		t.Fatal(err)
+	}
+	// Reopen the protected record after the kernel effect but before completion,
+	// exactly the durable interval a broker SIGKILL must preserve.
+	reopened := workerboundary.Registry{Directory: p.EvidenceDirectory}
+	held, err := reopened.Load(binding)
+	if err != nil || held.Phase != "RETIRING" || !held.SameOriginal(original) {
+		t.Fatal("interrupted namespace retirement lost original ownership", err)
+	}
+	finished, err := reopened.Retire(ctx, binding, removeOperation)
+	if err != nil || finished.Phase != "RETIRED" || !finished.SameOriginal(original) {
+		t.Fatal("recovery replaced original domain", err)
+	}
+	if _, err = reopened.Retire(ctx, binding, strings.Repeat("5", 64)); err == nil {
+		t.Fatal("replacement removal authority accepted")
+	}
+	if _, err = reopened.CheckRetired(binding, removeOperation); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = reopened.Create(ctx, binding, op, keeper, hex.EncodeToString(helperDigest[:]), hex.EncodeToString(policyDigest[:]), id.Socket, label, int(cg.Fd())); err == nil {
+		t.Fatal("retired domain was re-created")
 	}
 	retired = true
 	if err = id.CheckRetired(); err != nil {
