@@ -8,6 +8,7 @@
 #include <stdatomic.h>
 #include <sched.h>
 #include <signal.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -207,7 +208,7 @@ int main(int argc,char **argv){
         close(fd);close(socket);_exit(0);
     }
     if(!strcmp(argv[1],"confinement")) {
-        if(argc!=7)return 2;
+        if(argc!=8)return 2;
         char label[256]={0};int current=open("/proc/self/attr/current",O_RDONLY|O_CLOEXEC);
         if(current<0||read(current,label,sizeof(label)-1)<1)return 86;
         close(current);
@@ -230,11 +231,28 @@ int main(int argc,char **argv){
         memcpy(address.sun_path,argv[5],strlen(argv[5])+1);
         errno=0;if(connect(sock,(struct sockaddr *)&address,sizeof(address))!=-1||errno!=EACCES)return 95;
         close(sock);
+        sock=socket(AF_UNIX,SOCK_SEQPACKET|SOCK_CLOEXEC,0);
+        if(sock<0||argv[7][0]!='@'||strlen(argv[7])>=sizeof(address.sun_path))return 101;
+        memset(address.sun_path,0,sizeof(address.sun_path));
+        memcpy(address.sun_path+1,argv[7]+1,strlen(argv[7])-1);
+        errno=0;if(connect(sock,(struct sockaddr *)&address,
+            offsetof(struct sockaddr_un,sun_path)+strlen(argv[7]))!=-1||errno!=EACCES)return 102;
+        close(sock);
+        char protected[4096];snprintf(protected,sizeof(protected),"%s/apparmor",argv[3]);
+        errno=0;fd=open(protected,O_WRONLY|O_TRUNC|O_CLOEXEC);
+        if(fd!=-1||errno!=EACCES)return 103;
+        snprintf(protected,sizeof(protected),"%s/d.sock",argv[3]);
+        sock=socket(AF_UNIX,SOCK_SEQPACKET|SOCK_CLOEXEC,0);
+        if(sock<0||strlen(protected)>=sizeof(address.sun_path))return 104;
+        memset(address.sun_path,0,sizeof(address.sun_path));
+        memcpy(address.sun_path,protected,strlen(protected)+1);
+        errno=0;if(connect(sock,(struct sockaddr *)&address,sizeof(address))!=-1||errno!=EACCES)return 105;
+        close(sock);
         pid_t child=fork();if(child<0)return 96;
         if(!child) {execl("/usr/bin/true","true",NULL);_exit(errno==EACCES?97:98);}
         int status;while(waitpid(child,&status,0)<0)if(errno!=EINTR)return 99;
         if(!WIFEXITED(status)||WEXITSTATUS(status)!=97)return 100;
-        printf("CONFINEMENT_ENFORCED_STATE_READ_WRITE_DELETE_GUARD_CHMOD_DOCKER_SOCKET_UNAPPROVED_EXEC_DENIED\n");
+        printf("CONFINEMENT_ENFORCED_STATE_POLICY_WRITE_GUARD_CHMOD_DOCKER_ABSTRACT_SUPERVISOR_SOCKET_UNAPPROVED_EXEC_DENIED\n");
         return 0;
     }
     if(!strcmp(argv[1],"transfer")) {

@@ -132,6 +132,16 @@ func liveWorkerBoundary(t *testing.T, protected bool) {
 		}
 		digest := sha256.Sum256(probeBytes)
 		candidate := workerboundary.PreflightPolicy{Domain: plan.Name, WorkRoot: transient, MetadataRoot: stamp.Root, StateRoot: p.EvidenceDirectory, Executables: []workerboundary.PinnedExecutable{{Path: probe, SHA256: hex.EncodeToString(digest[:])}}}
+		injected := candidate
+		injected.WorkRoot += "\n file,"
+		if _, e = injected.Render(); e == nil {
+			t.Fatal("policy syntax in literal path accepted")
+		}
+		aliased := candidate
+		aliased.StateRoot = candidate.MetadataRoot
+		if _, e = aliased.Render(); e == nil {
+			t.Fatal("broker state accepted as writable metadata root")
+		}
 		policyBytes, e := candidate.Render()
 		if e != nil {
 			t.Fatal("protected policy render failed", e)
@@ -233,7 +243,13 @@ func liveWorkerBoundary(t *testing.T, protected bool) {
 		if _, err = os.Stat("/run/runnerd09-docker.sock"); err != nil {
 			t.Fatal("real dedicated Docker socket unavailable for negative control", err)
 		}
-		if err = id.Run(ctx, []string{probe, "confinement", canary, transient, stamp.Root, "/run/runnerd09-docker.sock", label}, stdio); err != nil {
+		abstract := "@neticora-preflight-" + plan.Name[4:44]
+		abstractListener, e := net.ListenUnix("unixpacket", &net.UnixAddr{Name: abstract, Net: "unixpacket"})
+		if e != nil {
+			t.Fatal(e)
+		}
+		defer abstractListener.Close()
+		if err = id.Run(ctx, []string{probe, "confinement", canary, transient, stamp.Root, "/run/runnerd09-docker.sock", label, abstract}, stdio); err != nil {
 			t.Fatal("restrictive policy negative/positive control failed", err)
 		}
 		content, e := os.ReadFile(canary)
@@ -360,6 +376,32 @@ func liveWorkerBoundary(t *testing.T, protected bool) {
 		t.Fatal(err)
 	}
 	defer unix.Close(processFD)
+	if protected {
+		fdPath := fmt.Sprintf("/proc/%d/fd/3", hostPID)
+		info, e := os.Stat(fdPath)
+		if e != nil {
+			t.Fatal("positive original reference witness unavailable", e)
+		}
+		s := info.Sys().(*syscall.Stat_t)
+		if uint64(s.Dev) != stamp.Device || s.Ino != stamp.Inode {
+			t.Fatal("outside-controller negative test selected wrong reference")
+		}
+		check := `import errno,os,sys
+try:
+ fd=os.open(sys.argv[1],os.O_PATH);os.close(fd);sys.exit(2)
+except OSError as e:
+ if e.errno not in (errno.EACCES,errno.EPERM):sys.exit(3)
+ print("OUTSIDE_UID_10003_PROTECTED_REFERENCE_DENIED")
+`
+		controller := exec.CommandContext(ctx, "/usr/bin/python3", "-c", check, fdPath)
+		controller.Env = []string{"PATH=/usr/bin:/bin", "LANG=C"}
+		controller.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: 10003, Gid: 10003, Groups: []uint32{}}}
+		result, e := controller.CombinedOutput()
+		if e != nil {
+			t.Fatalf("outside nonroot controller acquired protected reference or test failed: %v %s", e, result)
+		}
+		t.Log(strings.TrimSpace(string(result)))
+	}
 	// Move the original init, reference holder and all trusted transfer guardians
 	// into a DIFFERENT owned test slice. Freeze both owned leaves before reading
 	// their task IDs so no fixture task can exit/fork during numeric migration.
