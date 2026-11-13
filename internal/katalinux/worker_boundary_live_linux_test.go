@@ -694,7 +694,7 @@ except OSError as e:
 	if id.Run(ctx, []string{probe, "privileges", "check"}, stdio) == nil {
 		t.Fatal("failed guardian domain accepted replacement acquisition")
 	}
-	t.Log("Guardian SIGKILL: kernel ENOSYS, no outward rights, durable fault latch and original-owner quarantine; new acquisition denied")
+	t.Log("Guardian SIGKILL: kernel ENOSYS, no outward rights, protected same-boot fault latch and durable original-owner quarantine; new acquisition denied")
 	crashRequest := workerBoundaryCrashRequest{Directory: registry.Directory, Binding: binding, Operation: removeOperation, Ready: filepath.Join(transient, "retirement-ready")}
 	requestBytes, err := json.Marshal(crashRequest)
 	if err != nil {

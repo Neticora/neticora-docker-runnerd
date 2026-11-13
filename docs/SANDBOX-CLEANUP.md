@@ -156,9 +156,11 @@ are limited to immutable connected Unix stream/seqpacket peers visible inside th
 original namespace. Socket, namespace, pidfd and unknown anonymous-descriptor relay
 are denied; supported ordinary files, directories, pipes and eventfds may remain
 inside the domain. Losing a guardian leaves kernel notification failure, not an
-unfiltered syscall fallback. A failed guardian latches a protected, durable fault
-and the original namespace refuses replacement acquisition. Quarantine preserves
-the original phase/owner. Authorized retirement checks the original birth even
+unfiltered syscall fallback. A failed guardian latches a protected same-boot fault
+and the original namespace refuses replacement acquisition. The broker durably
+records quarantine with the original phase/owner. A control path on `/run` does
+not promise power-loss persistence; the durable original boot/ownership record
+still rejects unsupported reboot cleanup. Authorized retirement checks the original birth even
 when acquisition health has failed; it cannot substitute another namespace.
 Guardians remain inside the same lifetime boundary.
 
