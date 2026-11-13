@@ -553,6 +553,14 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 	if id.Run(ctx, []string{probe, "hold", stamp.Root, report}, stdio) == nil {
 		t.Fatal("retired namespace admitted replacement worker")
 	}
+	if err = out.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	workerLog, err := os.ReadFile(out.Name())
+	if err != nil || len(workerLog) > 65536 {
+		t.Fatal("bounded native component diagnostics unavailable", err)
+	}
+	t.Logf("native component diagnostics (no provider/authorization credentials):\n%s", workerLog)
 	bootChanged := id
 	bootChanged.Boot = "unsupported-boot"
 	if bootChanged.CheckRetired() == nil {

@@ -473,6 +473,44 @@ request budget.
 
 ## Broker-managed Kata lifecycle fixture
 
+### Worker acquisition-boundary component
+
+`TestRunnerd09LiveWorkerBoundary` requires the separate `runnerd_kata` native
+build, root on an explicitly marked dedicated host, `RUNNERD09_LIVE_LAB=1`, and
+`RUNNERD09_EXPECTED_CANDIDATE` equal to the committed build stamp. Set the
+`internal/katalinux.workerBoundaryCandidateCommit` linker variable to the full
+commit. `TestRunnerd09BoundaryBuildStamp` prints that commit and both embedded C
+source hashes; verify them and the executable hash before staging. A failed build
+must never cause a previous executable to run under a new candidate identity.
+
+The fixture uses fresh owned metadata/cgroups and a uniquely named enforcing
+AppArmor profile. It tests original ownership, descendant lifetime outside the
+original cgroup, internal regular-file/eventfd transfer through a thread with its
+own file table, denied outward rights, forbidden socket/namespace relay, sealed
+bootstrap and replacement-listener denial. It races 2,000 socket replacements
+against transfers and interrupts the original retirement owner with SIGKILL while
+workers acquire references. Reopening the protected registry must retain the exact
+owner/removal intent before retiring the original kernel namespace. Unsupported
+boot transitions remain denied. Retain failed runs as well as successful evidence.
+
+An optional protected historical profile in `RUNNERD09_KATA_COMPONENT_PROFILE`
+pins actual shim/QEMU/virtiofsd binaries. Supply the exact dedicated containerd
+publisher path/hash in `RUNNERD09_CONTAINERD_PUBLISH_BINARY` and
+`RUNNERD09_CONTAINERD_PUBLISH_SHA256`. This checks binary version calls and starts
+a fresh shim task service inside the original namespace; it sends no TaskCreate
+or Docker execution request and allocates no VM/block storage. Historical expired
+profiles supply binary identity only, never renewed admission authority.
+
+The component does not issue disposal evidence or release capacity. Its broad
+native AppArmor profile does not qualify production filesystem/IPC confinement.
+The helper requires a qualified kernel supporting thread pidfds and seccomp
+notification, plus explicitly reviewed supervisor capabilities; existing installed
+broker units must not silently gain privileges or enable this backend. Complete
+per-domain policy, original broker lifecycle integration and real VM verification
+before accepting acquisition-domain conformance or starting full F5-B.
+
+### Existing broker lifecycle fixture
+
 The separately tagged `TestPhaseDControllerRealDocker` fixture also exercises
 broker-managed block-backed Kata when `RUNNERD_PHASE_E_SEED` names an existing
 unqualified lab envelope. It preserves that pool's original evidence/journal

@@ -139,6 +139,37 @@ transfer. The current v1 proof therefore does not establish conformance with the
 contract above. Do not count old F5-A results, or issue new qualification approval on
 their basis, as satisfying these missing requirements.
 
+`internal/workerboundary` supplies a separate acquisition-boundary component. A
+protected `runnerd09-worker-domain-v1` record binds the original operation, owner,
+boot, namespace-init birth, PID/mount namespace inodes and helper/policy hashes.
+Its `INTENT`, `READY`, `RETIRING`, `RETIRED` states never replace the original
+physical/storage obligations or authorize disposal. Ambiguous creation cannot adopt
+another namespace. A boot change cannot prove retirement.
+
+Workers and transfer guardians inherit one original kernel PID namespace, including
+descendants moved to other cgroups. Retirement signals only the verified original
+init through its pidfd and waits for the kernel lifetime barrier. PID-namespace
+escape, asynchronous descriptor-transfer APIs and replacement seccomp listeners are
+denied. `sendmsg` is emulated using copied buffers and file descriptions captured
+from the notifying thread's pidfd; inspected syscalls are never resumed. Rights
+are limited to immutable connected Unix stream/seqpacket peers visible inside the
+original namespace. Socket, namespace, pidfd and unknown anonymous-descriptor relay
+are denied; supported ordinary files, directories, pipes and eventfds may remain
+inside the domain. Losing a guardian leaves kernel notification failure, not an
+unfiltered syscall fallback. Guardians remain inside the same lifetime boundary.
+
+This component is not connected to installed broker admission or disposal. Native
+fixtures deliberately use a broad AppArmor profile to isolate kernel mechanism
+tests; that profile is unsuitable for executing untrusted workers. Before runtime
+integration, independently pin an enforcing per-domain filesystem/IPC policy that
+protects broker records, helper binaries, host policy, privileged endpoints and
+unsupported kernel-mediated delegation paths. Verify every shim, QEMU, virtiofsd
+and helper enters the boundary before acquiring protected resources. Preserve the
+original committed-operation/journal ordering and version the signed admission and
+disposal evidence independently. Actual block-backed VM execution, complete runtime
+ABI, installed service capabilities, recovery and unsafe reuse remain qualification
+gates. Neither native fixture success nor shim task-service startup closes them.
+
 Keep historical signed artifacts, original ownership and completed evidence immutable.
 A stronger domain-evidence format must be explicitly versioned and independently
 verified rather than reinterpreting old v1 signatures. Existing unresolved obligations
