@@ -89,7 +89,10 @@ func (p PreflightPolicy) Render() ([]byte, error) {
 	slices.Sort(paths)
 	var b strings.Builder
 	fmt.Fprintf(&b, "# %s\nprofile %s flags=(attach_disconnected,mediate_deleted) {\n", PreflightPolicyVersion, p.Name())
-	b.WriteString("  /etc/ld.so.cache r,\n  /etc/localtime r,\n  /{,usr/}lib{,32,64}/** mr,\n  /dev/null rw,\n  /dev/{u,}random r,\n  /proc/** r,\n")
+	// The kernel represents an opened namespace inode as a disconnected root
+	// path. Permit root-directory read, never a recursive host filesystem read;
+	// descriptor classification still refuses namespace transfer.
+	b.WriteString("  / r,\n  /etc/ld.so.cache r,\n  /etc/localtime r,\n  /{,usr/}lib{,32,64}/** mr,\n  /dev/null rw,\n  /dev/{u,}random r,\n  /proc/** r,\n")
 	fmt.Fprintf(&b, "  %s/ r,\n  %s/ r,\n  %s/?* rwkl,\n  %s/?*/** rwkl,\n", p.WorkRoot, scratch, scratch, scratch)
 	fmt.Fprintf(&b, "  %s/ r,\n  %s/?* rwkl,\n  %s/?*/** rwkl,\n", p.MetadataRoot, p.MetadataRoot, p.MetadataRoot)
 	fmt.Fprintf(&b, "  %s/worker.log rw,\n  %s/ancestor-pidns r,\n  %s/outside.sock rw,\n", p.WorkRoot, p.WorkRoot, p.WorkRoot)
