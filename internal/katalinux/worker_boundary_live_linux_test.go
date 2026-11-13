@@ -546,6 +546,22 @@ except OSError as e:
 			if !ok || stat.Ino != id.PIDNamespaceInode || uint64(stat.Dev) != id.PIDNamespaceDevice {
 				t.Fatal("actual shim escaped original PID lifetime namespace")
 			}
+			status, e := os.ReadFile(filepath.Join(path, "status"))
+			if e != nil {
+				t.Fatal(e)
+			}
+			namespacePID := ""
+			for _, line := range strings.Split(string(status), "\n") {
+				fields := strings.Fields(line)
+				if len(fields) == 3 && fields[0] == "NSpid:" {
+					namespacePID = fields[2]
+				}
+			}
+			pidFile, e := os.ReadFile(filepath.Join(bundle, "shim.pid"))
+			if e != nil || namespacePID == "" || strings.TrimSpace(string(pidFile)) != namespacePID || namespacePID == entry.Name() {
+				t.Fatal("pinned shim PID-file ABI assumption changed; do not integrate", e)
+			}
+			t.Logf("SHIM_PID_ABI_GATE namespacePID=%s hostPID=%s: raw shim.pid is not host signaling authority; no containerd TaskCreate", namespacePID, entry.Name())
 			foundShim = true
 		}
 		if !foundShim {
