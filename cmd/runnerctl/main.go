@@ -47,7 +47,11 @@ func run() error {
 		return (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, "unix", *socket)
 	}, DisableCompression: true}
 	defer transport.CloseIdleConnections()
-	client := &http.Client{Transport: transport, Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	timeout := 5 * time.Second
+	if command == "kata-evidence" {
+		timeout = 15 * time.Second
+	}
+	client := &http.Client{Transport: transport, Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	query := url.Values{}
 	if command == "executions" {
 		query.Set("afterExecutionId", *afterID)

@@ -150,7 +150,13 @@ func (s *Server) ExposeKataEvidence(read func(context.Context, string, string) (
 			http.Error(w, "explicit execution scope required", http.StatusBadRequest)
 			return
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		// Fresh physical absence checks can outlast ordinary status requests.
+		// Extend only this authorized read, never execution or cleanup deadlines.
+		if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(12 * time.Second)); err != nil {
+			http.Error(w, "trusted Kata evidence unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
 		value, err := read(ctx, id, generation)
 		if err != nil {

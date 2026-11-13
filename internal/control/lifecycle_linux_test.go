@@ -26,6 +26,37 @@ func localTestClient(t *testing.T, path string) *http.Client {
 	return &http.Client{Transport: transport, Timeout: 5 * time.Second}
 }
 
+func TestKataEvidenceCompletesFreshChecksBeyondStatusDeadline(t *testing.T) {
+	path := privateSocketPath(t)
+	server, err := Listen(path, func() Snapshot { return Snapshot{} }, func() {}, func(string) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.ExposeKataEvidence(func(ctx context.Context, id, generation string) (any, error) {
+		if id != "original-execution" || generation != "1" {
+			return nil, errors.New("execution scope changed")
+		}
+		select {
+		case <-time.After(3200 * time.Millisecond):
+			return map[string]bool{"freshPhysicalChecks": true}, nil
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	})
+	served := make(chan error, 1)
+	go func() { served <- server.Serve() }()
+	t.Cleanup(func() { _ = server.Close(); <-served })
+	response, err := localTestClient(t, path).Get("http://local/kata-evidence?executionId=original-execution&generation=1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil || response.StatusCode != http.StatusOK || string(body) != "{\"freshPhysicalChecks\":true}\n" {
+		t.Fatalf("fresh evidence response failed: status=%d body=%q err=%v", response.StatusCode, body, err)
+	}
+}
+
 func TestActiveRequestShutdownAndImmediateRebind(t *testing.T) {
 	path := privateSocketPath(t)
 	original, err := Listen(path, func() Snapshot { return Snapshot{} }, func() {}, func(string) {})
