@@ -37,6 +37,40 @@ func TestRunnerd09BoundaryBuildStamp(t *testing.T) {
 	fmt.Printf("RUNNERD09_BOUNDARY_BUILD %s %x %x\n", workerBoundaryCandidateCommit, helper, probe)
 }
 
+type workerBoundaryCrashRequest struct {
+	Directory string                 `json:"directory"`
+	Binding   workerboundary.Binding `json:"binding"`
+	Operation string                 `json:"operation"`
+	Ready     string                 `json:"ready"`
+}
+
+// Native subprocess only: persist the original retirement intent and wait for
+// the parent to SIGKILL this exact process. No namespace signal/disposal occurs.
+func TestRunnerd09WorkerBoundaryCrashHelper(t *testing.T) {
+	path := os.Getenv("RUNNERD09_BOUNDARY_CRASH_REQUEST")
+	if path == "" {
+		t.Skip("parent-controlled native crash helper")
+	}
+	if os.Geteuid() != 0 || os.Getenv("RUNNERD09_LIVE_LAB") != "1" || workerBoundaryCandidateCommit != os.Getenv("RUNNERD09_EXPECTED_CANDIDATE") {
+		t.Fatal("explicit committed native helper required")
+	}
+	raw, err := hostfs.ReadPrivate(path, 32768)
+	var request workerBoundaryCrashRequest
+	if err != nil || json.Unmarshal(raw, &request) != nil {
+		t.Fatal("protected helper request unavailable", err)
+	}
+	record, err := (workerboundary.Registry{Directory: request.Directory}).BeginRetirement(request.Binding, request.Operation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(request.Ready, []byte(record.Owner), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		time.Sleep(time.Second)
+	}
+}
+
 func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 	if os.Getenv("RUNNERD09_LIVE_LAB") != "1" {
 		nativeUnavailable(t, "explicit dedicated namespace boundary lab required")
@@ -192,26 +226,34 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 	defer listener.Close()
 	received := make(chan error, 1)
 	go func() {
-		c, e := listener.AcceptUnix()
-		if e != nil {
+		for i := 0; i < 2; i++ {
+			c, e := listener.AcceptUnix()
+			if e != nil {
+				received <- e
+				return
+			}
+			defer c.Close()
+			_ = c.SetReadDeadline(time.Now().Add(5 * time.Second))
+			data := make([]byte, 64)
+			control := make([]byte, 256)
+			n, oob, flags, _, e := c.ReadMsgUnix(data, control)
+			if e == nil && (oob != 0 || flags&(unix.MSG_TRUNC|unix.MSG_CTRUNC) != 0 || string(data[:n]) != "plain-byte-stream") {
+				e = fmt.Errorf("unexpected receiver data: bytes=%d ancillary=%d flags=%x payload=%q", n, oob, flags, data[:n])
+			}
 			received <- e
-			return
 		}
-		defer c.Close()
-		_ = c.SetReadDeadline(time.Now().Add(5 * time.Second))
-		data := make([]byte, 64)
-		control := make([]byte, 256)
-		n, oob, flags, _, e := c.ReadMsgUnix(data, control)
-		if e == nil && (oob != 0 || flags&(unix.MSG_TRUNC|unix.MSG_CTRUNC) != 0 || string(data[:n]) != "plain-byte-stream") {
-			e = fmt.Errorf("unexpected receiver data: bytes=%d ancillary=%d flags=%x payload=%q", n, oob, flags, data[:n])
-		}
-		received <- e
 	}()
 	if err = id.Run(ctx, []string{probe, "transfer", outside, filepath.Join(stamp.Root, strings.Repeat("a", 64))}, stdio); err != nil {
 		t.Fatal(err)
 	}
 	if err = <-received; err != nil {
 		t.Fatal(err)
+	}
+	if err = id.Run(ctx, []string{probe, "race-transfer", outside, filepath.Join(stamp.Root, strings.Repeat("a", 64))}, stdio); err != nil {
+		t.Fatal("concurrent socket substitution bypassed or broke mediation", err)
+	}
+	if err = <-received; err != nil {
+		t.Fatal("outward descriptor during concurrent socket replacement", err)
 	}
 	// Even with an actual ancestor handle, inferred/explicit PID setns must be
 	// denied by syscall policy; no host namespace is entered.
@@ -431,9 +473,52 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 	}
 	removeOperation := strings.Repeat("4", 64)
 	original := domain
-	if _, err = registry.BeginRetirement(binding, removeOperation); err != nil {
+	// Start bounded acquisition concurrently with an interrupted retirement.
+	// Every new helper inherits the namespace/filter; none is reconstructed from
+	// a post-hoc process scan as disposal authority.
+	acquiring := filepath.Join(transient, "acquiring")
+	if err = id.Run(ctx, []string{probe, "acquire-loop", filepath.Join(stamp.Root, strings.Repeat("a", 64)), acquiring}, stdio); err != nil {
 		t.Fatal(err)
 	}
+	settleSandboxTest(t, func() error { _, e := os.Stat(acquiring); return e })
+	crashRequest := workerBoundaryCrashRequest{Directory: registry.Directory, Binding: binding, Operation: removeOperation, Ready: filepath.Join(transient, "retirement-ready")}
+	requestBytes, err := json.Marshal(crashRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requestPath := filepath.Join(transient, "crash-request.json")
+	if err = os.WriteFile(requestPath, requestBytes, 0600); err != nil {
+		t.Fatal(err)
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner := exec.CommandContext(ctx, executable, "-test.run", "^TestRunnerd09WorkerBoundaryCrashHelper$", "-test.timeout=60s")
+	owner.Env = append(os.Environ(), "RUNNERD09_BOUNDARY_CRASH_REQUEST="+requestPath)
+	owner.Stdout, owner.Stderr = out, out
+	if err = owner.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer owner.Process.Kill()
+	settleSandboxTest(t, func() error {
+		b, e := os.ReadFile(crashRequest.Ready)
+		if e != nil || string(b) != original.Owner {
+			return workerboundary.ErrBoundary
+		}
+		return nil
+	})
+	if err = owner.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	if err = owner.Wait(); err == nil || !owner.ProcessState.Sys().(syscall.WaitStatus).Signaled() || owner.ProcessState.Sys().(syscall.WaitStatus).Signal() != syscall.SIGKILL {
+		t.Fatal("retirement owner did not crash by SIGKILL", err)
+	}
+	preserved, err := (workerboundary.Registry{Directory: registry.Directory}).Load(binding)
+	if err != nil || !preserved.SameOriginal(original) || preserved.Phase != "RETIRING" || id.CheckRetired() == nil {
+		t.Fatal("owner crash lost original live retirement obligation", err)
+	}
+	t.Log("SIGKILL after durable RETIRING preserved original owner and live acquisition obligation; no disposal or capacity release")
 	if err = id.Retire(ctx); err != nil {
 		t.Fatal(err)
 	}

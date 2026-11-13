@@ -5,6 +5,7 @@
 #include <linux/filter.h>
 #include <linux/seccomp.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <sched.h>
 #include <signal.h>
 #include <stdint.h>
@@ -99,6 +100,53 @@ static int internal_transfer(const char *target) {
     close(ns);close(198);close(event);close(fd);close(pair[0]);close(pair[1]);
     printf("INTERNAL_THREAD_FD_EVENTFD_TRANSFER_VERIFIED_SOCKET_NAMESPACE_RELAY_DENIED\n");return 0;
 }
+struct race_args {int inside,outside,receive,fd;atomic_int stop;atomic_int error;};
+static void *replace_socket(void *opaque) {
+    struct race_args *a=opaque;
+    while(!atomic_load(&a->stop)) {
+        if(dup2(a->inside,200)!=200||dup2(a->outside,200)!=200)atomic_store(&a->error,59);
+    }
+    return NULL;
+}
+static void *receive_internal(void *opaque) {
+    struct race_args *a=opaque;
+    for(;;) {
+        char byte,control[128]={0};struct iovec data={.iov_base=&byte,.iov_len=1};
+        struct msghdr message={.msg_iov=&data,.msg_iovlen=1,.msg_control=control,.msg_controllen=sizeof(control)};
+        ssize_t n=recvmsg(a->receive,&message,MSG_CMSG_CLOEXEC|MSG_DONTWAIT);
+        if(n<0&&errno==EAGAIN) {if(atomic_load(&a->stop))break;sched_yield();continue;}
+        if(n!=1||message.msg_flags&(MSG_CTRUNC|MSG_TRUNC)){atomic_store(&a->error,60);break;}
+        struct cmsghdr *c=CMSG_FIRSTHDR(&message);int received=-1;
+        if(!c||c->cmsg_len!=CMSG_LEN(sizeof(int))||c->cmsg_level!=SOL_SOCKET||c->cmsg_type!=SCM_RIGHTS) {
+            atomic_store(&a->error,61);break;
+        }
+        memcpy(&received,CMSG_DATA(c),sizeof(received));
+        struct stat expected,actual;
+        if(fstat(a->fd,&expected)||fstat(received,&actual)||expected.st_dev!=actual.st_dev||expected.st_ino!=actual.st_ino)
+            atomic_store(&a->error,62);
+        close(received);
+    }
+    return NULL;
+}
+static int race_transfer(const char *outside,const char *target) {
+    int pair[2];if(socketpair(AF_UNIX,SOCK_SEQPACKET|SOCK_CLOEXEC,0,pair))return 63;
+    int fd=open(target,O_PATH|O_CLOEXEC);if(fd<0)return 64;
+    struct race_args a={.inside=pair[0],.outside=connect_to(outside),.receive=pair[1],.fd=fd};
+    if(dup2(a.inside,200)!=200)return 65;
+    pthread_t change,receive;
+    if(pthread_create(&change,NULL,replace_socket,&a)||pthread_create(&receive,NULL,receive_internal,&a))return 66;
+    for(int i=0;i<2000;i++) {
+        int n=pass_fd(200,fd);
+        if(n!=1&&!(n<0&&(errno==EPERM||errno==EAGAIN))) {atomic_store(&a.error,67);break;}
+    }
+    atomic_store(&a.stop,1);
+    if(pthread_join(change,NULL)||pthread_join(receive,NULL))return 68;
+    /* External receiver must see this terminal byte packet and no rights. */
+    if(write(a.outside,"plain-byte-stream",17)!=17)return 69;
+    close(200);close(fd);close(a.outside);close(pair[0]);close(pair[1]);
+    if(atomic_load(&a.error))return atomic_load(&a.error);
+    printf("CONCURRENT_SOCKET_REPLACEMENT_2000_TRANSFERS_NO_OUTWARD_RIGHTS\n");return 0;
+}
 int main(int argc,char **argv){
     if(argc<3)return 2;
     if(!strcmp(argv[1],"privileges")) {
@@ -124,6 +172,10 @@ int main(int argc,char **argv){
         printf("FD_TRANSFER_DENIED\n");return 0;
     }
     if(!strcmp(argv[1],"internal-transfer"))return internal_transfer(argv[2]);
+    if(!strcmp(argv[1],"race-transfer")) {
+        if(argc!=4)return 2;
+        return race_transfer(argv[2],argv[3]);
+    }
     if(!strcmp(argv[1],"escape")) {
         int fd=open(argv[2],O_RDONLY|O_CLOEXEC);if(fd<0)return 3;
         errno=0;if(setns(fd,CLONE_NEWPID)!=-1 || errno!=EPERM)return 4;
@@ -143,7 +195,7 @@ int main(int argc,char **argv){
         } else if(n>=0)return 7;
         close(fd);printf("INNER_ROOT_CONTROL_DENIED\n");return 0;
     }
-    if(!strcmp(argv[1],"hold")) {
+    if(!strcmp(argv[1],"hold")||!strcmp(argv[1],"acquire-loop")) {
         if(argc!=4)return 2;
         pid_t child=fork();if(child<0)return 9;
         if(child)return 0;
@@ -154,6 +206,19 @@ int main(int argc,char **argv){
         struct stat s;if(fstat(fd,&s))_exit(12);
         fprintf(report,"%ld %lu %lu\n",(long)getpid(),(unsigned long)s.st_dev,(unsigned long)s.st_ino);
         if(fflush(report)||fsync(fileno(report))||fclose(report)||rename(temporary,argv[3]))_exit(13);
+        if(!strcmp(argv[1],"acquire-loop")) {
+            for(;;) {
+                pid_t next=fork();if(next<0)_exit(14);
+                if(!next) {
+                    int acquired=open(argv[2],O_PATH|O_DIRECTORY|O_CLOEXEC);
+                    if(acquired<0)_exit(15);
+                    usleep(20000);close(acquired);_exit(0);
+                }
+                int status;
+                while(waitpid(next,&status,0)<0)if(errno!=EINTR)_exit(16);
+                if(!WIFEXITED(status)||WEXITSTATUS(status))_exit(17);
+            }
+        }
         for(;;)pause();
     }
     return 2;
