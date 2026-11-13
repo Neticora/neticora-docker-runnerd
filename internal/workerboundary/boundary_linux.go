@@ -257,9 +257,6 @@ func (id Identity) Retire(ctx context.Context) error {
 	if id.Check() != nil {
 		return ErrBoundary
 	}
-	if err = ctx.Err(); err != nil {
-		return err
-	}
 	pidfd, err := unix.PidfdOpen(id.PID, 0)
 	if err != nil {
 		return err
@@ -267,6 +264,9 @@ func (id Identity) Retire(ctx context.Context) error {
 	defer unix.Close(pidfd)
 	if id.Check() != nil {
 		return ErrBoundary
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	// Do not depend on a responsive userspace request loop to retire a busy
 	// original namespace. This pidfd is rechecked against its durable owner;
