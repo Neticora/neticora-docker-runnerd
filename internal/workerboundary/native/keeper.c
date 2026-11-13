@@ -188,7 +188,19 @@ int main(int argc, char **argv) {
              * kernel, including descendants moved to another host cgroup. The
              * broker waits on its original pidfd before asserting retirement. */
             close(client); close(listener); _exit(0);
-        } else run_child(client,request,(size_t)size,fds,count,listener,profile);
+        } else {
+            /* A worker may block on a denied control request. Keep PID1's
+             * peer checks and retirement control responsive while a trusted
+             * request handler waits for that worker. Handlers remain inside
+             * the same kernel lifetime boundary and never execute user code. */
+            pid_t handler = fork();
+            if (handler < 0) reply(client, ERROR_EXIT);
+            else if (!handler) {
+                run_child(client,request,(size_t)size,fds,count,listener,profile);
+                for (size_t i=0;i<count;i++) close(fds[i]);
+                close(client); close(listener); _exit(0);
+            }
+        }
         for (size_t i=0;i<count;i++) close(fds[i]);
         close(client);
     }

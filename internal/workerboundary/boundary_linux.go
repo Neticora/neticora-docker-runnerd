@@ -236,11 +236,9 @@ func (id Identity) Run(ctx context.Context, argv []string, stdio [3]*os.File) er
 // every descendant regardless of its cgroup; pidfd readiness is the barrier.
 // A missing or changed original identity cannot mint positive retirement proof.
 func (id Identity) Retire(ctx context.Context) error {
-	c, err := id.connect(ctx)
-	if err != nil {
-		return err
+	if id.Check() != nil {
+		return ErrBoundary
 	}
-	defer c.Close()
 	pidfd, err := unix.PidfdOpen(id.PID, 0)
 	if err != nil {
 		return err
@@ -249,15 +247,19 @@ func (id Identity) Retire(ctx context.Context) error {
 	if id.Check() != nil {
 		return ErrBoundary
 	}
-	if _, err = c.Write([]byte("STOP\x00")); err != nil {
+	// Do not depend on a responsive userspace request loop to retire a busy
+	// original namespace. This pidfd is rechecked against its durable owner;
+	// it cannot address an unknown worker or a reused numeric PID.
+	if err = unix.PidfdSendSignal(pidfd, unix.SIGKILL, nil, 0); err != nil {
 		return err
 	}
 	for {
-		n, e := unix.Poll([]unix.PollFd{{Fd: int32(pidfd), Events: unix.POLLIN}}, 50)
+		polls := []unix.PollFd{{Fd: int32(pidfd), Events: unix.POLLIN}}
+		n, e := unix.Poll(polls, 50)
 		if e != nil && e != unix.EINTR {
 			return e
 		}
-		if n > 0 {
+		if n == 1 && polls[0].Revents&unix.POLLIN != 0 {
 			return nil
 		}
 		select {
