@@ -256,6 +256,15 @@ func liveWorkerBoundary(t *testing.T, protected bool) {
 		if err = id.Run(ctx, []string{probe, "confinement", canary, transient, stamp.Root, "/run/runnerd09-docker.sock", label, abstract}, stdio); err != nil {
 			t.Fatal("restrictive policy negative/positive control failed", err)
 		}
+		for _, endpoint := range []string{"/var/lib/neticora-runnerd-kata-runtime/docker-exec/containerd/containerd.sock", "/var/lib/neticora-runnerd-kata-runtime/docker-exec/containerd/containerd.sock.ttrpc"} {
+			info, e := os.Stat(endpoint)
+			if e != nil || info.Mode()&os.ModeSocket == 0 {
+				t.Fatal("real dedicated containerd endpoint unavailable for negative control", e)
+			}
+			if err = id.Run(ctx, []string{probe, "control-socket", endpoint}, stdio); err != nil {
+				t.Fatal("privileged containerd endpoint was accessible", err)
+			}
+		}
 		content, e := os.ReadFile(canary)
 		if e != nil || string(content) != plan.Name {
 			t.Fatal("worker altered protected broker-state canary", e)

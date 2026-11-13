@@ -263,6 +263,15 @@ int main(int argc,char **argv){
         printf("CONFINEMENT_ENFORCED_STATE_ALIAS_POLICY_WRITE_GUARD_CHMOD_CHOWN_DOCKER_ABSTRACT_SUPERVISOR_SOCKET_UNAPPROVED_EXEC_DENIED\n");
         return 0;
     }
+    if(!strcmp(argv[1],"control-socket")) {
+        int fd=socket(AF_UNIX,SOCK_STREAM|SOCK_CLOEXEC,0);
+        struct sockaddr_un address={.sun_family=AF_UNIX};
+        if(fd<0||strlen(argv[2])>=sizeof(address.sun_path))return 114;
+        memcpy(address.sun_path,argv[2],strlen(argv[2])+1);
+        errno=0;
+        if(connect(fd,(struct sockaddr *)&address,sizeof(address))!=-1||errno!=EACCES)return 115;
+        close(fd);printf("PRIVILEGED_CONTAINERD_SOCKET_CONNECT_DENIED %s\n",argv[2]);return 0;
+    }
     if(!strcmp(argv[1],"transfer")) {
         if(argc!=4)return 2;
         denied_transfer(argv[2],argv[3]);
