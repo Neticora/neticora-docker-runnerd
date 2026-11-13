@@ -34,6 +34,10 @@ func (k *protectedKata) Plan(scope agent.StoreScope, s protocol.ExecutionSpec) (
 	return p, err
 }
 func (k *protectedKata) Admit(ctx context.Context, scope agent.StoreScope, s protocol.ExecutionSpec, policy *standardlinux.Policy, now time.Time) error {
+	plan, err := k.Plan(scope, s)
+	if err != nil || k.profile.RequireAcquisition(plan) != nil {
+		return ErrRejected
+	}
 	if err := k.profile.Admit(scope, s, policy, now); err != nil {
 		return err
 	}
@@ -62,8 +66,15 @@ func (k *protectedKata) Capture(ctx context.Context, id string, p dockerengine.P
 func (k *protectedKata) Healthy(p dockerengine.Plan, start string, now time.Time) bool {
 	return k.profile.Healthy(p, start, now)
 }
-func (k *protectedKata) Dispose(ctx context.Context, id string, p dockerengine.Plan, guard func() error) error {
-	if err := k.profile.VerifyAbsent(ctx, id, p, guard); err != nil {
+func (k *protectedKata) BeginRetirement(id string, p dockerengine.Plan, operationID string) error {
+	return k.profile.BeginRetirement(id, p, operationID)
+}
+func (k *protectedKata) Dispose(ctx context.Context, id string, p dockerengine.Plan, operationID string, guard func() error) error {
+	cleanup := func() error { return k.profile.VerifyAbsent(ctx, id, p, guard) }
+	if k.profile.Manifest.RetirementPolicy != "" {
+		cleanup = func() error { return k.profile.ReclaimRetired(ctx, id, p, operationID, guard) }
+	}
+	if err := cleanup(); err != nil {
 		return err
 	}
 	k.profile.CleanHealth(p)
@@ -75,6 +86,11 @@ func (k *protectedKata) Dispose(ctx context.Context, id string, p dockerengine.P
 func (k *protectedKata) Absence(ctx context.Context, id string, p dockerengine.Plan) error {
 	if _, err := os.Lstat(k.profile.HealthRoot() + "/" + p.Name); !os.IsNotExist(err) {
 		return ErrQuarantined
+	}
+	if k.profile.Manifest.RetirementPolicy != "" {
+		if err := k.profile.CheckRetirement(ctx, id, p); err != nil {
+			return err
+		}
 	}
 	return k.profile.BrokerAbsence(ctx, id, p)
 }
@@ -101,5 +117,12 @@ func (k *protectedKata) Observe(ctx context.Context, id string, p dockerengine.P
 	return k.profile.ObserveBrokerRecovery(ctx, id, p)
 }
 func (k *protectedKata) RecoverDispose(ctx context.Context, id string, p dockerengine.Plan, guard func() error) error {
+	if k.profile.Manifest.RetirementPolicy != "" {
+		return ErrQuarantined
+	}
 	return k.profile.BrokerRecoverDispose(ctx, id, p, guard)
+}
+
+func (k *protectedKata) Retirement(ctx context.Context, id string, p dockerengine.Plan) (*katalinux.RetirementProof, error) {
+	return k.profile.RetirementEvidence(ctx, id, p)
 }

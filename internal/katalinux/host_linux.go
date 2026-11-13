@@ -176,6 +176,9 @@ func (p *Profile) Check(now time.Time) error {
 	return nil
 }
 func (p *Profile) Prepare(plan dockerengine.Plan) error {
+	if p.Manifest.RetirementPolicy != "" && p.RequireAcquisition(plan) != nil {
+		return ErrQualification
+	}
 	if p.ObserverSocket != "" {
 		return p.remote(context.Background(), "prepare", "", plan)
 	}
@@ -431,6 +434,9 @@ func (p *Profile) processes(ctx context.Context, id string) ([]Process, error) {
 	return out, nil
 }
 func (p *Profile) Capture(ctx context.Context, id string, plan dockerengine.Plan) error {
+	if p.Manifest.RetirementPolicy != "" && p.RequireAcquisition(plan) != nil {
+		return ErrQualification
+	}
 	if p.ObserverSocket != "" {
 		return p.remote(ctx, "capture", id, plan)
 	}
@@ -540,6 +546,9 @@ func persist(root *os.Root, file string, record Evidence) error {
 	return d.Sync()
 }
 func (p *Profile) CapturePrepared(id string, plan dockerengine.Plan) error {
+	if p.Manifest.RetirementPolicy != "" && p.RequireAcquisition(plan) != nil {
+		return ErrQualification
+	}
 	if p.ObserverSocket != "" {
 		return p.remote(context.Background(), "prepared", id, plan)
 	}
@@ -647,6 +656,12 @@ func (p *Profile) cleanupSandboxGuard(ctx context.Context, plan dockerengine.Pla
 }
 
 func (p *Profile) VerifyAbsent(ctx context.Context, id string, plan dockerengine.Plan, guards ...func() error) error {
+	if p.Manifest.RetirementPolicy != "" {
+		f, ok := ctx.Value(retirementFenceKey{}).(*retirementFence)
+		if !ok || f.profile != p || f.record.Container != id || f.plan.Name != plan.Name || f.verify(ctx) != nil {
+			return ErrQualification
+		}
+	}
 	if p.ObserverSocket != "" {
 		return p.remote(ctx, "absent", id, plan)
 	}

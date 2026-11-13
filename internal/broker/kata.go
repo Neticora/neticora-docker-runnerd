@@ -22,7 +22,8 @@ type kataLifecycle interface {
 	VerifyStorage(context.Context, dockerengine.Plan) error
 	Capture(context.Context, string, dockerengine.Plan) error
 	Healthy(dockerengine.Plan, string, time.Time) bool
-	Dispose(context.Context, string, dockerengine.Plan, func() error) error
+	BeginRetirement(string, dockerengine.Plan, string) error
+	Dispose(context.Context, string, dockerengine.Plan, string, func() error) error
 	Absence(context.Context, string, dockerengine.Plan) error
 	Evidence(context.Context, string, dockerengine.Plan) (json.RawMessage, error)
 }

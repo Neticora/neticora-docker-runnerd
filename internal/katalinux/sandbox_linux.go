@@ -107,6 +107,14 @@ func (p *Profile) captureSandboxDirectories(id string) ([]SandboxDirectory, erro
 // mount points, symlinks, foreign ownership and filesystem crossings.
 func (p *Profile) removeSandboxResidue(ctx context.Context, id string, directories []SandboxDirectory, guard func() error) error {
 	ctx = context.WithValue(ctx, procDecodeKey{}, &procDecoder{})
+	if f, ok := ctx.Value(retirementFenceKey{}).(*retirementFence); ok {
+		if f.profile != p || f.record.Container != id || f.verify(ctx) != nil {
+			return ErrQualification
+		}
+	}
+	if p.Manifest.RetirementPolicy != "" && ctx.Value(retirementFenceKey{}) == nil {
+		return ErrQualification
+	}
 	allowed := map[string]bool{}
 	for _, root := range p.Manifest.SandboxRoots {
 		allowed[root] = true
@@ -123,7 +131,13 @@ func (p *Profile) removeSandboxResidue(ctx context.Context, id string, directori
 		actual, err := sandboxStamp(p.Manifest.Storage.Runtime.Root, expected.Root, id)
 		if errors.Is(err, os.ErrNotExist) {
 			filesystemPath, e := sandboxFilesystemPath(filepath.Join(expected.Root, id), expected.Device)
-			if e != nil || noBlockUsers(ctx, BlockRecord{FileDevice: expected.Device, FileInode: expected.Inode}) != nil || noSandboxNamespaceReferences(ctx, expected.Device, expected.Inode, filesystemPath) != nil {
+			var references error
+			if f, ok := ctx.Value(retirementFenceKey{}).(*retirementFence); ok {
+				references = f.verify(ctx)
+			} else if noBlockUsers(ctx, BlockRecord{FileDevice: expected.Device, FileInode: expected.Inode}) != nil || noSandboxNamespaceReferences(ctx, expected.Device, expected.Inode, filesystemPath) != nil {
+				references = ErrQualification
+			}
+			if e != nil || references != nil {
 				return ErrQualification
 			}
 			// Retry after a lost removal response must also make directory
@@ -229,6 +243,14 @@ func removeSandboxTree(ctx context.Context, root *os.Root, name string, device, 
 		{"blockUsers", func() error { return noBlockUsers(ctx, BlockRecord{FileDevice: device, FileInode: st.Ino}) }},
 		{"namespaceReferences", func() error { return noSandboxNamespaceReferences(ctx, device, st.Ino, filesystemPath) }},
 	} {
+		if check.name != "nestedMounts" {
+			if f, ok := ctx.Value(retirementFenceKey{}).(*retirementFence); ok {
+				if err := f.verify(ctx); err != nil {
+					return err
+				}
+				continue
+			}
+		}
 		if err := sandboxTimed(ctx, check.name, check.run); err != nil {
 			return err
 		}

@@ -6,6 +6,8 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"github.com/Neticora/neticora-docker-runnerd/internal/dockerengine"
+	"github.com/Neticora/neticora-docker-runnerd/internal/katalinux"
 	"slices"
 	"strconv"
 	"time"
@@ -16,30 +18,32 @@ const DisposalChallengeDomain = "neticora-runnerd-broker-disposal-challenge-v1\n
 const DisposalDomain = "neticora-runnerd-broker-disposal-v1\n"
 
 type DisposalChallenge struct {
-	Version      string   `json:"version"`
-	Binding      Binding  `json:"binding"`
-	ResourceID   string   `json:"resourceId"`
-	OperationIDs []string `json:"operationIds"`
-	Nonce        string   `json:"nonce"`
-	NotBefore    string   `json:"notBefore"`
-	ExpiresAt    string   `json:"expiresAt"`
-	RecoveryID   string   `json:"recoveryId,omitempty"`
+	Version          string   `json:"version"`
+	Binding          Binding  `json:"binding"`
+	ResourceID       string   `json:"resourceId"`
+	OperationIDs     []string `json:"operationIds"`
+	Nonce            string   `json:"nonce"`
+	NotBefore        string   `json:"notBefore"`
+	ExpiresAt        string   `json:"expiresAt"`
+	RecoveryID       string   `json:"recoveryId,omitempty"`
+	RetirementPolicy string   `json:"retirementPolicy,omitempty"`
 }
 type SignedDisposalChallenge struct {
 	Challenge DisposalChallenge `json:"challenge"`
 	Signature string            `json:"signature"`
 }
 type Disposal struct {
-	Version       string   `json:"version"`
-	ChallengeHash string   `json:"challengeHash"`
-	Binding       Binding  `json:"binding"`
-	ResourceID    string   `json:"resourceId"`
-	OperationIDs  []string `json:"operationIds"`
-	Boot          string   `json:"boot"`
-	Revision      string   `json:"revision"`
-	State         string   `json:"state"`
-	ObservedAt    string   `json:"observedAt"`
-	RecoveryID    string   `json:"recoveryId,omitempty"`
+	Version       string                     `json:"version"`
+	ChallengeHash string                     `json:"challengeHash"`
+	Binding       Binding                    `json:"binding"`
+	ResourceID    string                     `json:"resourceId"`
+	OperationIDs  []string                   `json:"operationIds"`
+	Boot          string                     `json:"boot"`
+	Revision      string                     `json:"revision"`
+	State         string                     `json:"state"`
+	ObservedAt    string                     `json:"observedAt"`
+	RecoveryID    string                     `json:"recoveryId,omitempty"`
+	Retirement    *katalinux.RetirementProof `json:"retirement,omitempty"`
 }
 type SignedDisposal struct {
 	Challenge SignedDisposalChallenge `json:"challenge"`
@@ -63,6 +67,9 @@ func verifyDisposalChallenge(s SignedDisposalChallenge, key ed25519.PublicKey, n
 	start, e1 := time.Parse(time.RFC3339Nano, c.NotBefore)
 	end, e2 := time.Parse(time.RFC3339Nano, c.ExpiresAt)
 	if c.Version != DisposalVersion || !c.Binding.valid() || (c.ResourceID != "" && !digest(c.ResourceID)) || !digest(c.Nonce) || len(c.OperationIDs) == 0 || len(c.OperationIDs) > 16 || !slices.IsSorted(c.OperationIDs) || e1 != nil || e2 != nil || !end.After(start) || end.Sub(start) > time.Minute || now.Before(start) || !now.Before(end) {
+		return ErrRejected
+	}
+	if (c.RetirementPolicy != "" && c.RetirementPolicy != katalinux.RetirementPolicy) || (c.RetirementPolicy != "" && (c.ResourceID == "" || c.RecoveryID != "")) {
 		return ErrRejected
 	}
 	if c.RecoveryID != "" && !digest(c.RecoveryID) {
@@ -138,6 +145,24 @@ func (e *physicalExecutor) Attest(ctx context.Context, s SignedDisposalChallenge
 	raw, _ := canonical(s)
 	sum := sha256.Sum256(raw)
 	proof := Disposal{Version: DisposalVersion, ChallengeHash: hex.EncodeToString(sum[:]), Binding: state.Binding, ResourceID: state.ResourceID, OperationIDs: ids, Boot: e.boot, Revision: revision, State: phase, RecoveryID: c.RecoveryID, ObservedAt: e.now().UTC().Format("2006-01-02T15:04:05.000Z")}
+	if state.Spec.IsolationProfile == "isolated" && c.ResourceID != "" && c.RecoveryID == "" {
+		provider, ok := e.kata.(interface {
+			Retirement(context.Context, string, dockerengine.Plan) (*katalinux.RetirementProof, error)
+		})
+		if ok {
+			proof.Retirement, err = provider.Retirement(ctx, state.ResourceID, p)
+			if err != nil {
+				return SignedDisposal{}, err
+			}
+		}
+	}
+	if c.RetirementPolicy != "" {
+		if proof.Retirement == nil || proof.Retirement.Policy != c.RetirementPolicy || proof.Retirement.OperationID != state.Operations["RemoveExecution"].OperationID {
+			return SignedDisposal{}, ErrQuarantined
+		}
+	} else if proof.Retirement != nil {
+		return SignedDisposal{}, ErrRejected
+	}
 	raw, err = canonical(proof)
 	if err != nil {
 		return SignedDisposal{}, err

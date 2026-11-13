@@ -100,6 +100,7 @@ type Manifest struct {
 	GuestCapabilities []string          `json:"guestCapabilities"`
 	GuestDNSServers   []string          `json:"guestDnsServers,omitempty"`
 	HostCgroup        *HostCgroup       `json:"hostCgroup,omitempty"`
+	RetirementPolicy  string            `json:"retirementPolicy,omitempty"`
 	SecurityReview    string            `json:"securityReview"`
 	Budget            Budget            `json:"budget"`
 	Storage           Storage           `json:"storage"`
@@ -215,6 +216,9 @@ func Load(file, public, evidence, journal string, base standardlinux.Settings) (
 }
 func (p *Profile) validate() error {
 	m := p.Manifest
+	if m.RetirementPolicy != "" && (m.RetirementPolicy != RetirementPolicy || m.Version != MultiBlockVersion) {
+		return ErrQualification
+	}
 	block := isBlockVersion(m.Version)
 	if m.Version == MultiBlockVersion {
 		if err := validateHostCgroup(m); err != nil {

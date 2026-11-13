@@ -379,7 +379,12 @@ func (e *physicalExecutor) Execute(ctx context.Context, r ExecutionGrantRequest,
 			state.State = "STOPPED"
 		}
 	case "RemoveExecution":
-		err = e.runtime.Remove(ctx, state.ResourceID, p)
+		if e.kata != nil {
+			err = e.kata.BeginRetirement(state.ResourceID, p, r.OperationID)
+		}
+		if err == nil {
+			err = e.runtime.Remove(ctx, state.ResourceID, p)
+		}
 		if err == nil && e.checkpoint != nil {
 			err = e.checkpoint("after-effect", r)
 		}
@@ -401,7 +406,7 @@ func (e *physicalExecutor) Execute(ctx context.Context, r ExecutionGrantRequest,
 			err = e.endpoint(ctx)
 		}
 		if err == nil && e.kata != nil {
-			err = e.kata.Dispose(ctx, state.ResourceID, p, func() error { return e.executionGone(ctx, state, p) })
+			err = e.kata.Dispose(ctx, state.ResourceID, p, r.OperationID, func() error { return e.executionGone(ctx, state, p) })
 		}
 		if err == nil && e.handoffs != nil {
 			err = e.handoffs.Dispose(p)

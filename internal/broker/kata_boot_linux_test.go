@@ -51,7 +51,7 @@ func (k *recoveryKataFixture) RecoverDispose(ctx context.Context, id string, p d
 	if k.interrupted {
 		return dockerengine.ErrUnavailable
 	}
-	return k.Dispose(ctx, id, p, guard)
+	return k.Dispose(ctx, id, p, "", guard)
 }
 func kataBootFixture(t *testing.T) (*physicalExecutor, *componentRuntime, *recoveryKataFixture, Lookup, ed25519.PrivateKey, ed25519.PrivateKey, map[string][]byte) {
 	t.Helper()

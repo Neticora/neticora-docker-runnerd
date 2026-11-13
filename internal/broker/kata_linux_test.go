@@ -57,7 +57,15 @@ func (k *componentKata) Capture(context.Context, string, dockerengine.Plan) erro
 	return nil
 }
 func (*componentKata) Healthy(dockerengine.Plan, string, time.Time) bool { return true }
-func (k *componentKata) Dispose(_ context.Context, _ string, _ dockerengine.Plan, guard func() error) error {
+func (k *componentKata) BeginRetirement(id string, p dockerengine.Plan, op string) error {
+	q := Lookup{ExecutionID: p.Config.Labels[dockerengine.LabelPrefix+"execution"], Generation: p.Config.Labels[dockerengine.LabelPrefix+"generation"], SpecHash: p.Config.Labels[dockerengine.LabelPrefix+"spec"], ResourceID: id}
+	s, _, err := k.executor.load(q)
+	if err != nil || s.Pending != op || s.Operations["RemoveExecution"].OperationID != op || !s.CancelFence {
+		return ErrQuarantined
+	}
+	return nil
+}
+func (k *componentKata) Dispose(_ context.Context, _ string, _ dockerengine.Plan, _ string, guard func() error) error {
 	if err := guard(); err != nil {
 		return err
 	}
