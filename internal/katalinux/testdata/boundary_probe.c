@@ -162,6 +162,11 @@ static int race_transfer(const char *outside,const char *target) {
 int main(int argc,char **argv){
     if(argc<3)return 2;
     if(!strcmp(argv[1],"privileges")) {
+        for(int fd=0;fd<3;fd++)if(fcntl(fd,F_GETFD)<0)return 116;
+        for(int fd=3;fd<1024;fd++) {
+            errno=0;if(fcntl(fd,F_GETFD)!=-1||errno!=EBADF)return 117;
+        }
+        printf("INITIAL_STDIO_ONLY_NO_BOOTSTRAP_CONTROL_OR_NOTIFY_FD\n");
         struct __user_cap_header_struct header={.version=_LINUX_CAPABILITY_VERSION_3,.pid=0};
         struct __user_cap_data_struct caps[2];
         if(syscall(SYS_capget,&header,caps))return 30;
