@@ -5,7 +5,6 @@ package katalinux
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -81,7 +80,9 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 	retired := false
 	t.Cleanup(func() {
 		if !retired {
-			if e := id.Retire(ctx); e != nil {
+			cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cleanupCancel()
+			if e := id.Retire(cleanupCtx); e != nil {
 				t.Errorf("retain boundary fixture for inspection: %v", e)
 				return
 			}
@@ -130,8 +131,8 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 		data := make([]byte, 64)
 		control := make([]byte, 256)
 		n, oob, flags, _, e := c.ReadMsgUnix(data, control)
-		if e == nil && (oob != 0 || flags != 0 || string(data[:n]) != "plain-byte-stream") {
-			e = errors.New("outward transfer reached recipient")
+		if e == nil && (oob != 0 || flags&(unix.MSG_TRUNC|unix.MSG_CTRUNC) != 0 || string(data[:n]) != "plain-byte-stream") {
+			e = fmt.Errorf("unexpected receiver data: bytes=%d ancillary=%d flags=%x payload=%q", n, oob, flags, data[:n])
 		}
 		received <- e
 	}()
