@@ -286,17 +286,60 @@ checks. Remove a test registry only by its recorded ID/label; never prune Docker
 Complete runtime, recovery and package qualification remain required before
 production admission. Lab proofs do not authorize customer execution.
 
-## Native metadata cleanup stress
+## Bounded resource-retirement qualification
+
+The signed `broker-frozen-empty-v1` contract is defined in
+[SANDBOX-CLEANUP.md](SANDBOX-CLEANUP.md). It covers malicious guests, the nonroot
+controller and the original execution's lifecycle-controlled workers. Host
+administrators and privileged Docker/containerd remain trusted. It does not
+promise preservation of references deliberately acquired by arbitrary host root.
+Explicit review of this bounded contract and its evidence is required before
+counting revised #328 acceptance. Retain the original unrestricted-root failure.
+
+F5-A is a separate engineering gate. Build a frozen Linux test executable with
+`go test -c -tags runnerd_kata ./internal/katalinux`. Stage it and
+`testdata/surviving_worker.c`, `testdata/retirement_acquirer.c` root-owned beneath
+a protected executable directory on the dedicated marked VM. Use a fresh private
+`TMPDIR` on the actual Kata metadata filesystem and preserve all failed fixtures.
+Run with `RUNNERD09_REQUIRE_NATIVE_TESTS=1`, `RUNNERD09_LIVE_LAB=1` and the selector
+`^TestRunnerd09LiveRetirement(AcquisitionDomain|CrashRecovery)$`. Require both
+parent tests and every subcase to execute with no skips. Record source, executable,
+boot/DMI, filesystem device and original owner identities.
+
+These component/native controls exercise descriptors, O_PATH, directories,
+cwd/root, mmap, private namespaces, surviving threads, concurrent acquisitions,
+positive hierarchical freezing, quarantine and SIGKILL persistence of the same
+intent/fence/reclamation record. Their private fixtures deliberately lack a real
+block allocation and platform commitment. They retain their frozen empty slices
+and ownership records; they cannot issue disposal evidence or claim released
+execution capacity. A helper-process crash is not an installed broker crash.
+
+The installed-product gate must additionally prove ordinary daemon entry rejects
+inherited metadata handles (including stdio), real workloads cannot acquire host
+metadata, all tuple-associated runtime workers occupy the original cgroup, exact
+committed authority is consumed once, and a broker crash reconciles the original
+resource. Require real signed retirement/disposal verification and the native
+final ACK before release. Correlate provider, platform, broker and native evidence.
+Do not substitute guest assertions or synthetic native fixtures for these facts.
+
+Only after F5-A passes may F5-B qualify the complete real VM, shim, namespace,
+mount, raw device, reclamation, disposal-publication and finalization interruption
+matrix. Cross-boot retirement for this new policy is intentionally quarantined;
+the old Docker/Kata recovery path cannot silently authorize it. Production
+admission and the revised #328/#315 release requirements remain open.
+
+## Legacy native metadata cleanup stress
 
 For operation timings, bounded retry behavior, large-directory coverage and the
 remaining reference-fence design requirements, see [SANDBOX-CLEANUP.md](SANDBOX-CLEANUP.md).
-The current cleanup implementation does not provide an atomic reference-acquisition
-fence. Native coverage requires the cases selected by the gate script, including
+The legacy scan-based path does not provide an atomic acquisition fence. Its
+unrestricted-root diagnostic coverage requires the gate-script cases, including
 `TestNativeSandboxLateReferenceAtUnlink`. This ptrace regression traces only a
 fresh child, acquires O_PATH at the actual unlinkat boundary, and requires either
 inode preservation with cleanup refusal or denied acquisition with complete
-cleanup. Missing ptrace coverage cannot qualify. The current unfenced code is
-expected to fail this test; retain that failure until the safety design passes.
+cleanup. Missing ptrace coverage cannot qualify. The unfenced legacy path is
+expected to fail this test. Keep the failure and assertion unchanged. A passing
+bounded retirement gate makes no unrestricted-root reference-tracking claim.
 The helper source `internal/katalinux/testdata/late_reference_probe.c` must
 accompany frozen native sources. The script retains the independent gate refusal
 in `native-coverage.stderr` even when the test package fails.
@@ -394,8 +437,9 @@ original physical ID and authority. A before-effect create/start uses
 `RUNNERD_D2_EXPECT_OWNED=1`. Those cases intentionally retain unresolved records
 and reservations for external reboot/power-loss observation.
 
-Broker-managed Kata supports separately authorized cleanup-only boot recovery
-when original protected Kata/storage anchors exist. Docker-only boot recovery
+Historical Kata profiles support separately authorized cleanup-only boot recovery
+when original protected Kata/storage anchors exist. New retirement-policy profiles
+remain quarantined across boot changes pending their separate qualification. Docker-only boot recovery
 remains forbidden for Kata. Container absence never discards the original block
 allocation, operation or reservation. Missing anchors and ambiguous creates stay
 held; do not clear them to make another test fit. After broker-verified disposal,
