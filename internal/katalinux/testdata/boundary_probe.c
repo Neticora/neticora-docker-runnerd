@@ -135,8 +135,11 @@ static int race_transfer(const char *outside,const char *target) {
     if(dup2(a.inside,200)!=200)return 65;
     pthread_t change,receive;
     if(pthread_create(&change,NULL,replace_socket,&a)||pthread_create(&receive,NULL,receive_internal,&a))return 66;
+    int accepted=0,denied=0;
     for(int i=0;i<2000;i++) {
         int n=pass_fd(200,fd);
+        if(n==1)accepted++;
+        else if(n<0&&errno==EPERM)denied++;
         if(n!=1&&!(n<0&&(errno==EPERM||errno==EAGAIN))) {atomic_store(&a.error,67);break;}
     }
     atomic_store(&a.stop,1);
@@ -145,7 +148,8 @@ static int race_transfer(const char *outside,const char *target) {
     if(write(a.outside,"plain-byte-stream",17)!=17)return 69;
     close(200);close(fd);close(a.outside);close(pair[0]);close(pair[1]);
     if(atomic_load(&a.error))return atomic_load(&a.error);
-    printf("CONCURRENT_SOCKET_REPLACEMENT_2000_TRANSFERS_NO_OUTWARD_RIGHTS\n");return 0;
+    if(!accepted||!denied)return 70;
+    printf("CONCURRENT_SOCKET_REPLACEMENT_2000_ATTEMPTS internal=%d outside_denied=%d NO_OUTWARD_RIGHTS\n",accepted,denied);return 0;
 }
 int main(int argc,char **argv){
     if(argc<3)return 2;
