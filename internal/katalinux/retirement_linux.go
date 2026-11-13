@@ -85,6 +85,13 @@ func (p *Profile) RequireAcquisition(plan dockerengine.Plan) error {
 	if !p.brokerOwned || p.Manifest.RetirementPolicy != RetirementPolicy || p.Manifest.Version != MultiBlockVersion || p.Manifest.HostCgroup == nil || !ownedName(plan.Name) {
 		return ErrQualification
 	}
+	for _, path := range []string{p.EvidenceDirectory, p.Manifest.Storage.Runtime.Root} {
+		protected, err := hostfs.OpenState(path)
+		if err != nil {
+			return ErrQualification
+		}
+		protected.Close()
+	}
 	_, err := p.retirementRecord(plan)
 	if !errors.Is(err, os.ErrNotExist) {
 		return ErrQualification
@@ -115,7 +122,7 @@ func (p *Profile) BeginRetirement(id string, plan dockerengine.Plan, operationID
 	}
 	raw, err := hostfs.ReadPrivate(filepath.Join(p.EvidenceDirectory, plan.Name+".json"), 32768)
 	var original Evidence
-	if err != nil || readEvidence(raw, &original) != nil || original.Profile != p.ID || original.Container != id || original.SpecHash != plan.Config.Labels[dockerengine.LabelPrefix+"spec"] || original.Generation != plan.Config.Labels[dockerengine.LabelPrefix+"generation"] || original.Absence != nil || original.Cgroup == nil {
+	if err != nil || readEvidence(raw, &original) != nil || original.Version != "runnerd09-physical-v1" || original.Profile != p.ID || original.Container != id || original.SpecHash != plan.Config.Labels[dockerengine.LabelPrefix+"spec"] || original.Generation != plan.Config.Labels[dockerengine.LabelPrefix+"generation"] || original.Absence != nil || original.Cgroup == nil {
 		return ErrQualification
 	}
 	group, err := p.cgroupRecord(plan)
@@ -231,6 +238,11 @@ func (p *Profile) ReclaimRetired(ctx context.Context, id string, plan dockerengi
 }
 
 func (p *Profile) observeEmptyFrozen(ctx context.Context, plan dockerengine.Plan, expected CgroupRecord) error {
+	protected, err := hostfs.OpenState(p.Manifest.Storage.Runtime.Root)
+	if err != nil {
+		return ErrQualification
+	}
+	protected.Close()
 	// Reuse the exact same verifier without weakening durable-state validation:
 	// inspect the live barrier here, and recheck through verify after persistence.
 	groupValue, err := p.cgroupRecord(plan)
@@ -271,6 +283,10 @@ func (p *Profile) observeEmptyFrozen(ctx context.Context, plan dockerengine.Plan
 func (p *Profile) CheckRetirement(ctx context.Context, id string, plan dockerengine.Plan) error {
 	r, err := p.retirementRecord(plan)
 	if err != nil || r.Container != id || r.Phase != "DISPOSED" || r.Quarantined {
+		return ErrQualification
+	}
+	boot, be := currentCgroupBoot()
+	if be != nil || boot != r.Cgroup.BootID {
 		return ErrQualification
 	}
 	if err = p.priorProcessesAbsent(r.Processes); err != nil {
@@ -432,12 +448,19 @@ func (p *Profile) finishRetired(ctx context.Context, id string, plan dockerengin
 	if err != nil || readEvidence(raw, &original) != nil || original.Profile != r.Profile || original.Container != id || original.SpecHash != r.SpecHash || original.Generation != r.Generation || !sameHostCgroup(original.Cgroup, &r.Cgroup) || !reflect.DeepEqual(original.Sandboxes, r.Sandboxes) || !reflect.DeepEqual(original.Processes, r.Processes) {
 		return ErrQualification
 	}
+	current, ce := p.cgroupRecord(plan)
+	if ce != nil || !sameHostCgroup(&current, &r.Cgroup) {
+		return ErrQualification
+	}
 	group, err := p.releaseHostCgroup(ctx, plan)
 	if err != nil {
 		return err
 	}
 	if err = guard(); err != nil {
 		return err
+	}
+	if group == nil || !sameHostCgroup(group, &r.Cgroup) {
+		return ErrQualification
 	}
 	if err = p.retiredPhysicalAbsence(ctx, id, plan, *group); err != nil {
 		return err

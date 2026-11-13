@@ -21,6 +21,10 @@ func retirementFixture(t *testing.T) (*Profile, string, dockerengine.Plan, strin
 	p.Manifest.RetirementPolicy = RetirementPolicy
 	p.brokerOwned = true
 	p.EvidenceDirectory = t.TempDir()
+	p.Manifest.Storage.Runtime.Root = t.TempDir()
+	if err := os.Chmod(p.Manifest.Storage.Runtime.Root, 0700); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.Chmod(p.EvidenceDirectory, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -189,5 +193,21 @@ func TestRetirementReclaimedRevokesReclamation(t *testing.T) {
 	after, err = p.retirementRecord(plan)
 	if err != nil || after.Phase != "RECLAIMED" || !after.Quarantined {
 		t.Fatal("quarantine regressed durable reclamation", err)
+	}
+}
+
+func TestRetirementAcquisitionRequiresPrivateAnchors(t *testing.T) {
+	for _, kind := range []string{"missing-evidence", "public-metadata"} {
+		t.Run(kind, func(t *testing.T) {
+			p, _, plan, _ := retirementFixture(t)
+			if kind == "missing-evidence" {
+				p.EvidenceDirectory += "/missing"
+			} else if err := os.Chmod(p.Manifest.Storage.Runtime.Root, 0755); err != nil {
+				t.Fatal(err)
+			}
+			if p.RequireAcquisition(plan) == nil {
+				t.Fatal("unsafe acquisition boundary accepted")
+			}
+		})
 	}
 }
