@@ -68,6 +68,21 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 	if err = os.Mkdir(leaf, 0755); err != nil {
 		t.Fatal(err)
 	}
+	// Delegate a read-only handle to the actual ancestor PID namespace solely
+	// for this negative control. This tests the syscall policy independently of
+	// the profile's additional /proc ptrace/read denial.
+	ancestor := filepath.Join(transient, "ancestor-pidns")
+	if err = os.WriteFile(ancestor, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = unix.Mount("/proc/self/ns/pid", ancestor, "", unix.MS_BIND, ""); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if e := unix.Unmount(ancestor, 0); e != nil {
+			t.Error(e)
+		}
+	})
 	cg, err := os.Open(leaf)
 	if err != nil {
 		t.Fatal(err)
@@ -142,9 +157,9 @@ func TestRunnerd09LiveWorkerBoundary(t *testing.T) {
 	if err = <-received; err != nil {
 		t.Fatal(err)
 	}
-	// This handle names the original namespace itself. Even inferred/explicit
-	// setns must be denied by syscall policy; no host namespace is entered.
-	if err = id.Run(ctx, []string{probe, "escape", "/proc/1/ns/pid"}, stdio); err != nil {
+	// Even with an actual ancestor handle, inferred/explicit PID setns must be
+	// denied by syscall policy; no host namespace is entered.
+	if err = id.Run(ctx, []string{probe, "escape", ancestor}, stdio); err != nil {
 		t.Fatal(err)
 	}
 	if err = id.Run(ctx, []string{probe, "keeper-control", id.Socket}, stdio); err != nil {
