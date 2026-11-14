@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "protocolVersion": "1.0.0",
-  "goVersion": "go1.27.3",
+  "goVersion": "go1.27.4",
   "generatorModule": "github.com/oapi-codegen/oapi-codegen/v2",
   "generatorVersion": "v2.8.1",
   "provenance": {
