@@ -184,8 +184,8 @@ remain separate milestones. See Alpha's `docs/runnerd/RUNNERD05-DISPATCH.md`.
 
 # Runnerd05 creation fence
 
-The repository declares Go 1.26 and pins the Go 1.27.3 toolchain. Contract CI
-installs Go 1.27.3 with `GOTOOLCHAIN=local`; its root-module compile, race tests and
+The repository declares Go 1.26 and pins the Go 1.27.4 toolchain. Contract CI
+installs Go 1.27.4 with `GOTOOLCHAIN=local`; its root-module compile, race tests and
 build include both `journal` and `transport`. This supports `crypto/hkdf` and
 `os.Root`; Go 1.23 is below the repository's supported version.
 
