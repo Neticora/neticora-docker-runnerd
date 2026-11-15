@@ -20,7 +20,7 @@ class ServiceStateGuards(unittest.TestCase):
             getent.write_text('#!/bin/sh\nexit 0\n')
             getent.chmod(0o755)
             identity = Path(directory) / 'id'
-            identity.write_text('#!/bin/sh\ncase "$1" in\n-u) echo "$TEST_UID";;\n-g) echo "$TEST_GID";;\n-G) echo "$TEST_GROUPS";;\n*) exit 1;;\nesac\n')
+            identity.write_text('#!/bin/sh\n[ "${TEST_LOOKUP_FAILURE:-0}" = 0 ] || exit 1\ncase "$1" in\n-u) echo "$TEST_UID";;\n-g) echo "$TEST_GID";;\n-G) echo "$TEST_GROUPS";;\n*) exit 1;;\nesac\n')
             identity.chmod(0o755)
             for uid, gid, groups, allowed in (
                     ('982', '982', '982', True),
@@ -28,12 +28,20 @@ class ServiceStateGuards(unittest.TestCase):
                     ('982', '982', '982 983 44', True),
                     ('0', '982', '982 983', False),
                     ('982', '0', '982 983', False),
-                    ('982', '982', '982 983 0', False)):
+                    ('982', '982', '982 983 0', False),
+                    ('982', '982', '', False),
+                    ('982', '982', 'invalid', False),
+                    ('', '982', '982', False),
+                    ('982', '', '982', False)):
                 with self.subTest(uid=uid, gid=gid, groups=groups):
                     result = subprocess.run(['/bin/sh', '-ec', account_guard],
                         env={**os.environ, 'PATH': directory, 'TEST_UID': uid, 'TEST_GID': gid, 'TEST_GROUPS': groups},
                         capture_output=True, text=True)
                     self.assertEqual(result.returncode == 0, allowed, result.stderr)
+            failed_lookup = subprocess.run(['/bin/sh', '-ec', account_guard],
+                env={**os.environ, 'PATH': directory, 'TEST_LOOKUP_FAILURE': '1'},
+                capture_output=True, text=True)
+            self.assertNotEqual(failed_lookup.returncode, 0)
 
     def guard(self, state, code=0):
         with tempfile.TemporaryDirectory() as directory:
