@@ -1,6 +1,7 @@
 package onboarding
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/x509"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
+	"github.com/Neticora/neticora-docker-runnerd/internal/dockerengine"
 	"github.com/Neticora/neticora-docker-runnerd/internal/execution"
 	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
 	"github.com/Neticora/neticora-docker-runnerd/transport"
@@ -23,6 +25,7 @@ import (
 type platform struct {
 	binding        transport.InstallationBinding
 	request        []byte
+	lastRequest    []byte
 	effects, calls int
 	lost           bool
 	reject         bool
@@ -35,9 +38,17 @@ func (p *platform) Post(_ context.Context, path, _ string, m protocol.Outbound, 
 	if path == "/token" {
 		return json.Marshal(map[string]string{"accessToken": strings.Repeat("a", 43), "expiresAt": time.Now().Add(time.Minute).UTC().Format("2006-01-02T15:04:05.000Z")})
 	}
+	p.lastRequest = m.Bytes()
 	p.calls++
 	if len(p.request) > 0 && string(p.request) != string(m.Bytes()) {
-		return nil, errors.New("attempt changed")
+		// This fixture models the original registration effect, not server proof
+		// validation. Real signed history expansion is checked by PostgreSQL and
+		// cross-language acceptance tests; token/key/request changes still reject.
+		var original, retry protocol.EnrollmentRequest
+		if json.Unmarshal(p.request, &original) != nil || json.Unmarshal(m.Bytes(), &retry) != nil ||
+			original.RequestId != retry.RequestId || original.PublicKey != retry.PublicKey || original.EnrollmentToken != retry.EnrollmentToken {
+			return nil, errors.New("attempt changed")
+		}
 	}
 	if len(p.request) == 0 {
 		p.effects++
@@ -211,4 +222,110 @@ func TestOriginalPeerAndCredentialCannotBeReplaced(t *testing.T) {
 		t.Fatal(e)
 	}
 	clear(k)
+}
+
+func TestDockerPreflightPrecedesTokenIdentityAndPlatformEffects(t *testing.T) {
+	for _, cause := range []error{dockerengine.ErrPermission, dockerengine.ErrSocketInaccessible, dockerengine.ErrDaemonUnavailable, dockerengine.ErrUnsupported, dockerengine.ErrContinuity} {
+		t.Run(cause.Error(), func(t *testing.T) {
+			o, p := fixture(t)
+			o.Probe = func(context.Context) (string, error) { return "", cause }
+			o.Token = func() ([]byte, error) { t.Fatal("failed preflight requested token"); return nil, nil }
+			if _, err := Setup(context.Background(), p, o); !errors.Is(err, cause) {
+				t.Fatal("specific preflight diagnosis lost", err)
+			}
+			if p.calls != 0 || p.effects != 0 {
+				t.Fatal("preflight contacted enrollment")
+			}
+			for _, path := range []string{filepath.Join(o.SetupDir, "attempt.json"), filepath.Join(o.SetupDir, "original-key.seed"), o.ConfigPath, o.CredentialPath} {
+				if _, err := os.Lstat(path); !os.IsNotExist(err) {
+					t.Fatal("preflight created identity state", path)
+				}
+			}
+		})
+	}
+}
+
+func TestFailedDockerPreflightRetainsOriginalAttemptAndKey(t *testing.T) {
+	o, p := fixture(t)
+	p.reject = true
+	if _, err := Setup(context.Background(), p, o); err == nil {
+		t.Fatal("expected interrupted enrollment")
+	}
+	paths := []string{filepath.Join(o.SetupDir, "attempt.json"), filepath.Join(o.SetupDir, "original-key.seed")}
+	before := map[string][]byte{}
+	for _, path := range paths {
+		before[path], _ = os.ReadFile(path)
+	}
+	o.Probe = func(context.Context) (string, error) { return "", dockerengine.ErrPermission }
+	o.Token = func() ([]byte, error) { t.Fatal("failed retry preflight requested token"); return nil, nil }
+	if _, err := Setup(context.Background(), p, o); !errors.Is(err, dockerengine.ErrPermission) {
+		t.Fatal(err)
+	}
+	for _, path := range paths {
+		after, _ := os.ReadFile(path)
+		if !bytes.Equal(before[path], after) {
+			t.Fatal("original state changed", path)
+		}
+	}
+	if p.calls != 0 || p.effects != 0 {
+		t.Fatal("failed preflight contacted platform")
+	}
+}
+
+func TestDockerChangeDuringTokenEntryCannotConsumeToken(t *testing.T) {
+	o, p := fixture(t)
+	calls := 0
+	o.Probe = func(context.Context) (string, error) {
+		calls++
+		if calls == 1 {
+			return "docker-original", nil
+		}
+		return "docker-replacement", nil
+	}
+	if _, err := Setup(context.Background(), p, o); !errors.Is(err, dockerengine.ErrContinuity) {
+		t.Fatal(err)
+	}
+	if p.calls != 0 || p.effects != 0 {
+		t.Fatal("changed daemon consumed token")
+	}
+	before, _ := os.ReadFile(filepath.Join(o.SetupDir, "original-key.seed"))
+	o.Probe = func(context.Context) (string, error) { return "docker-original", nil }
+	if _, err := Setup(context.Background(), p, o); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := os.ReadFile(filepath.Join(o.SetupDir, "original-key.seed"))
+	if !bytes.Equal(before, after) || p.effects != 1 {
+		t.Fatal("retry replaced identity")
+	}
+}
+
+func TestDockerChangeAfterEnrollmentRetainsResponseWithoutCredentials(t *testing.T) {
+	o, p := fixture(t)
+	calls := 0
+	o.Probe = func(context.Context) (string, error) {
+		calls++
+		if calls < 3 {
+			return "docker-original", nil
+		}
+		return "docker-replacement", nil
+	}
+	if _, err := Setup(context.Background(), p, o); !errors.Is(err, dockerengine.ErrContinuity) {
+		t.Fatal(err)
+	}
+	if p.effects != 1 {
+		t.Fatal("expected one original registration")
+	}
+	if _, err := os.Stat(filepath.Join(o.SetupDir, "enrollment.json")); err != nil {
+		t.Fatal("lost original response")
+	}
+	for _, path := range []string{o.ConfigPath, o.CredentialPath} {
+		if _, err := os.Lstat(path); !os.IsNotExist(err) {
+			t.Fatal("changed endpoint was provisioned")
+		}
+	}
+	o.Probe = func(context.Context) (string, error) { return "docker-original", nil }
+	o.Token = func() ([]byte, error) { t.Fatal("saved response requested another token"); return nil, nil }
+	if _, err := Setup(context.Background(), p, o); err != nil || p.effects != 1 {
+		t.Fatal("failed original response recovery", err)
+	}
 }

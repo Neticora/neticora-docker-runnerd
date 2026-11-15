@@ -22,9 +22,9 @@ type tokenReplacement struct {
 }
 
 // Append-only replacement records are synced before network effects. The
-// original attempt/key remain immutable. Each candidate uses the original token
-// as its retirement anchor and the same request ID as its replay fence. A typo
-// in a candidate must not make the next valid token impossible to register.
+// original attempt/key remain immutable. Every predecessor is included in the
+// signed request. The server requires the original anchor and retires all known
+// unused candidates; nonexistent non-anchor hashes cannot poison recovery.
 func enrollmentMessage(o Options, key ed25519.PrivateKey, a attempt, token []byte) (protocol.Outbound, error) {
 	var zero protocol.Outbound
 	hashes := []string{a.TokenHash}
@@ -72,12 +72,21 @@ func enrollmentMessage(o Options, key ed25519.PrivateKey, a attempt, token []byt
 		}
 		selected = len(hashes)
 	}
+	// Include every other recorded candidate, including attempts made after a
+	// successful request whose response was lost. Recovery may only narrow the
+	// outstanding credentials of the same original identity.
+	priorHashes := make([]string, 0, len(hashes))
+	for i, hash := range hashes {
+		if i != selected {
+			priorHashes = append(priorHashes, hash)
+		}
+	}
 	var replacement *protocol.EnrollmentTokenReplacement
-	if selected > 0 {
+	if len(priorHashes) > 0 && (selected > 0 || len(hashes) > 1) {
 		if err := unfinishedReplacement(o); err != nil {
 			return zero, err
 		}
-		replacement = &protocol.EnrollmentTokenReplacement{TenantId: a.TenantID, RunnerDeploymentId: a.PoolID, PriorTokenHashes: []string{a.TokenHash}}
+		replacement = &protocol.EnrollmentTokenReplacement{TenantId: a.TenantID, RunnerDeploymentId: a.PoolID, PriorTokenHashes: priorHashes}
 	}
 	message, err := identity.EnrollmentReplacing(key, a.RequestID, string(token), replacement)
 	if err != nil {

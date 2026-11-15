@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
 	"github.com/Neticora/neticora-docker-runnerd/identity"
 	"github.com/Neticora/neticora-docker-runnerd/internal/config"
+	"github.com/Neticora/neticora-docker-runnerd/internal/dockerengine"
 	"github.com/Neticora/neticora-docker-runnerd/internal/execution"
 	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
 	"github.com/Neticora/neticora-docker-runnerd/transport"
@@ -131,8 +133,25 @@ func exists(path string) (bool, error) {
 	return e == nil, e
 }
 
+func observeSetupDocker(ctx context.Context, o Options, expected string) (string, error) {
+	endpoint, err := o.Probe(ctx)
+	if err != nil {
+		return "", fmt.Errorf("Docker preflight failed: %w; original enrollment retained", err)
+	}
+	if endpoint == "" {
+		return "", fmt.Errorf("Docker preflight failed: %w; original enrollment retained", dockerengine.ErrDaemonUnavailable)
+	}
+	if expected != "" && endpoint != expected {
+		return "", fmt.Errorf("Docker preflight failed: %w; original enrollment retained", dockerengine.ErrContinuity)
+	}
+	return endpoint, nil
+}
+
 func Setup(ctx context.Context, p Platform, o Options) (transport.InstallationBinding, error) {
 	var zero transport.InstallationBinding
+	if err := dockerengine.ValidateEndpoint(o.RuntimeEndpoint); err != nil {
+		return zero, fmt.Errorf("Docker preflight failed: %w; original enrollment retained", err)
+	}
 	base := config.Config{ControlPlaneURL: o.PlatformURL, StateDir: o.StateDir, CredentialFile: o.CredentialPath, RuntimeEndpoint: o.RuntimeEndpoint, RequestTimeoutSeconds: 15}
 	raw, _ := json.Marshal(base)
 	if _, e := config.Parse(raw); e != nil || o.TenantID == "" || o.PoolID == "" || o.Probe == nil || o.Token == nil {
@@ -200,6 +219,25 @@ func Setup(ctx context.Context, p Platform, o Options) (transport.InstallationBi
 			if f.Name() != "instance.lock" {
 				return zero, ErrState
 			}
+		}
+	}
+	// The installed CLI runs this observation with the exact service UID/GID and
+	// no supplementary groups. Fail before key creation, token prompting/history
+	// changes or any platform call. Never grant socket permissions implicitly.
+	preflightEndpoint, e := observeSetupDocker(ctx, o, "")
+	if e != nil {
+		return zero, e
+	}
+	if yes, err := exists(o.CredentialPath); err != nil {
+		return zero, ErrState
+	} else if yes {
+		old, key, err := execution.ReadCredentials(o.CredentialPath)
+		clear(key)
+		if err != nil {
+			return zero, err
+		}
+		if old.EndpointIdentity != preflightEndpoint || old.BootID != o.BootID {
+			return zero, dockerengine.ErrContinuity
 		}
 	}
 	if e = checkpoint(o, "before-key"); e != nil {
@@ -282,6 +320,11 @@ func Setup(ctx context.Context, p Platform, o Options) (transport.InstallationBi
 		if e != nil {
 			return zero, e
 		}
+		// A daemon/socket change while the operator entered the token must not
+		// consume it. Retain the original attempt and any synced candidate intent.
+		if _, e = observeSetupDocker(ctx, o, preflightEndpoint); e != nil {
+			return zero, e
+		}
 		data, e := p.Post(ctx, "/enroll", "", message, "EnrollmentResponse")
 		if e != nil {
 			return zero, e
@@ -307,9 +350,9 @@ func Setup(ctx context.Context, p Platform, o Options) (transport.InstallationBi
 	if b.Identity != enrolled.Identity || b.TenantID != a.TenantID || b.RunnerDeploymentID != a.PoolID || b.EnrollmentRequestID != a.RequestID || b.PublicKeyFingerprint != fingerprint {
 		return zero, errors.New("authenticated installation binding does not match the original attempt")
 	}
-	endpoint, e := o.Probe(ctx)
-	if e != nil || endpoint == "" {
-		return zero, errors.New("Docker validation failed; original enrollment retained")
+	endpoint, e := observeSetupDocker(ctx, o, preflightEndpoint)
+	if e != nil {
+		return zero, e
 	}
 	der, _ := x509.MarshalPKCS8PrivateKey(key)
 	c := execution.Credentials{InstallationID: b.InstallationID, TenantID: b.TenantID, Identity: b.Identity, EndpointIdentity: endpoint, BootID: o.BootID, PrivateKeyPEM: string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}))}

@@ -239,12 +239,15 @@ func diagnose(command string) error {
 	defer cancel()
 	engine, e := dockerengine.OpenReadOnly(c.RuntimeEndpoint, credentials.InstallationID, func() {})
 	if e != nil {
-		return errors.New("Docker observation unavailable")
+		return fmt.Errorf("Docker observation failed: %w", e)
 	}
 	defer engine.Close()
 	endpoint, e := engine.Probe(ctx)
-	if e != nil || endpoint != credentials.EndpointIdentity {
-		return errors.New("Docker endpoint identity changed or unavailable; preserve state and use authorized continuity recovery")
+	if e != nil {
+		return fmt.Errorf("Docker observation failed: %w", e)
+	}
+	if endpoint != credentials.EndpointIdentity {
+		return dockerengine.ErrContinuity
 	}
 	report["docker"] = "original-peer-verified"
 	client, e := transport.New(c.ControlPlaneURL, c.Timeout())

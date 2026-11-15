@@ -36,8 +36,9 @@ public download or APT repository implied by this local build.
 
 ## Customer prerequisites
 
-Provision Docker independently, with an explicit directly owned local dockerd Unix
-socket and the accepted Runnerd08 endpoint model. The installer never installs,
+Provision Docker independently, using a local root-owned Linux Docker Engine Unix
+socket. Both a directly bound socket and Ubuntu's standard `docker.socket` with
+`dockerd -H fd://` are supported; keep the vendor Docker units and flags. The installer never installs,
 reconfigures or restarts Docker, or changes networking. An administrator must
 provide the service account its narrowly selected endpoint access under the
 accepted Standard deployment model (for example a dedicated endpoint socket ACL).
@@ -45,6 +46,29 @@ The package does not add the account to `docker`, grant capabilities/sudo, chang
 socket permissions, or silently authorize arbitrary Docker endpoints. Standard's
 accepted Docker access remains privileged runtime authority; this is not the
 unfinished Runnerd09 controller/broker containment model.
+
+Setup performs read-only Docker checks as the effective service account before
+requesting a token or sending enrollment. If access is denied, an administrator
+must explicitly approve and grant access to the selected socket, for example:
+
+```sh
+sudo setfacl -m u:neticora-runnerd:rw /run/docker.sock
+sudo setpriv --reuid=neticora-runnerd --regid=neticora-runnerd --clear-groups \
+  docker --host unix:///run/docker.sock version
+```
+
+Install the distribution's `acl` package if `setfacl` is unavailable. This is a
+privileged administrator action, not an automatic installer/setup operation.
+Socket recreation may remove its ACL; access must then be explicitly restored.
+Restoring permissions does not approve a new daemon or discard its old binding.
+Rootless/remote engines and arbitrary socket proxies remain unsupported.
+
+The connection authenticates the actual root `dockerd` process, not PID 1. For
+systemd activation, a bounded credential-free `HEAD /_ping` receives Linux
+`SCM_CREDENTIALS` on the same Unix connection before it can carry a mutation.
+Replies must retain that sender; daemon PID/start time and host boot identity
+remain part of the original continuity binding. No Docker service restart or
+unit/configuration change is needed for normal onboarding.
 
 Provide sufficient persistent ext4 storage and HTTPS connectivity to the host API.
 The target does not need Go. No package configuration, credentials or identity are
@@ -76,6 +100,14 @@ is authenticated through the existing proof-of-possession token exchange and the
 new read-only `/me/installation` handoff. The verified tenant, pool, original key,
 request, installation and session must all match before credentials are written.
 
+Preflight distinguishes missing/inaccessible sockets, denied service-account
+permissions, unavailable daemons, unsupported configurations and continuity
+failures. Failed preflight does not prompt for or consume a token, create a new
+key/attempt, or change an existing one. Docker is checked again immediately
+before enrollment submission and before credential/configuration commit. If
+Docker changes after the platform commits, the original saved response is
+retained for recovery; a retry must not create a replacement identity.
+
 Keep failed setup state. Never delete it to retry with another token or create a
 replacement host. If the original token expired or is unavailable before enrollment
 completed, create a fresh token for the **same tenant and pool**, then run:
@@ -85,15 +117,26 @@ sudo neticora-runnerd setup --replace-token
 ```
 
 Accept the saved bindings and paste the fresh token. Replacement requires an
-upgraded platform. The platform locks the original token and the fresh token,
+upgraded platform. Setup signs the full recorded candidate history except the
+token being redeemed, including later failed attempts after a lost response.
+The original token is first whenever it is a predecessor. The platform locks
+the current token and all known candidates,
 checks that the original never registered a host and the original request was
-never consumed by any replacement, and atomically revokes the unused original
-while registering the fresh token. The original key, request and attempt remain
+never consumed by another replacement, and atomically revokes all known unused
+same-scope predecessors while registering the fresh token. The original anchor
+must exist. Non-original hashes that never existed can be ignored as typos;
+known consumed, inconsistent or cross-scope candidates reject replacement.
+The original key, request and attempt remain
 unchanged; append-only local records retain token hashes, never token values.
 An interrupted replacement resumes with ordinary `setup` and the same fresh token.
 If a candidate was mistyped or expired without registration, explicit replacement
 can accept another fresh token. Earlier candidates remain in local history; a
 successful earlier registration always blocks a second host for the same request.
+Bounded response recovery may supply a signed extension of the original history
+to retire omitted unused candidates. It must match the original identity, key,
+request and an exact earlier history prefix, and cannot change the original
+request hash or deadline. The registered original token itself is the anchor
+when recovering an original non-replacement request.
 At most 16 replacements are retained; reaching this bound requires operator recovery.
 
 Replacement is rejected if local credentials, an enrollment response or runtime
@@ -146,6 +189,12 @@ the journal/credentials and use the existing Runnerd08 signed continuity-recover
 procedure. Connection/setup cannot treat a new boot, missing object or changed
 socket as authority to discard history. Ordinary daemon stop preserves workloads
 through `KillMode=process`; the original controller/journal perform recovery.
+
+Socket-path replacement and daemon restart are distinct observations. A different
+socket inode invalidates the current observation even when the same authenticated
+daemon process remains alive. A fresh read-only observation may then report the
+same daemon endpoint identity; this does not itself authorize execution or
+disposal. Existing event-stream invalidation and reconciliation rules still apply.
 
 ## Reinstall, replace and remove
 

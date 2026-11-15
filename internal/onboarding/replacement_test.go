@@ -129,8 +129,8 @@ func TestMultipleUnusedReplacementsRetainAllFences(t *testing.T) {
 	}
 	var request protocol.EnrollmentRequest
 	_ = json.Unmarshal(p.request, &request)
-	if request.Replacement == nil || len(request.Replacement.PriorTokenHashes) != 1 || request.Replacement.PriorTokenHashes[0] != original.TokenHash || request.RequestId != original.RequestID {
-		t.Fatal("replacement lost its original token and request fence")
+	if request.Replacement == nil || len(request.Replacement.PriorTokenHashes) != 2 || request.Replacement.PriorTokenHashes[0] != original.TokenHash || request.Replacement.PriorTokenHashes[1] != digest([]byte("second-unused-secret")) || request.RequestId != original.RequestID {
+		t.Fatal("replacement omitted a predecessor or changed its original request")
 	}
 	for i := 1; i <= 2; i++ {
 		if yes, err := exists(replacementPath(o, i)); err != nil || !yes {
@@ -217,5 +217,36 @@ func TestReplacementHistoryBound(t *testing.T) {
 	}
 	if p.calls != 0 {
 		t.Fatal("history bound contacted platform")
+	}
+}
+
+func TestRecoveryIncludesCandidatesRecordedAfterLostSuccess(t *testing.T) {
+	o, p, original, _ := unfinishedSetup(t)
+	o.ReplaceToken = true
+	o.Token = func() ([]byte, error) { return []byte("successful-candidate-secret"), nil }
+	p.reject = false
+	p.lost = true
+	if _, err := Setup(context.Background(), p, o); err == nil {
+		t.Fatal("response was not lost")
+	}
+	o.Token = func() ([]byte, error) { return []byte("later-failed-candidate-secret"), nil }
+	if _, err := Setup(context.Background(), p, o); err == nil {
+		t.Fatal("later candidate replaced original registration")
+	}
+	o.ReplaceToken = false
+	o.Token = func() ([]byte, error) { return []byte("successful-candidate-secret"), nil }
+	if _, err := Setup(context.Background(), p, o); err != nil {
+		t.Fatal(err)
+	}
+	var request protocol.EnrollmentRequest
+	if json.Unmarshal(p.lastRequest, &request) != nil || request.Replacement == nil {
+		t.Fatal("missing recovery history")
+	}
+	hashes := request.Replacement.PriorTokenHashes
+	if len(hashes) != 2 || hashes[0] != original.TokenHash || hashes[1] != digest([]byte("later-failed-candidate-secret")) {
+		t.Fatal("recovery omitted a later failed candidate")
+	}
+	if p.effects != 1 {
+		t.Fatal("response recovery allocated another identity")
 	}
 }
