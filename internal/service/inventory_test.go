@@ -233,3 +233,29 @@ func TestObserverHostnameUnavailableAndInvalid(t *testing.T) {
 		}
 	}
 }
+
+func TestInventoryFailureCannotBeHiddenByFreshHeartbeat(t *testing.T) {
+	o, _, gateway := observationFixture()
+	report, err := o.observe(context.Background(), "auth")
+	if err != nil {
+		t.Fatal(err)
+	}
+	status := &connectionStatus{}
+	status.set("connected", time.Now().UTC().Format(time.RFC3339Nano))
+	status.setInventory(report)
+	if _, fresh := status.inventoryStatus(); !fresh {
+		t.Fatal("accepted inventory not fresh")
+	}
+	gateway.offline = true
+	report, err = o.observe(context.Background(), "auth")
+	if err == nil {
+		t.Fatal("inventory failure hidden")
+	}
+	status.setInventory(report)
+	if platform, _ := status.get(); platform != "connected" {
+		t.Fatal("inventory failure changed heartbeat connectivity")
+	}
+	if _, fresh := status.inventoryStatus(); fresh {
+		t.Fatal("heartbeat masked failed inventory observation")
+	}
+}

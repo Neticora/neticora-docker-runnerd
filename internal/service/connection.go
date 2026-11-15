@@ -53,7 +53,7 @@ func (s *connectionStatus) inventoryStatus() (inventoryReport, bool) {
 	}
 	observed, err := time.Parse(time.RFC3339Nano, report.ObservedAt)
 	age := time.Since(observed)
-	return report, err == nil && age >= -5*time.Second && age <= inventoryFreshness
+	return report, report.State == "accepted" && err == nil && age >= -5*time.Second && age <= inventoryFreshness
 }
 
 // connect reports zero capacity and no supported profiles. It never opens the
@@ -91,6 +91,9 @@ func connect(ctx context.Context, c config.Config, status *connectionStatus, loc
 		binding, e := engine.Probe(requestCtx)
 		if e != nil || binding != credentials.EndpointIdentity {
 			status.set("runtime-continuity-recovery-required", "")
+			report, _ := status.inventoryStatus()
+			report.State = "runtime-continuity-required"
+			status.setInventory(report)
 			cancel()
 			return
 		}
@@ -124,6 +127,9 @@ func connect(ctx context.Context, c config.Config, status *connectionStatus, loc
 		cancel()
 		if err != nil {
 			status.set("authentication-or-connection-failed", "")
+			report, _ := status.inventoryStatus()
+			report.State = "authentication-or-connection-failed"
+			status.setInventory(report)
 		} else {
 			status.set("connected", time.Now().UTC().Format(time.RFC3339Nano))
 		}
