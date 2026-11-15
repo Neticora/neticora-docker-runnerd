@@ -15,15 +15,19 @@ import (
 
 type peerKey struct{}
 type Snapshot struct {
-	Platform         string `json:"platform,omitempty"`
-	LastHeartbeat    string `json:"lastHeartbeat,omitempty"`
-	ExecutionReason  string `json:"executionReason,omitempty"`
-	ExecutionEnabled bool   `json:"executionEnabled,omitempty"`
-	State            string `json:"state"`
-	AdmissionEnabled bool   `json:"admissionEnabled"`
-	RuntimeQualified bool   `json:"runtimeQualified"`
-	RecoveryReady    bool   `json:"recoveryReady"`
-	RecoveryReason   string `json:"recoveryReason"`
+	InventoryState      string `json:"inventoryState,omitempty"`
+	InventoryGeneration string `json:"inventoryGeneration,omitempty"`
+	InventoryObservedAt string `json:"inventoryObservedAt,omitempty"`
+	InventoryFresh      bool   `json:"inventoryFresh"`
+	Platform            string `json:"platform,omitempty"`
+	LastHeartbeat       string `json:"lastHeartbeat,omitempty"`
+	ExecutionReason     string `json:"executionReason,omitempty"`
+	ExecutionEnabled    bool   `json:"executionEnabled,omitempty"`
+	State               string `json:"state"`
+	AdmissionEnabled    bool   `json:"admissionEnabled"`
+	RuntimeQualified    bool   `json:"runtimeQualified"`
+	RecoveryReady       bool   `json:"recoveryReady"`
+	RecoveryReason      string `json:"recoveryReason"`
 }
 type Server struct {
 	drainAction *drainAction

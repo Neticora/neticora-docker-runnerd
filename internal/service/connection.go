@@ -19,6 +19,7 @@ import (
 type connectionStatus struct {
 	sync.Mutex
 	state, heartbeat string
+	inventory        inventoryReport
 }
 
 func (s *connectionStatus) set(state, heartbeat string) {
@@ -35,9 +36,29 @@ func (s *connectionStatus) get() (string, string) {
 	return s.state, s.heartbeat
 }
 
+func (s *connectionStatus) setInventory(report inventoryReport) {
+	s.Lock()
+	defer s.Unlock()
+	s.inventory = report
+}
+func (s *connectionStatus) inventoryStatus() (inventoryReport, bool) {
+	s.Lock()
+	defer s.Unlock()
+	report := s.inventory
+	if report.Generation == "" {
+		report.Generation = "0"
+	}
+	if report.State == "" {
+		report.State = "unreported"
+	}
+	observed, err := time.Parse(time.RFC3339Nano, report.ObservedAt)
+	age := time.Since(observed)
+	return report, err == nil && age >= -5*time.Second && age <= inventoryFreshness
+}
+
 // connect reports zero capacity and no supported profiles. It never opens the
 // mutating engine, pulls/acks commands, or emits execution/cleanup evidence.
-func connect(ctx context.Context, c config.Config, status *connectionStatus) {
+func connect(ctx context.Context, c config.Config, status *connectionStatus, localEmpty func(context.Context) (bool, error)) {
 	credentials, key, e := execution.ReadCredentials(c.CredentialFile)
 	if e != nil {
 		status.set("identity-invalid", "")
@@ -57,10 +78,11 @@ func connect(ctx context.Context, c config.Config, status *connectionStatus) {
 	}
 	defer engine.Close()
 	boot, e := os.ReadFile("/proc/sys/kernel/random/boot_id")
-	if e != nil {
+	if e != nil || strings.TrimSpace(string(boot)) != credentials.BootID {
 		status.set("boot-unavailable", "")
 		return
 	}
+	observer := &inventoryObserver{runtime: engine, remote: client, identity: credentials.Identity, endpoint: credentials.EndpointIdentity, localEmpty: localEmpty, hostname: os.Hostname, now: time.Now}
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -89,8 +111,10 @@ func connect(ctx context.Context, c config.Config, status *connectionStatus) {
 				proposal, err = protocol.DecodeConfigResponse(data)
 			}
 			if err == nil {
+				report, _ := observer.observe(requestCtx, access)
+				status.setInventory(report)
 				capabilities := protocol.HostCapabilities{Host: protocol.Platform{Os: "linux", Architecture: protocol.PlatformArchitecture(runtime.GOARCH), Build: "unqualified"}, Engine: protocol.Platform{Os: "linux", Architecture: protocol.PlatformArchitecture(runtime.GOARCH), Build: "unqualified"}, EndpointIdentity: binding, RuntimeVersion: "unqualified-observation", ConfigurationGeneration: "1", ProbeGeneration: "1", ObservedAt: time.Now().UTC().Format("2006-01-02T15:04:05.000Z"), Profiles: []string{}, SupportedImageFamilies: []string{}, RuntimeMechanism: "docker", Capacity: protocol.ResourceBudget{CpuMillis: "0", MemoryBytes: "0", StorageBytes: "0", Slots: "0"}}
-				m, x := protocol.EncodeValidated("HostHeartbeat", map[string]any{"identity": credentials.Identity, "agentVersion": execution.Version(), "protocolVersion": "1.0.0", "inventoryGeneration": "1", "effectivePolicyGeneration": proposal.Policy.Generation, "capabilities": capabilities})
+				m, x := protocol.EncodeValidated("HostHeartbeat", map[string]any{"identity": credentials.Identity, "agentVersion": execution.Version(), "protocolVersion": "1.0.0", "inventoryGeneration": report.Generation, "effectivePolicyGeneration": proposal.Policy.Generation, "capabilities": capabilities})
 				err = x
 				if err == nil {
 					_, err = client.Post(requestCtx, "/me/heartbeat", access, m, "ConfigResponse")

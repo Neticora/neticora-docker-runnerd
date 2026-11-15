@@ -268,3 +268,35 @@ permission to stop a job, discard state or release its reservation. Arrange a
 reviewed maintenance window and retry only after the normal drain/recovery checks.
 Local noninteractive APT tests do not qualify every unattended-update service,
 arbitrary binary/schema transitions, signed distribution or fleet rollout.
+
+### Connection-only inventory and reported hostname
+
+An enrolled connection-only service observes Docker and publishes complete,
+authenticated inventory every 15 seconds, independently of the execution
+controller. It still advertises zero qualified capacity, no execution profiles,
+and disabled admission. A heartbeat is not an inventory receipt or qualification.
+`status` and `doctor` expose `inventoryState`, `inventoryGeneration`,
+`inventoryObservedAt`, and `inventoryFresh` separately from platform connectivity.
+Inventory expires after 60 seconds without an accepted fresh observation.
+
+This mode publishes only when the original endpoint remains bound and local
+incomplete executions, platform recovery obligations, and installation-scoped
+Docker resources are all empty. Any resource needing ownership reconciliation
+blocks publication; it is never adopted, removed or silently omitted. Diagnose
+`unreconciled-*-resources` through the existing recovery workflow. Do not clear
+state or enable execution just to obtain an inventory report. A Docker peer
+change requires the existing separately authorized continuity recovery.
+
+Inventory generations come from the authenticated platform recovery receipt.
+An ambiguous response retains the exact observation for idempotent replay;
+conflicts cause a new read and observation on the next interval. After a process
+restart the observer resumes from the server's accepted generation. Observation
+retries do not create execution authority or reconcile the local journal.
+
+The OS hostname is included as display metadata in each new inventory snapshot.
+Valid ASCII hostname/FQDN labels are bounded to 63 characters per label and 253
+overall. An unavailable/invalid hostname is reported as null. A hostname change
+needs no re-enrollment; the UUID and installation/key/session bindings remain the
+security identity. Older agents may omit the optional field. Deploy the updated
+inventory gateway protocol before installing this agent; older strict gateways
+reject the new hostname field. No schema/database migration is required.

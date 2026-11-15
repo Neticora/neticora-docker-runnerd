@@ -49,7 +49,17 @@ func Run(ctx context.Context, c config.Config, socket string) error {
 	connection := &connectionStatus{state: "disabled"}
 	if !executing && c.Connection != nil {
 		done := make(chan struct{})
-		go func() { defer close(done); connect(controllerCtx, c, connection) }()
+		go func() {
+			defer close(done)
+			connect(controllerCtx, c, connection, func(ctx context.Context) (bool, error) {
+				health := store.Health(ctx)
+				if health.Reason != "reconciliation-required" && health.Reason != "ready" {
+					return false, agent.ErrRecoveryRequired
+				}
+				rows, err := store.Incomplete(ctx, agent.ExecutionCursor{}, 1)
+				return err == nil && len(rows) == 0, err
+			})
+		}()
 		defer func() { stopController(); <-done }()
 	}
 	var controller *execution.Controller
@@ -88,7 +98,8 @@ func Run(ctx context.Context, c config.Config, socket string) error {
 			reason = controller.Status()
 		}
 		platform, lastHeartbeat := connection.get()
-		return control.Snapshot{Platform: platform, LastHeartbeat: lastHeartbeat, ExecutionReason: reason, ExecutionEnabled: executing, State: state, AdmissionEnabled: executing && !draining.Load() && health.Ready, RuntimeQualified: false, RecoveryReady: health.Ready, RecoveryReason: health.Reason}
+		inventory, inventoryFresh := connection.inventoryStatus()
+		return control.Snapshot{InventoryState: inventory.State, InventoryGeneration: inventory.Generation, InventoryObservedAt: inventory.ObservedAt, InventoryFresh: inventoryFresh, Platform: platform, LastHeartbeat: lastHeartbeat, ExecutionReason: reason, ExecutionEnabled: executing, State: state, AdmissionEnabled: executing && !draining.Load() && health.Ready, RuntimeQualified: false, RecoveryReady: health.Ready, RecoveryReason: health.Reason}
 	}, func() {
 		draining.Store(true)
 	}, func(event string) { log.Print(event) })
