@@ -61,8 +61,10 @@ In Neticora Runner Hosts select the intended tenant and an existing customer-hos
 pool, then generate a single-use token valid for 15 minutes. Pool creation remains
 in the existing pool workflow (#326); setup cannot create a pool. Copy the canonical
 tenant ID and pool ID displayed by the dialog, and the HTTPS host API URL supplied
-by your platform administrator. Enter the token at the hidden terminal prompt;
-never put it in arguments, environment variables, shell history or logs.
+by your platform administrator. Enter or paste the token at the terminal prompt;
+each character appears as `*`. Press Enter to submit, Backspace to correct the
+entry, or Ctrl+U to clear it. Never put tokens in arguments, environment variables,
+shell history or logs.
 
 Setup runs file, key, enrollment and Docker observations as the service account,
 without supplementary groups. Root is used only to select that account and, after

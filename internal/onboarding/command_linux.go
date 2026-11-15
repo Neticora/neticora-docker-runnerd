@@ -122,13 +122,7 @@ func Command(args []string) (bool, error) {
 	}
 	o := Options{ConfigPath: configPath, SetupDir: "/etc/neticora-runnerd/setup", StateDir: "/var/lib/neticora-runnerd", CredentialPath: "/etc/neticora-runnerd/identity.json", PlatformURL: platform, TenantID: tenant, PoolID: pool, RuntimeEndpoint: endpoint, BootID: strings.TrimSpace(string(boot))}
 	o.Token = func() ([]byte, error) {
-		fmt.Print("Enrollment token (hidden): ")
-		value, e := term.ReadPassword(int(os.Stdin.Fd()))
-		fmt.Println()
-		if e != nil {
-			return nil, errors.New("cannot read protected token")
-		}
-		return value, nil
+		return promptToken(os.Stdin, os.Stdout)
 	}
 	o.Probe = func(ctx context.Context) (string, error) {
 		engine, e := dockerengine.OpenReadOnly(endpoint, "onboarding-observation", func() {})
@@ -156,7 +150,7 @@ func prompt(label, fallback string) (string, error) {
 	if fallback != "" {
 		fmt.Printf("[%s] ", fallback)
 	}
-	// Read one byte at a time: buffering must not consume the hidden-token prompt.
+	// Read one byte at a time: buffering must not consume the masked-token prompt.
 	var data []byte
 	var b [1]byte
 	for len(data) < 2048 {
