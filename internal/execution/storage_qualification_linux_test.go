@@ -44,17 +44,28 @@ func (r *physicalRemote) Recovery(context.Context, []agent.ExecutionCursor) (pro
 
 type physicalRuntime struct {
 	*dockerengine.Engine
-	loseRemove      bool
-	ensures, starts int
+	loseCreate, loseStart bool
+	loseRemove            bool
+	ensures, starts       int
 }
 
 func (r *physicalRuntime) Ensure(ctx context.Context, p dockerengine.Plan, claim func() error) (dockerengine.Object, error) {
 	r.ensures++
-	return r.Engine.Ensure(ctx, p, claim)
+	o, err := r.Engine.Ensure(ctx, p, claim)
+	if err == nil && r.loseCreate {
+		r.loseCreate = false
+		return dockerengine.Object{}, dockerengine.ErrUnavailable
+	}
+	return o, err
 }
 func (r *physicalRuntime) Start(ctx context.Context, id string, p dockerengine.Plan, auth func() error) (dockerengine.Object, error) {
 	r.starts++
-	return r.Engine.Start(ctx, id, p, auth)
+	o, err := r.Engine.Start(ctx, id, p, auth)
+	if err == nil && r.loseStart {
+		r.loseStart = false
+		return dockerengine.Object{}, dockerengine.ErrUnavailable
+	}
+	return o, err
 }
 func (r *physicalRuntime) Remove(ctx context.Context, id string, p dockerengine.Plan) error {
 	if err := r.Engine.Remove(ctx, id, p); err != nil {
@@ -550,8 +561,25 @@ func TestRunnerd08StorageProcessChild(t *testing.T) {
 	if os.Getenv("RUNNERD08_STORAGE_CHILD") != "1" {
 		t.Skip("child only")
 	}
-	f := newPhysical(t, "process-restart-hold", false)
-	e := f.launch(t, f.accept(t, "process-restart"))
+	name := "process-restart-hold"
+	if os.Getenv("RUNNERD08_STORAGE_RETIRE") == "1" {
+		name = "retirement-restart"
+	}
+	f := newPhysical(t, name, false)
+	e := f.launch(t, f.accept(t, name))
+	if os.Getenv("RUNNERD08_STORAGE_RETIRE") == "1" {
+		os.WriteFile(filepath.Join(f.path(t, e), "workspace", "finish"), []byte("done"), 0600)
+		e = f.exited(t, e, 0)
+		restricted := filepath.Join(f.path(t, e), "workspace", "restricted")
+		os.Mkdir(restricted, 0700)
+		os.WriteFile(filepath.Join(restricted, "retained"), []byte("owner repair required"), 0600)
+		os.Chmod(restricted, 0000)
+		f.control(t, e, "cleanup")
+		if err := f.c.execution(context.Background(), e); !errors.Is(err, executionstorage.ErrQuarantined) {
+			t.Fatal("retirement did not stop", err)
+		}
+		e = f.row(t, e.Identity.ExecutionID)
+	}
 	storage, err := f.c.storage().Record(context.Background(), e.Identity)
 	if err != nil {
 		t.Fatal(err)
@@ -563,4 +591,181 @@ func TestRunnerd08StorageProcessChild(t *testing.T) {
 	for {
 		time.Sleep(time.Second)
 	}
+}
+
+func TestRunnerd08StorageAdditional(t *testing.T) {
+	t.Run("lost-create-response", func(t *testing.T) {
+		f := newPhysical(t, "lost-create", false)
+		e := f.accept(t, "lost-create")
+		f.runtime.loseCreate = true
+		if err := f.c.execution(context.Background(), e); !errors.Is(err, dockerengine.ErrUnavailable) {
+			t.Fatal(err)
+		}
+		p, _ := f.c.plan(e)
+		original, err := f.runtime.Inspect(context.Background(), p.Name, p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		before, _ := f.c.storage().Record(context.Background(), e.Identity)
+		for i := 0; i < 2; i++ {
+			if err = f.c.execution(context.Background(), f.row(t, e.Identity.ExecutionID)); err != nil {
+				t.Fatal("original create recovery", err)
+			}
+		}
+		after, _ := f.c.storage().Record(context.Background(), e.Identity)
+		observed, err := f.runtime.Inspect(context.Background(), p.Name, p)
+		if err != nil || observed.ID != original.ID || before != after || f.runtime.starts != 1 {
+			t.Fatal("create response loss replaced ownership", err)
+		}
+		e = f.exited(t, f.row(t, e.Identity.ExecutionID), 0)
+		f.clean(t, e)
+	})
+	t.Run("lost-start-response", func(t *testing.T) {
+		f := newPhysical(t, "lost-start-hold", false)
+		e := f.accept(t, "lost-start")
+		f.runtime.loseStart = true
+		if err := f.c.execution(context.Background(), e); !errors.Is(err, dockerengine.ErrUnavailable) {
+			t.Fatal(err)
+		}
+		e = f.row(t, e.Identity.ExecutionID)
+		ref := string(e.RuntimeRef)
+		if err := f.c.execution(context.Background(), e); err != nil {
+			t.Fatal(err)
+		}
+		e = f.row(t, e.Identity.ExecutionID)
+		if string(e.RuntimeRef) != ref || f.runtime.starts != 1 || f.runtime.ensures != 1 {
+			t.Fatal("start replay replaced original")
+		}
+		os.WriteFile(filepath.Join(f.path(t, e), "workspace", "finish"), []byte("done"), 0600)
+		e = f.exited(t, e, 0)
+		f.clean(t, e)
+	})
+	t.Run("symlink", func(t *testing.T) {
+		f := newPhysical(t, "symlink", false)
+		e := f.launch(t, f.accept(t, "symlink"))
+		e = f.exited(t, e, 0)
+		canary := filepath.Join(f.base, "outside-canary")
+		os.WriteFile(canary, []byte("retain outside execution"), 0600)
+		if err := os.Symlink(canary, filepath.Join(f.path(t, e), "workspace", "escape")); err != nil {
+			t.Fatal(err)
+		}
+		f.clean(t, e)
+		if b, err := os.ReadFile(canary); err != nil || string(b) != "retain outside execution" {
+			t.Fatal("symlink escaped root", err)
+		}
+	})
+	t.Run("unknown-container", func(t *testing.T) {
+		f := newPhysical(t, "unknown-container", false)
+		e := f.accept(t, "unknown-container")
+		physicalAction(t, "unknown-container", f.c.Scope.InstallationID)
+		if _, err := f.c.refresh(context.Background()); err == nil {
+			t.Fatal("unknown container accepted")
+		}
+		f.reserved(t, e, true)
+		physicalAction(t, "record", f.base)
+	})
+	t.Run("restricted-permissions", func(t *testing.T) {
+		f := newPhysical(t, "restricted-permissions", false)
+		e := f.launch(t, f.accept(t, "restricted-permissions"))
+		e = f.exited(t, e, 0)
+		path := filepath.Join(f.path(t, e), "workspace", "restricted")
+		os.Mkdir(path, 0700)
+		os.WriteFile(filepath.Join(path, "keep"), []byte("retain"), 0600)
+		os.Chmod(path, 0000)
+		f.control(t, e, "cleanup")
+		if err := f.c.execution(context.Background(), e); !errors.Is(err, executionstorage.ErrQuarantined) {
+			t.Fatal("permissions bypassed", err)
+		}
+		f.reserved(t, e, true)
+		physicalAction(t, "record", f.base)
+	})
+	t.Run("interrupted-retirement", func(t *testing.T) {
+		executable, err := os.Executable()
+		if err != nil {
+			t.Fatal(err)
+		}
+		child := exec.Command(executable, "-test.run=^TestRunnerd08StorageProcessChild$", "-test.v")
+		child.Env = append(os.Environ(), "RUNNERD08_STORAGE_CHILD=1", "RUNNERD08_STORAGE_RETIRE=1")
+		log, _ := os.Create(filepath.Join(storageLab, os.Getenv("RUNNERD08_STORAGE_RUN"), "retirement-child.log"))
+		defer log.Close()
+		child.Stdout = log
+		child.Stderr = log
+		if err = child.Start(); err != nil {
+			t.Fatal(err)
+		}
+		defer child.Process.Kill()
+		marker := filepath.Join(storageLab, os.Getenv("RUNNERD08_STORAGE_RUN"), "retirement-restart", "ready.json")
+		deadline := time.Now().Add(30 * time.Second)
+		for {
+			if _, err = os.Stat(marker); err == nil {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("retirement child not ready")
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		var before struct {
+			Execution agent.Execution
+			Storage   journal.ExecutionStorage
+		}
+		raw, _ := os.ReadFile(marker)
+		json.Unmarshal(raw, &before)
+		if before.Storage.State != "retiring" {
+			t.Fatal("not partial retirement")
+		}
+		child.Process.Kill()
+		child.Wait()
+		f := openPhysical(t, "retirement-restart", false, true)
+		e := f.row(t, before.Execution.Identity.ExecutionID)
+		after, err := f.c.storage().Record(context.Background(), e.Identity)
+		if err != nil || after != before.Storage || string(e.RuntimeRef) != string(before.Execution.RuntimeRef) {
+			t.Fatal("retirement lost original", err)
+		}
+		f.reserved(t, e, true)
+		if err = os.Chmod(filepath.Join(f.path(t, e), "workspace", "restricted"), 0700); err != nil {
+			t.Fatal(err)
+		}
+		f.clean(t, e)
+		if f.runtime.ensures != 0 || f.runtime.starts != 0 {
+			t.Fatal("retirement allocated replacement")
+		}
+	})
+	t.Run("inode-exhaustion", func(t *testing.T) {
+		// Reuse only the explicitly owned zero-filled probe file, not a job directory
+		// or quarantined resource. Its prior ENOSPC witness remains in run-002.
+		filler, err := os.OpenFile("/mnt/cleanup-enospc-20261115/owned-filler", os.O_RDWR, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = filler.Truncate(0); err != nil {
+			t.Fatal(err)
+		}
+		filler.Sync()
+		filler.Close()
+		f := newPhysical(t, "inodes", true)
+		directory := "/mnt/cleanup-enospc-20261115/inode-probe"
+		if err = os.Mkdir(directory, 0700); err != nil {
+			t.Fatal(err)
+		}
+		count := 0
+		for ; count < 8192; count++ {
+			file, e := os.OpenFile(filepath.Join(directory, fmt.Sprint(count)), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+			if e != nil {
+				if !strings.Contains(e.Error(), "no space left") {
+					t.Fatal(e)
+				}
+				break
+			}
+			file.Close()
+		}
+		if count == 8192 {
+			t.Fatal("inode limit not reached")
+		}
+		if err = f.c.runtimeHeadroom(context.Background()); err == nil {
+			t.Fatal("inode exhaustion admitted new work")
+		}
+		physicalAction(t, "record", f.base)
+		t.Log("physical inode exhaustion files", count)
+	})
 }
