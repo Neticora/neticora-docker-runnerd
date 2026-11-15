@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -154,6 +155,16 @@ func physicalAction(t *testing.T, action, path string) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	t.Fatal("lab action timed out", action)
+}
+func guardPhysical(t *testing.T) {
+	t.Helper()
+	if os.Getenv("RUNNERD08_STORAGE_RUN") == "" {
+		t.Skip("explicit disposable cleanup campaign only")
+	}
+	host, _ := os.Hostname()
+	if host != "runnerd08-storage-s0" || os.Geteuid() != 10001 {
+		t.Fatal("authorized disposable VM and test UID required")
+	}
 }
 func newPhysical(t *testing.T, name string, small bool) *physicalFixture {
 	return openPhysical(t, name, small, false)
@@ -395,6 +406,7 @@ func (f *physicalFixture) clean(t *testing.T, e agent.Execution) {
 	physicalAction(t, "record", f.base)
 }
 func TestRunnerd08StoragePhysical(t *testing.T) {
+	guardPhysical(t)
 	for _, name := range []string{"success", "failure", "timeout"} {
 		t.Run(name, func(t *testing.T) {
 			f := newPhysical(t, name, false)
@@ -645,6 +657,7 @@ func TestRunnerd08StorageProcessChild(t *testing.T) {
 }
 
 func TestRunnerd08StorageAdditional(t *testing.T) {
+	guardPhysical(t)
 	t.Run("lost-create-response", func(t *testing.T) {
 		f := newPhysical(t, "lost-create", false)
 		e := f.accept(t, "lost-create")
@@ -785,9 +798,18 @@ func TestRunnerd08StorageAdditional(t *testing.T) {
 	t.Run("inode-exhaustion", func(t *testing.T) {
 		// Reuse only the explicitly owned zero-filled probe file, not a job directory
 		// or quarantined resource. Its prior ENOSPC witness remains in run-002.
-		filler, err := os.OpenFile("/mnt/cleanup-enospc-20261115/owned-filler", os.O_RDWR, 0)
+		filler, err := os.OpenFile("/mnt/cleanup-enospc-20261115/owned-filler", os.O_RDWR|syscall.O_NOFOLLOW, 0)
 		if err != nil {
 			t.Fatal(err)
+		}
+		info, err := filler.Stat()
+		if err != nil {
+			t.Fatal(err)
+		}
+		st, ok := info.Sys().(*syscall.Stat_t)
+		var fs syscall.Statfs_t
+		if !ok || st.Uid != 10001 || st.Nlink != 1 || !info.Mode().IsRegular() || syscall.Fstatfs(int(filler.Fd()), &fs) != nil || fs.Type != 0xef53 || uint64(fs.Blocks)*uint64(fs.Bsize) > 128<<20 {
+			t.Fatal("refuse unowned or unbounded probe file")
 		}
 		if err = filler.Truncate(0); err != nil {
 			t.Fatal(err)
