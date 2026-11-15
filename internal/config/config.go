@@ -54,7 +54,13 @@ type Execution struct {
 	MinRuntimeFreeBytes uint64 `json:"minRuntimeFreeBytes,omitempty"`
 }
 
-func Parse(data []byte) (Config, error) {
+func Parse(data []byte) (Config, error) { return parse(data, false) }
+
+// ParsePreparation validates a complete inactive execution configuration without
+// changing the live opt-in or the legacy disabled foundation configuration.
+func ParsePreparation(data []byte) (Config, error) { return parse(data, true) }
+
+func parse(data []byte, preparation bool) (Config, error) {
 	var c Config
 	if len(data) > MaxConfigBytes {
 		return c, errors.New("configuration exceeds size limit")
@@ -91,7 +97,10 @@ func Parse(data []byte) (Config, error) {
 	if b := c.Connection; b != nil && (b.TenantID == "" || b.RunnerDeploymentID == "" || b.EnrollmentRequestID == "" || len(b.PublicKeyFingerprint) != 64) {
 		return Config{}, errors.New("incomplete onboarding binding")
 	}
-	if x := c.Execution; x != nil && x.Enabled {
+	if preparation && (c.Execution == nil || c.Execution.Enabled) {
+		return Config{}, errors.New("preparation requires a complete execution configuration with enabled=false")
+	}
+	if x := c.Execution; x != nil && (x.Enabled || preparation) {
 		if x.MinRuntimeFreeBytes != 0 && x.MinRuntimeFreeBytes < 64<<20 {
 			return Config{}, errors.New("runtime storage headroom must be at least 64 MiB")
 		}
@@ -120,7 +129,7 @@ func Parse(data []byte) (Config, error) {
 				return Config{}, errors.New("execution trust and secrets must remain outside journal")
 			}
 		}
-		if x.Organization == "" || x.Pool == "" || x.ImageRepository == "" || x.NetworkID == "" || x.PidsLimit < 16 || x.PidsLimit > 4096 {
+		if x.Organization == "" || x.Pool == "" || x.ImageRepository == "" || strings.ContainsAny(x.ImageRepository, "@ \t\r\n") || x.NetworkID == "" || x.NetworkID == "host" || x.NetworkID == "none" || strings.HasPrefix(x.NetworkID, "container:") || x.PidsLimit < 16 || x.PidsLimit > 4096 {
 			return Config{}, errors.New("incomplete execution configuration")
 		}
 		if _, e := time.Parse(time.RFC3339Nano, x.TrustProvisionedAt); e != nil {

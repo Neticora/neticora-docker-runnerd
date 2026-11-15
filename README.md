@@ -22,6 +22,8 @@ Runnerd07 separates Docker mechanics, a trusted process-only profile, and durabl
 reconciliation. See Alpha's `docs/runnerd/RUNNERD07-LINUX-GITHUB.md` for the exact
 configuration, protected JIT handoff, cleanup contract and remaining live gates.
 No production tuple or Docker live-restore guarantee is implied.
+For inactive configuration validation, see
+[read-only execution preparation](docs/EXECUTION-PREPARATION.md).
 
 Runnerd08 keeps each Docker adapter bound to its first verified endpoint and
 checks continuity again after inspections and before mutation. A replacement

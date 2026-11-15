@@ -29,12 +29,13 @@ const configPath = "/etc/neticora-runnerd/config.json"
 // or environment variables are accepted. Root initializes the service account's
 // configured groups instead of inheriting any groups from the invoking caller.
 func Command(args []string) (bool, error) {
-	if len(args) == 0 || (args[0] != "setup" && args[0] != "status" && args[0] != "doctor") {
+	if len(args) == 0 || (args[0] != "setup" && args[0] != "status" && args[0] != "doctor" && args[0] != "prepare-execution") {
 		return false, nil
 	}
 	replaceToken := len(args) == 2 && args[0] == "setup" && args[1] == "--replace-token"
-	if len(args) != 1 && !replaceToken {
-		return true, errors.New("usage: neticora-runnerd setup [--replace-token]|status|doctor")
+	prepare := len(args) == 2 && args[0] == "prepare-execution"
+	if len(args) != 1 && !replaceToken && !prepare {
+		return true, errors.New("usage: neticora-runnerd setup [--replace-token]|status|doctor|prepare-execution FILE")
 	}
 	identity, e := resolveServiceIdentity()
 	if e != nil {
@@ -45,6 +46,26 @@ func Command(args []string) (bool, error) {
 	}
 	if e = identity.verifyCurrent(); e != nil {
 		return true, e
+	}
+	if args[0] == "prepare-execution" {
+		if !prepare {
+			return true, errors.New("usage: neticora-runnerd prepare-execution ABSOLUTE_CONFIG_FILE")
+		}
+		raw, err := hostfs.ReadPrivate(args[1], config.MaxConfigBytes)
+		if err != nil {
+			return true, errors.New("protected preparation configuration unavailable; installation unchanged")
+		}
+		defer clear(raw)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		report := execution.PrepareExecution(ctx, raw, time.Now())
+		if err := json.NewEncoder(os.Stdout).Encode(report); err != nil {
+			return true, err
+		}
+		if !report.ConfigurationValid {
+			return true, errors.New("execution preparation blocked; no configuration, authority or recovery state changed")
+		}
+		return true, nil
 	}
 	if args[0] != "setup" {
 		return true, diagnose(args[0])
