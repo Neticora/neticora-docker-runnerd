@@ -222,7 +222,7 @@ func Setup(ctx context.Context, p Platform, o Options) (transport.InstallationBi
 		}
 	}
 	// The installed CLI runs this observation with the exact service UID/GID and
-	// no supplementary groups. Fail before key creation, token prompting/history
+	// configured supplementary groups. Fail before key creation, token prompting/history
 	// changes or any platform call. Never grant socket permissions implicitly.
 	preflightEndpoint, e := observeSetupDocker(ctx, o, "")
 	if e != nil {

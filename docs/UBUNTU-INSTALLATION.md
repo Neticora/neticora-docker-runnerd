@@ -39,28 +39,48 @@ public download or APT repository implied by this local build.
 Provision Docker independently, using a local root-owned Linux Docker Engine Unix
 socket. Both a directly bound socket and Ubuntu's standard `docker.socket` with
 `dockerd -H fd://` are supported; keep the vendor Docker units and flags. The installer never installs,
-reconfigures or restarts Docker, or changes networking. An administrator must
-provide the service account its narrowly selected endpoint access under the
-accepted Standard deployment model (for example a dedicated endpoint socket ACL).
+reconfigures or restarts Docker, or changes networking. Setup can authorize the
+dedicated service account through the host's standard Docker group, only after
+explicit administrator approval.
 The package does not add the account to `docker`, grant capabilities/sudo, change
 socket permissions, or silently authorize arbitrary Docker endpoints. Standard's
 accepted Docker access remains privileged runtime authority; this is not the
 unfinished Runnerd09 controller/broker containment model.
 
-Setup performs read-only Docker checks as the effective service account before
-requesting a token or sending enrollment. If access is denied, an administrator
-must explicitly approve and grant access to the selected socket, for example:
+The normal Ubuntu onboarding flow is:
 
 ```sh
-sudo setfacl -m u:neticora-runnerd:rw /run/docker.sock
-sudo setpriv --reuid=neticora-runnerd --regid=neticora-runnerd --clear-groups \
-  docker --host unix:///run/docker.sock version
+sudo apt install ./neticora-runnerd_*_amd64.deb
+sudo neticora-runnerd setup
 ```
 
-Install the distribution's `acl` package if `setfacl` is unavailable. This is a
-privileged administrator action, not an automatic installer/setup operation.
-Socket recreation may remove its ACL; access must then be explicitly restored.
-Restoring permissions does not approve a new daemon or discard its old binding.
+Setup resolves the dedicated account's primary and supplementary groups from
+the operating system identity database, initializes exactly those groups before
+dropping privileges, and verifies the resulting identity. It never inherits root's
+groups or performs enrollment/Docker probes as root. Existing authorized Docker
+group membership works immediately; no new login or socket ACL is needed.
+
+If the service account cannot access a standard root:docker socket with mode
+0660, setup explains Docker's root-equivalent access and offers:
+
+```text
+[1] Authorize and continue
+[2] Cancel
+Selection [2]:
+```
+
+Only selection `1` authorizes adding `neticora-runnerd` to the Docker group. The
+root parent uses fixed argument-based account management, reinitializes the
+service identity in a fresh nonroot child, and continues with the same public
+setup answers and original enrollment state. The invoking human is not added.
+Declining, invalid input or authorization failure leaves enrollment intact and
+does not prompt for or consume a token. No manual permission commands are needed.
+
+The package installer does not grant Docker access. Setup never changes socket
+ownership, mode or ACLs, Docker units/flags/configuration, or restarts Docker.
+Nonstandard sockets require administrator review rather than automatic rewriting.
+Group membership persists when Docker recreates its standard socket; this does
+not approve a new daemon identity or discard the existing continuity binding.
 Rootless/remote engines and arbitrary socket proxies remain unsupported.
 
 The connection authenticates the actual root `dockerd` process, not PID 1. For
@@ -107,6 +127,17 @@ key/attempt, or change an existing one. Docker is checked again immediately
 before enrollment submission and before credential/configuration commit. If
 Docker changes after the platform commits, the original saved response is
 retained for recovery; a retry must not create a replacement identity.
+
+Diagnostics use `DOCKER_ACCESS_NOT_AUTHORIZED`,
+`DOCKER_GROUP_MEMBERSHIP_INACTIVE`, `DOCKER_AUTHORIZATION_FAILED`,
+`DOCKER_SOCKET_UNAVAILABLE`, `DOCKER_DAEMON_UNAVAILABLE`,
+`DOCKER_ENDPOINT_UNSUPPORTED` and `DOCKER_CONTINUITY_CHANGED` to distinguish
+operator actions. Group mismatch fails closed; rerunning setup with sudo creates
+a fresh service-identity process. Systemd's `User=neticora-runnerd` and
+`Group=neticora-runnerd` initialize the same configured supplementary groups when
+starting the installed service. Setup does not restart a running Runnerd daemon;
+an active installation retains its lock and original recovery obligations. Any
+required Runnerd restart must follow the existing safe lifecycle procedure.
 
 Keep failed setup state. Never delete it to retry with another token or create a
 replacement host. If the original token expired or is unavailable before enrollment

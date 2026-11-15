@@ -12,10 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"os/user"
-	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/Neticora/neticora-docker-runnerd/internal/config"
@@ -29,7 +26,8 @@ import (
 const configPath = "/etc/neticora-runnerd/config.json"
 
 // Command handles only explicit installed-product commands. No token arguments
-// or environment variables are accepted; root drops every supplementary group.
+// or environment variables are accepted. Root initializes the service account's
+// configured groups instead of inheriting any groups from the invoking caller.
 func Command(args []string) (bool, error) {
 	if len(args) == 0 || (args[0] != "setup" && args[0] != "status" && args[0] != "doctor") {
 		return false, nil
@@ -38,56 +36,28 @@ func Command(args []string) (bool, error) {
 	if len(args) != 1 && !replaceToken {
 		return true, errors.New("usage: neticora-runnerd setup [--replace-token]|status|doctor")
 	}
-	account, e := user.Lookup("neticora-runnerd")
-	if e != nil {
-		return true, errors.New("install the Debian package before using this command")
-	}
-	uid, e := strconv.Atoi(account.Uid)
-	if e != nil {
-		return true, e
-	}
-	gid, e := strconv.Atoi(account.Gid)
+	identity, e := resolveServiceIdentity()
 	if e != nil {
 		return true, e
 	}
 	if os.Geteuid() == 0 {
-		binary, e := os.Executable()
-		if e != nil {
-			return true, e
-		}
-		command := exec.Command(binary, args...)
-		command.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid), Groups: []uint32{}}}
-		command.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C.UTF-8"}
-		command.Stdin = os.Stdin
-		command.Stdout = os.Stdout
-		command.Stderr = os.Stderr
-		if e = command.Run(); e != nil {
-			return true, errors.New("command failed; original installation state retained")
-		}
-		if args[0] == "setup" {
-			answer, e := prompt("Start Runnerd now? [y/N]: ", "")
-			if e != nil {
-				return true, e
-			}
-			if strings.EqualFold(answer, "y") || strings.EqualFold(answer, "yes") {
-				start := exec.Command("/usr/bin/systemctl", "start", "neticora-runnerd.service")
-				start.Stdout = os.Stdout
-				start.Stderr = os.Stderr
-				if start.Run() != nil {
-					return true, errors.New("service did not start; use doctor and journalctl")
-				}
-			}
-		}
-		return true, nil
+		return true, commandAsService(args, identity)
 	}
-	if os.Geteuid() != uid || os.Getegid() != gid {
-		return true, errors.New("run this command with sudo")
+	if e = identity.verifyCurrent(); e != nil {
+		return true, e
 	}
 	if args[0] != "setup" {
 		return true, diagnose(args[0])
 	}
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
 		return true, errors.New("setup requires a protected interactive terminal")
+	}
+	channel, start, e := setupChildChannel()
+	if e != nil {
+		return true, e
+	}
+	if channel != nil {
+		defer channel.Close()
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
@@ -96,23 +66,28 @@ func Command(args []string) (bool, error) {
 	var previous attempt
 	_ = readJSON("/etc/neticora-runnerd/setup/attempt.json", &previous)
 	fmt.Println("Neticora Runnerd setup (Linux Standard; execution remains disabled)")
-	platform, e := prompt("Platform host API HTTPS URL: ", previous.PlatformURL)
-	if e != nil {
-		return true, e
+	var inputs setupInputs
+	if start.Inputs != nil {
+		inputs = *start.Inputs
+	} else {
+		inputs.Platform, e = prompt("Platform host API HTTPS URL: ", previous.PlatformURL)
+		if e != nil {
+			return true, e
+		}
+		inputs.Tenant, e = prompt("Canonical tenant ID: ", previous.TenantID)
+		if e != nil {
+			return true, e
+		}
+		inputs.Pool, e = prompt("Customer-host pool ID: ", previous.PoolID)
+		if e != nil {
+			return true, e
+		}
+		inputs.Endpoint, e = prompt("Customer-provisioned Docker endpoint: ", defaultValue(previous.RuntimeEndpoint, "unix:///run/docker.sock"))
+		if e != nil {
+			return true, e
+		}
 	}
-	tenant, e := prompt("Canonical tenant ID: ", previous.TenantID)
-	if e != nil {
-		return true, e
-	}
-	pool, e := prompt("Customer-host pool ID: ", previous.PoolID)
-	if e != nil {
-		return true, e
-	}
-	endpoint, e := prompt("Customer-provisioned Docker endpoint: ", defaultValue(previous.RuntimeEndpoint, "unix:///run/docker.sock"))
-	if e != nil {
-		return true, e
-	}
-	client, e := transport.New(platform, 15*time.Second)
+	client, e := transport.New(inputs.Platform, 15*time.Second)
 	if e != nil {
 		return true, e
 	}
@@ -121,20 +96,32 @@ func Command(args []string) (bool, error) {
 	if e != nil {
 		return true, errors.New("cannot observe host boot identity")
 	}
-	o := Options{ConfigPath: configPath, SetupDir: "/etc/neticora-runnerd/setup", StateDir: "/var/lib/neticora-runnerd", CredentialPath: "/etc/neticora-runnerd/identity.json", PlatformURL: platform, TenantID: tenant, PoolID: pool, RuntimeEndpoint: endpoint, BootID: strings.TrimSpace(string(boot))}
+	o := Options{ConfigPath: configPath, SetupDir: "/etc/neticora-runnerd/setup", StateDir: "/var/lib/neticora-runnerd", CredentialPath: "/etc/neticora-runnerd/identity.json", PlatformURL: inputs.Platform, TenantID: inputs.Tenant, PoolID: inputs.Pool, RuntimeEndpoint: inputs.Endpoint, BootID: strings.TrimSpace(string(boot))}
 	o.ReplaceToken = replaceToken
 	o.Token = func() ([]byte, error) {
 		return promptToken(os.Stdin, os.Stdout)
 	}
+	firstProbe := true
 	o.Probe = func(ctx context.Context) (string, error) {
-		engine, e := dockerengine.OpenReadOnly(endpoint, "onboarding-observation", func() {})
+		mayAuthorize := firstProbe && start.MayAuthorize && channel != nil
+		firstProbe = false
+		engine, e := dockerengine.OpenReadOnly(inputs.Endpoint, "onboarding-observation", func() {})
 		if e != nil {
 			return "", e
 		}
 		defer engine.Close()
-		return engine.Probe(ctx)
+		endpoint, err := engine.Probe(ctx)
+		if mayAuthorize && errors.Is(err, dockerengine.ErrPermission) {
+			return "", errAuthorizeDocker
+		}
+		return endpoint, err
 	}
 	b, e := Setup(ctx, client, o)
+	if errors.Is(e, errAuthorizeDocker) {
+		// Exit before any enrollment effects. The root parent can authorize only
+		// the fixed Docker group, then re-exec with freshly resolved account groups.
+		return true, json.NewEncoder(channel).Encode(inputs)
+	}
 	if e != nil {
 		return true, e
 	}
@@ -220,15 +207,14 @@ func diagnose(command string) error {
 		return errors.New("installed package integrity check failed")
 	}
 	report["packageIntegrity"] = "verified-against-installed-metadata"
-	groups, err := os.Getgroups()
+	identity, err := resolveServiceIdentity()
 	if err != nil {
-		return errors.New("cannot verify service groups")
+		return err
 	}
-	for _, group := range groups {
-		if group != os.Getegid() {
-			return errors.New("unexpected service supplementary group")
-		}
+	if err = identity.verifyCurrent(); err != nil {
+		return err
 	}
+	report["serviceIdentity"] = "configured-uid-gid-groups-verified"
 	state, err := hostfs.OpenState(c.StateDir)
 	if err != nil {
 		return err

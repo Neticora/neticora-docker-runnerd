@@ -10,11 +10,11 @@ import (
 // These fixed, credential-free diagnostics also match ErrUnavailable. Callers
 // must retain the installation and reconcile after any failed observation.
 var (
-	ErrSocketInaccessible = errors.New("Docker socket is inaccessible or missing; check the selected Unix endpoint and install/start Docker")
-	ErrPermission         = errors.New("Docker socket permission denied for the effective Runnerd account; an administrator must explicitly authorize its access before retrying setup")
-	ErrDaemonUnavailable  = errors.New("Docker daemon is unavailable or did not answer; inspect Docker service health")
-	ErrUnsupported        = errors.New("unsupported Docker configuration; use a local root-owned Linux Docker Engine Unix socket, directly bound or systemd-activated")
-	ErrContinuity         = errors.New("Docker daemon or socket continuity changed; preserve original state and use authorized reconciliation/recovery")
+	ErrSocketInaccessible = errors.New("DOCKER_SOCKET_UNAVAILABLE: Docker socket is inaccessible or missing; check the selected Unix endpoint and install/start Docker")
+	ErrPermission         = errors.New("DOCKER_ACCESS_NOT_AUTHORIZED: Docker socket permission denied for the effective Runnerd account; run sudo neticora-runnerd setup and explicitly authorize Docker access")
+	ErrDaemonUnavailable  = errors.New("DOCKER_DAEMON_UNAVAILABLE: Docker daemon is unavailable or did not answer; inspect Docker service health")
+	ErrUnsupported        = errors.New("DOCKER_ENDPOINT_UNSUPPORTED: unsupported Docker configuration; use a local root-owned Linux Docker Engine Unix socket, directly bound or systemd-activated")
+	ErrContinuity         = errors.New("DOCKER_CONTINUITY_CHANGED: Docker daemon or socket continuity changed; preserve original state and use authorized reconciliation/recovery")
 )
 
 func diagnostic(err error) error {
