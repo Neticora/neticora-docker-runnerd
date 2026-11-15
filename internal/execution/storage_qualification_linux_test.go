@@ -842,3 +842,29 @@ func TestRunnerd08StorageAdditional(t *testing.T) {
 		t.Log("physical inode exhaustion files", count)
 	})
 }
+
+// The controller also rejects visible mounts. Exercise the filesystem boundary
+// directly to prove that even a same-filesystem bind fails before traversal.
+func TestRunnerd08StorageSameFilesystemMount(t *testing.T) {
+	guardPhysical(t)
+	f := newPhysical(t, "same-fs-mount", false)
+	e := f.accept(t, "same-fs-mount")
+	if _, err := f.c.storage().Prepare(context.Background(), e.Identity); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(f.path(t, e), "workspace", "mount-crossing")
+	if err := os.Mkdir(target, 0700); err != nil {
+		t.Fatal(err)
+	}
+	physicalAction(t, "bind-samefs", target)
+	err := f.c.storage().Dispose(context.Background(), e.Identity)
+	if !errors.Is(err, executionstorage.ErrQuarantined) || !strings.Contains(err.Error(), "invalid cross-device link") {
+		t.Fatal("kernel same-filesystem mount boundary not enforced", err)
+	}
+	f.reserved(t, e, true)
+	b, err := os.ReadFile("/mnt/s0-jobdata/cleanup-samefs-canary-20261115/keep")
+	if err != nil || string(b) != "outside execution ownership; retain" {
+		t.Fatal("crossed same-filesystem bind", err)
+	}
+	physicalAction(t, "record", f.base)
+}
