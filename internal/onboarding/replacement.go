@@ -22,8 +22,9 @@ type tokenReplacement struct {
 }
 
 // Append-only replacement records are synced before network effects. The
-// original attempt/key remain immutable. All previous hashes travel in the
-// signed request, so an unknown earlier outcome cannot authorize another host.
+// original attempt/key remain immutable. Each candidate uses the original token
+// as its retirement anchor and the same request ID as its replay fence. A typo
+// in a candidate must not make the next valid token impossible to register.
 func enrollmentMessage(o Options, key ed25519.PrivateKey, a attempt, token []byte) (protocol.Outbound, error) {
 	var zero protocol.Outbound
 	hashes := []string{a.TokenHash}
@@ -76,7 +77,7 @@ func enrollmentMessage(o Options, key ed25519.PrivateKey, a attempt, token []byt
 		if err := unfinishedReplacement(o); err != nil {
 			return zero, err
 		}
-		replacement = &protocol.EnrollmentTokenReplacement{TenantId: a.TenantID, RunnerDeploymentId: a.PoolID, PriorTokenHashes: hashes[:selected]}
+		replacement = &protocol.EnrollmentTokenReplacement{TenantId: a.TenantID, RunnerDeploymentId: a.PoolID, PriorTokenHashes: []string{a.TokenHash}}
 	}
 	message, err := identity.EnrollmentReplacing(key, a.RequestID, string(token), replacement)
 	if err != nil {

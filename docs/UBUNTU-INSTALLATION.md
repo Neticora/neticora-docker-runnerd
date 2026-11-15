@@ -85,11 +85,15 @@ sudo neticora-runnerd setup --replace-token
 ```
 
 Accept the saved bindings and paste the fresh token. Replacement requires an
-upgraded platform. The platform locks all prior tokens and the fresh token, checks
-that no prior token registered a host, and atomically revokes unused prior tokens
+upgraded platform. The platform locks the original token and the fresh token,
+checks that the original never registered a host and the original request was
+never consumed by any replacement, and atomically revokes the unused original
 while registering the fresh token. The original key, request and attempt remain
 unchanged; append-only local records retain token hashes, never token values.
 An interrupted replacement resumes with ordinary `setup` and the same fresh token.
+If a candidate was mistyped or expired without registration, explicit replacement
+can accept another fresh token. Earlier candidates remain in local history; a
+successful earlier registration always blocks a second host for the same request.
 At most 16 replacements are retained; reaching this bound requires operator recovery.
 
 Replacement is rejected if local credentials, an enrollment response or runtime

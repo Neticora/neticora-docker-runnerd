@@ -129,8 +129,13 @@ func TestMultipleUnusedReplacementsRetainAllFences(t *testing.T) {
 	}
 	var request protocol.EnrollmentRequest
 	_ = json.Unmarshal(p.request, &request)
-	if request.Replacement == nil || len(request.Replacement.PriorTokenHashes) != 2 || request.Replacement.PriorTokenHashes[0] != original.TokenHash || request.Replacement.PriorTokenHashes[1] != digest([]byte("second-unused-secret")) {
-		t.Fatal("earlier uncertain attempt was omitted")
+	if request.Replacement == nil || len(request.Replacement.PriorTokenHashes) != 1 || request.Replacement.PriorTokenHashes[0] != original.TokenHash || request.RequestId != original.RequestID {
+		t.Fatal("replacement lost its original token and request fence")
+	}
+	for i := 1; i <= 2; i++ {
+		if yes, err := exists(replacementPath(o, i)); err != nil || !yes {
+			t.Fatal("candidate history was discarded")
+		}
 	}
 }
 
