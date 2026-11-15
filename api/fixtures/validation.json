@@ -2066,5 +2066,278 @@
       }
     },
     "valid": false
+  },
+  {
+    "id": "heartbeat-no-inventory-yet",
+    "schema": "HostHeartbeat",
+    "value": {
+      "identity": {
+        "hostId": "host-a",
+        "keyId": "key-a",
+        "keyVersion": "1",
+        "sessionEpoch": "1"
+      },
+      "agentVersion": "0.1.0",
+      "protocolVersion": "1.0.0",
+      "inventoryGeneration": "0",
+      "effectivePolicyGeneration": "1",
+      "capabilities": {
+        "host": {
+          "os": "linux",
+          "architecture": "amd64",
+          "build": "candidate"
+        },
+        "engine": {
+          "os": "linux",
+          "architecture": "amd64",
+          "build": "candidate"
+        },
+        "endpointIdentity": "engine-a",
+        "runtimeVersion": "candidate",
+        "configurationGeneration": "1",
+        "probeGeneration": "1",
+        "observedAt": "2026-10-25T00:00:00.000Z",
+        "profiles": [
+          "standard-linux-v1"
+        ],
+        "dockerBuild": false,
+        "hardStorageLimit": false,
+        "capacity": {
+          "cpuMillis": "1000",
+          "memoryBytes": "1073741824",
+          "storageBytes": "10737418240",
+          "slots": "1"
+        },
+        "supportedImageFamilies": [
+          "linux"
+        ],
+        "runtimeMechanism": "process"
+      }
+    },
+    "valid": true
+  },
+  {
+    "id": "inventory-hostname-hostname",
+    "schema": "InventorySnapshot",
+    "value": {
+      "inventoryGeneration": "1",
+      "endpointIdentity": "engine-a",
+      "complete": false,
+      "nextCursor": null,
+      "observedAt": "2026-10-25T00:00:00.000Z",
+      "resources": [
+        {
+          "runtimeRef": {
+            "engine": "docker",
+            "scope": "engine-a",
+            "resourceKind": "container",
+            "resourceId": "immutable-a",
+            "executionId": "exec-a",
+            "generation": "1",
+            "specHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "state": "running",
+          "observedAt": "2026-10-25T00:00:00.000Z"
+        }
+      ],
+      "hostname": "runnerd-clean"
+    },
+    "valid": true
+  },
+  {
+    "id": "inventory-hostname-fqdn",
+    "schema": "InventorySnapshot",
+    "value": {
+      "inventoryGeneration": "1",
+      "endpointIdentity": "engine-a",
+      "complete": false,
+      "nextCursor": null,
+      "observedAt": "2026-10-25T00:00:00.000Z",
+      "resources": [
+        {
+          "runtimeRef": {
+            "engine": "docker",
+            "scope": "engine-a",
+            "resourceKind": "container",
+            "resourceId": "immutable-a",
+            "executionId": "exec-a",
+            "generation": "1",
+            "specHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "state": "running",
+          "observedAt": "2026-10-25T00:00:00.000Z"
+        }
+      ],
+      "hostname": "runner.example.test"
+    },
+    "valid": true
+  },
+  {
+    "id": "inventory-hostname-unavailable",
+    "schema": "InventorySnapshot",
+    "value": {
+      "inventoryGeneration": "1",
+      "endpointIdentity": "engine-a",
+      "complete": false,
+      "nextCursor": null,
+      "observedAt": "2026-10-25T00:00:00.000Z",
+      "resources": [
+        {
+          "runtimeRef": {
+            "engine": "docker",
+            "scope": "engine-a",
+            "resourceKind": "container",
+            "resourceId": "immutable-a",
+            "executionId": "exec-a",
+            "generation": "1",
+            "specHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "state": "running",
+          "observedAt": "2026-10-25T00:00:00.000Z"
+        }
+      ],
+      "hostname": null
+    },
+    "valid": true
+  },
+  {
+    "id": "inventory-hostname-empty",
+    "schema": "InventorySnapshot",
+    "value": {
+      "inventoryGeneration": "1",
+      "endpointIdentity": "engine-a",
+      "complete": false,
+      "nextCursor": null,
+      "observedAt": "2026-10-25T00:00:00.000Z",
+      "resources": [
+        {
+          "runtimeRef": {
+            "engine": "docker",
+            "scope": "engine-a",
+            "resourceKind": "container",
+            "resourceId": "immutable-a",
+            "executionId": "exec-a",
+            "generation": "1",
+            "specHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "state": "running",
+          "observedAt": "2026-10-25T00:00:00.000Z"
+        }
+      ],
+      "hostname": ""
+    },
+    "valid": false
+  },
+  {
+    "id": "inventory-hostname-injection",
+    "schema": "InventorySnapshot",
+    "value": {
+      "inventoryGeneration": "1",
+      "endpointIdentity": "engine-a",
+      "complete": false,
+      "nextCursor": null,
+      "observedAt": "2026-10-25T00:00:00.000Z",
+      "resources": [
+        {
+          "runtimeRef": {
+            "engine": "docker",
+            "scope": "engine-a",
+            "resourceKind": "container",
+            "resourceId": "immutable-a",
+            "executionId": "exec-a",
+            "generation": "1",
+            "specHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "state": "running",
+          "observedAt": "2026-10-25T00:00:00.000Z"
+        }
+      ],
+      "hostname": "host\nname"
+    },
+    "valid": false
+  },
+  {
+    "id": "inventory-hostname-invalid-label",
+    "schema": "InventorySnapshot",
+    "value": {
+      "inventoryGeneration": "1",
+      "endpointIdentity": "engine-a",
+      "complete": false,
+      "nextCursor": null,
+      "observedAt": "2026-10-25T00:00:00.000Z",
+      "resources": [
+        {
+          "runtimeRef": {
+            "engine": "docker",
+            "scope": "engine-a",
+            "resourceKind": "container",
+            "resourceId": "immutable-a",
+            "executionId": "exec-a",
+            "generation": "1",
+            "specHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "state": "running",
+          "observedAt": "2026-10-25T00:00:00.000Z"
+        }
+      ],
+      "hostname": "-host"
+    },
+    "valid": false
+  },
+  {
+    "id": "inventory-hostname-long-label",
+    "schema": "InventorySnapshot",
+    "value": {
+      "inventoryGeneration": "1",
+      "endpointIdentity": "engine-a",
+      "complete": false,
+      "nextCursor": null,
+      "observedAt": "2026-10-25T00:00:00.000Z",
+      "resources": [
+        {
+          "runtimeRef": {
+            "engine": "docker",
+            "scope": "engine-a",
+            "resourceKind": "container",
+            "resourceId": "immutable-a",
+            "executionId": "exec-a",
+            "generation": "1",
+            "specHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "state": "running",
+          "observedAt": "2026-10-25T00:00:00.000Z"
+        }
+      ],
+      "hostname": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "valid": false
+  },
+  {
+    "id": "inventory-hostname-too-long",
+    "schema": "InventorySnapshot",
+    "value": {
+      "inventoryGeneration": "1",
+      "endpointIdentity": "engine-a",
+      "complete": false,
+      "nextCursor": null,
+      "observedAt": "2026-10-25T00:00:00.000Z",
+      "resources": [
+        {
+          "runtimeRef": {
+            "engine": "docker",
+            "scope": "engine-a",
+            "resourceKind": "container",
+            "resourceId": "immutable-a",
+            "executionId": "exec-a",
+            "generation": "1",
+            "specHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "state": "running",
+          "observedAt": "2026-10-25T00:00:00.000Z"
+        }
+      ],
+      "hostname": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "valid": false
   }
 ]

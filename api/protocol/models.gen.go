@@ -1018,7 +1018,7 @@ type HostHeartbeat struct {
 	Capabilities              HostCapabilities `json:"capabilities"`
 	EffectivePolicyGeneration Generation       `json:"effectivePolicyGeneration"`
 	Identity                  HostIdentity     `json:"identity"`
-	InventoryGeneration       Generation       `json:"inventoryGeneration"`
+	InventoryGeneration       UInt64String     `json:"inventoryGeneration"`
 	ProtocolVersion           string           `json:"protocolVersion"`
 }
 
@@ -1032,8 +1032,11 @@ type HostIdentity struct {
 
 // InventorySnapshot defines model for InventorySnapshot.
 type InventorySnapshot struct {
-	Complete             bool                      `json:"complete"`
-	EndpointIdentity     string                    `json:"endpointIdentity"`
+	Complete         bool   `json:"complete"`
+	EndpointIdentity string `json:"endpointIdentity"`
+
+	// Hostname Latest OS hostname observation, or null when unavailable. Display metadata only; never an authorization identity. Omission supports older agents.
+	Hostname             nullable.Nullable[string] `json:"hostname,omitempty"`
 	InventoryGeneration  Generation                `json:"inventoryGeneration"`
 	NextCursor           nullable.Nullable[string] `json:"nextCursor,omitempty"`
 	ObservedAt           Timestamp                 `json:"observedAt"`

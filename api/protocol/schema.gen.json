@@ -729,7 +729,7 @@
             "maxLength": 256
           },
           "inventoryGeneration": {
-            "$ref": "#/components/schemas/Generation"
+            "$ref": "#/components/schemas/UInt64String"
           },
           "effectivePolicyGeneration": {
             "$ref": "#/components/schemas/Generation"
@@ -1275,6 +1275,16 @@
               "$ref": "#/components/schemas/ProviderObservation"
             },
             "maxItems": 1000
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 253,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$",
+            "description": "Latest OS hostname observation, or null when unavailable. Display metadata only; never an authorization identity. Omission supports older agents."
           }
         },
         "required": [
