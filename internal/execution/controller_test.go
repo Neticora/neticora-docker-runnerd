@@ -175,6 +175,9 @@ func (f *fakeRemote) Start(_ context.Context, m protocol.Outbound) (protocol.Sta
 }
 
 func setup(t *testing.T) (*Controller, *fakeRuntime, *fakeRemote, agent.Execution) {
+	return setupTemplate(t, standardlinux.TemplateVersion)
+}
+func setupTemplate(t *testing.T, template string) (*Controller, *fakeRuntime, *fakeRemote, agent.Execution) {
 	t.Helper()
 	ctx := context.Background()
 	dir := func() string {
@@ -191,7 +194,7 @@ func setup(t *testing.T) (*Controller, *fakeRuntime, *fakeRemote, agent.Executio
 	t.Cleanup(func() { _ = s.Close() })
 	storetest.Reconcile(t, s, storetest.Scope, "1")
 	command := storetest.Object(t, storetest.Start(t, "a"))
-	command["spec"].(map[string]any)["templateVersion"] = standardlinux.TemplateVersion
+	command["spec"].(map[string]any)["templateVersion"] = template
 	raw := storetest.Encode(t, "HostCommand", command)
 	var start protocol.StartCommand
 	_ = json.Unmarshal(raw, &start)

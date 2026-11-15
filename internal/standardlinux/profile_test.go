@@ -119,3 +119,38 @@ func TestPinnedImageSignatureIdentityDigestAndFreshness(t *testing.T) {
 		t.Fatal("changed root accepted")
 	}
 }
+
+func TestDiskTemplateHasFourPrivateDiskBindsAndPreservesLegacyPlan(t *testing.T) {
+	v := storetest.Object(t, storetest.Start(t, "disk"))
+	v["spec"].(map[string]any)["templateVersion"] = DiskTemplateVersion
+	var cmd protocol.StartCommand
+	json.Unmarshal(storetest.Encode(t, "HostCommand", v), &cmd)
+	settings := Settings{ImageRepository: "example/runner", NetworkID: "existing-bridge", BootstrapRoot: "/run/neticora-bootstrap", StorageRoot: "/mnt/neticora-runners/executions", RunnerUID: 1000, PidsLimit: 128}
+	p, err := settings.Plan(storetest.Scope, cmd.Spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.StorageDirectory == "" || len(p.HostConfig.Mounts) != 5 || len(p.HostConfig.Tmpfs) != 0 || p.Config.Labels["com.neticora.runnerd.hard-storage-limit"] != "false" {
+		t.Fatal("incorrect disk plan", p)
+	}
+	for _, m := range p.HostConfig.Mounts[1:] {
+		if !strings.HasPrefix(m.Source, p.StorageDirectory+"/") || m.ReadOnly {
+			t.Fatal("shared or unwritable execution mount", m)
+		}
+	}
+	cmd.Spec.AttemptId = "other-attempt"
+	other, err := settings.Plan(storetest.Scope, cmd.Spec)
+	if err != nil || other.StorageDirectory == p.StorageDirectory {
+		t.Fatal("attempt storage reused", err)
+	}
+	cmd.Spec.TemplateVersion = TemplateVersion
+	legacy, err := settings.Plan(storetest.Scope, cmd.Spec)
+	if err != nil || legacy.StorageDirectory != "" || len(legacy.HostConfig.Tmpfs) != 2 || len(legacy.HostConfig.Mounts) != 1 {
+		t.Fatal("original template reinterpreted", err)
+	}
+	settings.StorageRoot = ""
+	cmd.Spec.TemplateVersion = DiskTemplateVersion
+	if _, err = settings.Plan(storetest.Scope, cmd.Spec); err == nil {
+		t.Fatal("missing disk root accepted")
+	}
+}

@@ -138,7 +138,7 @@ func Open(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drain
 		skew, measured := client.ClockSkew()
 		return policy.Get().Transport(actualProxy, caDigest, skew, measured)
 	}
-	controller := &Controller{Store: store, Runtime: runtime, Remote: remote, SigningKey: key, Scope: agent.StoreScope{InstallationID: credentials.InstallationID, TenantID: credentials.TenantID, HostID: credentials.Identity.HostId, SessionEpoch: credentials.Identity.SessionEpoch, EndpointIdentity: credentials.EndpointIdentity}, Authority: journal.Authority{TenantID: credentials.TenantID, HostID: credentials.Identity.HostId, SessionEpoch: credentials.Identity.SessionEpoch, EndpointIdentity: credentials.EndpointIdentity, KeyID: credentials.Identity.KeyId}, Profile: standardlinux.Settings{ImageRepository: x.ImageRepository, NetworkID: x.NetworkID, BootstrapRoot: x.BootstrapRoot, RunnerUID: os.Geteuid(), PidsLimit: x.PidsLimit}, Policy: policy.Get, VerifyImage: verifier.Verify, KeysDirectory: x.KeysDirectory, Organization: x.Organization, Pool: x.Pool, Drained: drained}
+	controller := &Controller{Store: store, Runtime: runtime, Remote: remote, SigningKey: key, Scope: agent.StoreScope{InstallationID: credentials.InstallationID, TenantID: credentials.TenantID, HostID: credentials.Identity.HostId, SessionEpoch: credentials.Identity.SessionEpoch, EndpointIdentity: credentials.EndpointIdentity}, Authority: journal.Authority{TenantID: credentials.TenantID, HostID: credentials.Identity.HostId, SessionEpoch: credentials.Identity.SessionEpoch, EndpointIdentity: credentials.EndpointIdentity, KeyID: credentials.Identity.KeyId}, Profile: standardlinux.Settings{ImageRepository: x.ImageRepository, NetworkID: x.NetworkID, BootstrapRoot: x.BootstrapRoot, StorageRoot: x.StorageRoot, RunnerUID: os.Geteuid(), PidsLimit: x.PidsLimit}, Policy: policy.Get, VerifyImage: verifier.Verify, KeysDirectory: x.KeysDirectory, Organization: x.Organization, Pool: x.Pool, Drained: drained}
 	controller.HostLimits = policy.Get().Limits()
 	capacity := capabilities.Capacity
 	ceilings := []*uint64{&controller.HostLimits.CPUMillis, &controller.HostLimits.MemoryBytes, &controller.HostLimits.StorageBytes, &controller.HostLimits.Slots}
@@ -150,6 +150,7 @@ func Open(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drain
 		}
 		*ceilings[i] = min(*ceilings[i], limit)
 	}
+	controller.RuntimeStoragePaths = x.RuntimeStoragePaths
 	controller.Repository = x.Repository
 	controller.MinRuntimeFreeBytes = x.MinRuntimeFreeBytes
 	return controller, cleanup, nil

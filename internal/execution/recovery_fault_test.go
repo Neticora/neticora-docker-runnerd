@@ -24,7 +24,7 @@ func TestRuntimePressureBlocksAdmissionButKeepsReceiptAndCleanup(t *testing.T) {
 		t.Fatal("receipt replay wrote journal")
 	}
 	next := storetest.Object(t, storetest.Start(t, "new"))
-	next["spec"].(map[string]any)["templateVersion"] = standardlinux.TemplateVersion
+	next["spec"].(map[string]any)["templateVersion"] = standardlinux.DiskTemplateVersion
 	if _, err := c.accept(ctx, storetest.Encode(t, "HostCommand", next)); !errors.Is(err, dockerengine.ErrStoragePressure) {
 		t.Fatal(err)
 	}

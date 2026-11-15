@@ -84,6 +84,8 @@ def build():
             'packaging/linux/neticora-runnerd.tmpfiles.conf': 'usr/lib/tmpfiles.d/neticora-runnerd.conf',
             'packaging/linux/config.example.json': 'usr/share/neticora-runnerd/config.example.json',
             'docs/UBUNTU-INSTALLATION.md': 'usr/share/doc/neticora-runnerd/UBUNTU-INSTALLATION.md',
+            'docs/EXECUTION-STORAGE.md': 'usr/share/doc/neticora-runnerd/EXECUTION-STORAGE.md',
+            'docs/EXECUTION-PREPARATION.md': 'usr/share/doc/neticora-runnerd/EXECUTION-PREPARATION.md',
         }
         for origin, target in contents.items():
             destination = stage / target

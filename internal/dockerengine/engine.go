@@ -35,9 +35,10 @@ const LabelPrefix = "com.neticora.runnerd."
 // Plan is detached configuration produced by a qualified profile, never raw wire input.
 // It deliberately has no bootstrap or environment credential field.
 type Plan struct {
-	Name       string
-	Config     *container.Config
-	HostConfig *container.HostConfig
+	StorageDirectory string // Versioned, journal-owned disk storage, never wire input.
+	Name             string
+	Config           *container.Config
+	HostConfig       *container.HostConfig
 }
 
 type Object struct {
@@ -228,6 +229,18 @@ func (e *Engine) CheckHeadroom(ctx context.Context, minimum uint64) error {
 // PrepareImage pulls only the immutable verified reference. It never obtains
 // authority/JIT or starts a container. Registry credentials are not inherited.
 func (e *Engine) PrepareImage(ctx context.Context, p Plan) error {
+	if p.StorageDirectory != "" {
+		if err := e.check(ctx); err != nil {
+			return err
+		}
+		info, err := e.api.Info(ctx, client.InfoOptions{})
+		if err != nil {
+			return e.lost()
+		}
+		if info.Info.CgroupDriver != "systemd" || info.Info.CgroupVersion != "2" {
+			return ErrConflict
+		}
+	}
 	if e.readOnly {
 		return ErrRecoveryApprovalRequired
 	}

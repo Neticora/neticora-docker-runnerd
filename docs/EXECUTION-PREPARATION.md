@@ -46,3 +46,7 @@ Independent offline qualification, image trust, exact workflow scope, signed
 resource budgets, generation agreement and authoritative controller recovery are
 required before any separately approved execution activation. Fresh read-only
 inventory alone cannot satisfy these requirements.
+
+For new Standard executions, provision and independently qualify the
+[disk-backed storage lifecycle](EXECUTION-STORAGE.md) before activation.
+Legacy tmpfs-template acceptance remains recovery evidence only.

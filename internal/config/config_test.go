@@ -72,3 +72,28 @@ func TestPreparationValidatesDisabledConfigurationBeforeActivation(t *testing.T)
 		}
 	}
 }
+
+func TestDiskStorageCannotExposeJournalSecretsOrDockerBackingPaths(t *testing.T) {
+	c, err := Parse([]byte(valid))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Execution = &Execution{Enabled: false, Repository: "org/repo", Organization: "org", Pool: "pool", PolicyFile: "/etc/runnerd/policy.json", CapabilitiesFile: "/etc/runnerd/caps.json", TrustRoots: "/etc/runnerd/roots", ImageBundles: "/etc/runnerd/bundles", ImageRepository: "registry/runner", NetworkID: "existing-bridge", BootstrapRoot: "/run/bootstrap", KeysDirectory: "/var/lib/runnerd-keys", TrustProvisionedAt: "2026-11-15T00:00:00Z", PidsLimit: 128, StorageRoot: "/mnt/neticora-runners/executions", RuntimeStoragePaths: []string{"/var/lib/docker", "/var/lib/containerd"}}
+	raw, _ := json.Marshal(c)
+	if _, err = ParsePreparation(raw); err != nil {
+		t.Fatal(err)
+	}
+	for _, root := range []string{"/", "relative", "/var/lib", "/etc", "/run/bootstrap", "/var/lib/docker/jobs", "/mnt/neticora-runners/executions/../cache"} {
+		c.Execution.StorageRoot = root
+		raw, _ = json.Marshal(c)
+		if _, err = ParsePreparation(raw); err == nil {
+			t.Fatal("unsafe storage root accepted", root)
+		}
+	}
+	c.Execution.StorageRoot = "/mnt/neticora-runners/executions"
+	c.Execution.RuntimeStoragePaths = nil
+	raw, _ = json.Marshal(c)
+	if _, err = ParsePreparation(raw); err == nil {
+		t.Fatal("unobserved Docker backing accepted")
+	}
+}

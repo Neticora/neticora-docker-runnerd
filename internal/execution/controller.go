@@ -22,6 +22,7 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/agent"
 	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
 	"github.com/Neticora/neticora-docker-runnerd/internal/dockerengine"
+	"github.com/Neticora/neticora-docker-runnerd/internal/executionstorage"
 	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
 	"github.com/Neticora/neticora-docker-runnerd/internal/standardlinux"
 	"github.com/Neticora/neticora-docker-runnerd/journal"
@@ -75,6 +76,7 @@ type Controller struct {
 	Drained             func() bool
 	HostLimits          agent.ReservationLimits
 	MinRuntimeFreeBytes uint64
+	RuntimeStoragePaths []string
 	mu                  sync.Mutex // One reconciliation owner; all work remains durable in Store.
 	launchMu            sync.Mutex // Serializes durable command acceptance with final Docker start.
 	wake                chan struct{}
@@ -94,6 +96,12 @@ func (c *Controller) Status() string {
 }
 func failureReason(err error) string {
 	switch {
+	case errors.Is(err, executionstorage.ErrQuarantined):
+		return "execution-storage-quarantined"
+	case errors.Is(err, executionstorage.ErrCriticalPressure):
+		return "storage-critical-intervention-required"
+	case errors.Is(err, executionstorage.ErrPressure):
+		return "execution-storage-pressure"
 	case errors.Is(err, ErrBootstrap):
 		return "bootstrap-envelope-rejected"
 	case errors.Is(err, standardlinux.ErrAdmission):
@@ -227,7 +235,7 @@ func (c *Controller) accept(ctx context.Context, raw json.RawMessage) (agent.Rec
 	if json.Unmarshal(raw, &command) != nil {
 		return agent.Receipt{}, ErrReconcile
 	}
-	if command.Kind == "start" && (command.Spec.PoolId != c.Pool || c.Drained() || c.Policy().Admit(c.Scope, command.Spec, time.Now()) != nil || c.Remote.Admission(ctx, command.Spec) != nil) {
+	if command.Kind == "start" && (command.Spec.TemplateVersion != standardlinux.DiskTemplateVersion || command.Spec.PoolId != c.Pool || c.Drained() || c.Policy().Admit(c.Scope, command.Spec, time.Now()) != nil || c.Remote.Admission(ctx, command.Spec) != nil) {
 		return agent.Receipt{}, standardlinux.ErrAdmission
 	}
 	if err = c.activateLimits(ctx); err != nil {
@@ -305,6 +313,11 @@ func (c *Controller) refresh(ctx context.Context) ([]agent.Execution, error) {
 	}
 	if state.EndpointIdentity != c.Scope.EndpointIdentity || state.Identity.HostId != c.Scope.HostID || state.Identity.SessionEpoch != c.Scope.SessionEpoch || state.Identity.KeyId != c.Authority.KeyID {
 		return nil, ErrReconcile
+	}
+	if c.Profile.StorageRoot != "" {
+		if err := c.storage().Verify(ctx); err != nil {
+			return nil, err
+		}
 	}
 	known := map[string]bool{}
 	observations := []any{}
@@ -404,6 +417,9 @@ func (c *Controller) reconcile(ctx context.Context) error {
 		return err
 	}
 	var firstError error
+	if c.Profile.StorageRoot != "" {
+		firstError = c.runtimeHeadroom(ctx)
+	}
 	for _, e := range rows {
 		if e.State == "cleaned" {
 			if p, e2 := c.plan(e); e2 == nil {
@@ -584,6 +600,16 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 		if e2 != nil {
 			return e2
 		}
+		if p.StorageDirectory != "" {
+			_, err := c.Store.StorageRecord(ctx, e.Identity)
+			if err == nil {
+				if err = c.disposeStorage(ctx, e, p, ""); err != nil {
+					return err
+				}
+			} else if !errors.Is(err, agent.ErrNotFound) {
+				return err
+			}
+		}
 		return c.Store.CompleteNeverStarted(ctx, c.Scope, event)
 	}
 	if e.CleanupPending && len(e.RuntimeRef) > 0 {
@@ -673,6 +699,11 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 		if err := authorize(); err != nil {
 			return err
 		}
+		if p.StorageDirectory != "" {
+			if _, err := c.storage().Prepare(ctx, e.Identity); err != nil {
+				return err
+			}
+		}
 		return c.Store.ClaimCreation(ctx, e.Command, c.Authority)
 	})
 	if err != nil {
@@ -718,6 +749,22 @@ func (c *Controller) runtimeHeadroom(ctx context.Context) error {
 	minimum := c.MinRuntimeFreeBytes
 	if minimum == 0 {
 		minimum = 256 << 20
+	}
+	if c.Profile.StorageRoot != "" {
+		if len(c.RuntimeStoragePaths) == 0 {
+			return executionstorage.ErrPressure
+		}
+		if err := c.storage().Verify(ctx); err != nil {
+			return err
+		}
+		if err := c.storage().Headroom(minimum); err != nil {
+			return err
+		}
+		for _, path := range c.RuntimeStoragePaths {
+			if err := backingHeadroom(path, minimum); err != nil {
+				return err
+			}
+		}
 	}
 	return c.Runtime.CheckHeadroom(ctx, minimum)
 }
@@ -886,6 +933,11 @@ func (c *Controller) cleanup(ctx context.Context, e agent.Execution, p dockereng
 	if _, err := c.refresh(ctx); err != nil {
 		return err
 	}
+	if p.StorageDirectory != "" {
+		if err := c.disposeStorage(ctx, e, p, ref.ResourceId); err != nil {
+			return err
+		}
+	}
 	observed := c.inventoryObservedAt
 	o.ID = ref.ResourceId
 	o.State = "cleaned"
@@ -993,4 +1045,20 @@ func (c *Controller) reportLoop(ctx context.Context) {
 			}
 		}
 	}
+}
+
+func (c *Controller) storage() executionstorage.Manager {
+	return executionstorage.Manager{Path: c.Profile.StorageRoot, Store: c.Store, Scope: c.Scope}
+}
+func (c *Controller) disposeStorage(ctx context.Context, e agent.Execution, p dockerengine.Plan, id string) error {
+	verifier, ok := c.Runtime.(interface {
+		VerifyStorageReleased(context.Context, string, dockerengine.Plan) error
+	})
+	if !ok {
+		return executionstorage.ErrQuarantined
+	}
+	if err := verifier.VerifyStorageReleased(ctx, id, p); err != nil {
+		return err
+	}
+	return c.storage().Dispose(ctx, e.Identity)
 }

@@ -2,7 +2,10 @@
 
 package execution
 
-import "syscall"
+import (
+	"github.com/Neticora/neticora-docker-runnerd/internal/executionstorage"
+	"syscall"
+)
 
 func volatileDirectory(path string) error {
 	var fs syscall.Statfs_t
@@ -22,4 +25,18 @@ func persistentDirectory(path string) error {
 		return nil
 	}
 	return ErrReconcile
+}
+
+func backingHeadroom(path string, minimum uint64) error {
+	var fs syscall.Statfs_t
+	if syscall.Statfs(path, &fs) != nil || fs.Bsize <= 0 || fs.Bavail > ^uint64(0)/uint64(fs.Bsize) {
+		return executionstorage.ErrPressure
+	}
+	if fs.Bavail*uint64(fs.Bsize) < 64<<20 || fs.Ffree < 128 {
+		return executionstorage.ErrCriticalPressure
+	}
+	if fs.Bavail*uint64(fs.Bsize) < minimum || fs.Ffree < 1024 {
+		return executionstorage.ErrPressure
+	}
+	return nil
 }

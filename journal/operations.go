@@ -380,6 +380,15 @@ func (s *SQLiteStore) record(ctx context.Context, scope agent.StoreScope, raw js
 			return agent.ErrConflict
 		}
 		if operation == "never" {
+			var storageCount int
+			if err = tx.QueryRowContext(ctx, "SELECT count(*) FROM execution_storage WHERE execution_id=? AND generation=?", doc.ExecutionID, doc.Generation).Scan(&storageCount); err != nil {
+				return err
+			}
+			if storageCount > 0 {
+				if err = storageDisposed(ctx, tx, doc.ExecutionID, doc.Generation); err != nil {
+					return err
+				}
+			}
 			if len(refRaw) != 0 || state != "accepted" || cleanup {
 				return agent.ErrConflict
 			}
@@ -447,6 +456,9 @@ func (s *SQLiteStore) record(ctx context.Context, scope agent.StoreScope, raw js
 				return agent.ErrConflict
 			}
 			if operation == "complete" {
+				if err = storageDisposed(ctx, tx, doc.ExecutionID, doc.Generation); err != nil {
+					return err
+				}
 				var known bool
 				var inventory string
 				if err = tx.QueryRowContext(ctx, "SELECT runtime_known,inventory_generation FROM metadata WHERE singleton=1").Scan(&known, &inventory); err != nil {

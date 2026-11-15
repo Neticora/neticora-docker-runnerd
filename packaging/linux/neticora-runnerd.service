@@ -21,6 +21,8 @@ RuntimeDirectoryMode=0750
 NoNewPrivileges=yes
 ProtectSystem=strict
 ReadWritePaths=-/run/neticora-runnerd-bootstrap
+# Operator provisions this disk-backed root; onboarding never formats/mounts it.
+ReadWritePaths=-/mnt/neticora-runners/executions
 ProtectHome=yes
 PrivateTmp=yes
 PrivateDevices=yes

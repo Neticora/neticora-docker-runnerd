@@ -13,6 +13,7 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
 	"github.com/Neticora/neticora-docker-runnerd/internal/config"
 	"github.com/Neticora/neticora-docker-runnerd/internal/dockerengine"
+	"github.com/Neticora/neticora-docker-runnerd/internal/executionstorage"
 	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
 	"github.com/Neticora/neticora-docker-runnerd/internal/standardlinux"
 )
@@ -159,7 +160,21 @@ func PrepareExecution(ctx context.Context, raw []byte, now time.Time) Preparatio
 		}
 	}
 	check("image-trust", imageTrust, "Existing offline Sigstore verifier checks exact allowed digest, issuer/subject, provisioned root/bundle and freshness; no pull or fallback.")
-	out.ConfigurationValid = imageTrust
+	storageReady := x.StorageRoot != "" && len(x.RuntimeStoragePaths) > 0
+	minimum := x.MinRuntimeFreeBytes
+	if minimum == 0 {
+		minimum = 256 << 20
+	}
+	if storageReady {
+		storageReady = (executionstorage.Manager{Path: x.StorageRoot}).Headroom(minimum) == nil
+	}
+	for _, path := range x.RuntimeStoragePaths {
+		if backingHeadroom(path, minimum) != nil {
+			storageReady = false
+		}
+	}
+	check("disk-execution-storage", storageReady, "New disk-template work requires a private durable execution root and independently verified actual Docker/containerd backing paths with free bytes/inodes; no directories or daemon settings are changed.")
+	out.ConfigurationValid = imageTrust && storageReady
 	out.Checks = append(out.Checks, PreparationCheck{Name: "resource-enforcement", State: "NOT TESTED", Detail: "Soft-storage template is not a whole-host hard storage bound. CPU/memory/PID/storage/network/concurrency/runtime-duration evidence requires a separately approved disposable campaign."}, PreparationCheck{Name: "platform-qualification", State: "NOT TESTED", Detail: "No platform policy, qualification signature or acceptance is written by preparation."}, PreparationCheck{Name: "authoritative-recovery", State: "NOT TESTED", Detail: "Only the approved execution controller may establish its original journal/claim/receipt checkpoint; inventory alone never qualifies recovery."})
 	return out
 }

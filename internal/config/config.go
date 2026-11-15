@@ -36,22 +36,24 @@ type Connection struct {
 // Execution is an explicit operator opt-in. Old foundation configurations remain
 // drained and never open Docker or contact the platform.
 type Execution struct {
-	Repository          string `json:"repository"`
-	CustomCAFile        string `json:"customCaFile,omitempty"`
-	Enabled             bool   `json:"enabled"`
-	PolicyFile          string `json:"policyFile"`
-	CapabilitiesFile    string `json:"capabilitiesFile"`
-	ImageRepository     string `json:"imageRepository"`
-	NetworkID           string `json:"networkId"`
-	BootstrapRoot       string `json:"bootstrapRoot"`
-	KeysDirectory       string `json:"keysDirectory"`
-	TrustRoots          string `json:"trustRoots"`
-	ImageBundles        string `json:"imageBundles"`
-	TrustProvisionedAt  string `json:"trustProvisionedAt"`
-	Organization        string `json:"organization"`
-	Pool                string `json:"pool"`
-	PidsLimit           int64  `json:"pidsLimit"`
-	MinRuntimeFreeBytes uint64 `json:"minRuntimeFreeBytes,omitempty"`
+	StorageRoot         string   `json:"storageRoot,omitempty"`
+	RuntimeStoragePaths []string `json:"runtimeStoragePaths,omitempty"`
+	Repository          string   `json:"repository"`
+	CustomCAFile        string   `json:"customCaFile,omitempty"`
+	Enabled             bool     `json:"enabled"`
+	PolicyFile          string   `json:"policyFile"`
+	CapabilitiesFile    string   `json:"capabilitiesFile"`
+	ImageRepository     string   `json:"imageRepository"`
+	NetworkID           string   `json:"networkId"`
+	BootstrapRoot       string   `json:"bootstrapRoot"`
+	KeysDirectory       string   `json:"keysDirectory"`
+	TrustRoots          string   `json:"trustRoots"`
+	ImageBundles        string   `json:"imageBundles"`
+	TrustProvisionedAt  string   `json:"trustProvisionedAt"`
+	Organization        string   `json:"organization"`
+	Pool                string   `json:"pool"`
+	PidsLimit           int64    `json:"pidsLimit"`
+	MinRuntimeFreeBytes uint64   `json:"minRuntimeFreeBytes,omitempty"`
 }
 
 func Parse(data []byte) (Config, error) { return parse(data, false) }
@@ -101,6 +103,24 @@ func parse(data []byte, preparation bool) (Config, error) {
 		return Config{}, errors.New("preparation requires a complete execution configuration with enabled=false")
 	}
 	if x := c.Execution; x != nil && (x.Enabled || preparation) {
+		if x.StorageRoot != "" {
+			if !filepath.IsAbs(x.StorageRoot) || filepath.Clean(x.StorageRoot) != x.StorageRoot || x.StorageRoot == "/" || len(x.RuntimeStoragePaths) == 0 {
+				return Config{}, errors.New("disk execution storage requires an explicit root and independently verified Docker backing paths")
+			}
+			for _, path := range append([]string{c.StateDir, c.CredentialFile, x.BootstrapRoot, x.KeysDirectory, x.PolicyFile, x.CapabilitiesFile, x.TrustRoots, x.ImageBundles, x.CustomCAFile}, x.RuntimeStoragePaths...) {
+				if path == "" {
+					continue
+				}
+				if !filepath.IsAbs(path) || filepath.Clean(path) != path {
+					return Config{}, errors.New("storage backing paths must be absolute and clean")
+				}
+				if path == x.StorageRoot || strings.HasPrefix(path, x.StorageRoot+"/") || strings.HasPrefix(x.StorageRoot, path+"/") {
+					return Config{}, errors.New("execution storage must not overlap journal, credentials, bootstrap, trust or Docker backing paths")
+				}
+			}
+		} else if len(x.RuntimeStoragePaths) > 0 {
+			return Config{}, errors.New("backing path observations require execution storage root")
+		}
 		if x.MinRuntimeFreeBytes != 0 && x.MinRuntimeFreeBytes < 64<<20 {
 			return Config{}, errors.New("runtime storage headroom must be at least 64 MiB")
 		}
