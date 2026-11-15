@@ -12,6 +12,29 @@ spec.loader.exec_module(builder)
 
 
 class ServiceStateGuards(unittest.TestCase):
+    def test_upgrade_preserves_configured_groups_and_rejects_root_identity(self):
+        # Run the actual account guard with a controlled OS identity database.
+        account_guard = 'if getent passwd' + (ROOT / 'packaging/debian/preinst').read_text().split('if getent passwd', 1)[1]
+        with tempfile.TemporaryDirectory() as directory:
+            getent = Path(directory) / 'getent'
+            getent.write_text('#!/bin/sh\nexit 0\n')
+            getent.chmod(0o755)
+            identity = Path(directory) / 'id'
+            identity.write_text('#!/bin/sh\ncase "$1" in\n-u) echo "$TEST_UID";;\n-g) echo "$TEST_GID";;\n-G) echo "$TEST_GROUPS";;\n*) exit 1;;\nesac\n')
+            identity.chmod(0o755)
+            for uid, gid, groups, allowed in (
+                    ('982', '982', '982', True),
+                    ('982', '982', '982 983', True),
+                    ('982', '982', '982 983 44', True),
+                    ('0', '982', '982 983', False),
+                    ('982', '0', '982 983', False),
+                    ('982', '982', '982 983 0', False)):
+                with self.subTest(uid=uid, gid=gid, groups=groups):
+                    result = subprocess.run(['/bin/sh', '-ec', account_guard],
+                        env={**os.environ, 'PATH': directory, 'TEST_UID': uid, 'TEST_GID': gid, 'TEST_GROUPS': groups},
+                        capture_output=True, text=True)
+                    self.assertEqual(result.returncode == 0, allowed, result.stderr)
+
     def guard(self, state, code=0):
         with tempfile.TemporaryDirectory() as directory:
             systemctl = Path(directory) / 'systemctl'

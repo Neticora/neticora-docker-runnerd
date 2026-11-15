@@ -10,5 +10,10 @@ set -eu
 if [ -d /run/systemd/system ]; then runnerd_require_stopped; fi
 if getent passwd neticora-runnerd >/dev/null; then
   [ "$(id -u neticora-runnerd)" != 0 ] || exit 1
-  [ "$(id -G neticora-runnerd | wc -w)" = 1 ] || { echo 'Unexpected supplementary service groups.' >&2; exit 1; }
+  [ "$(id -g neticora-runnerd)" != 0 ] || exit 1
+  # Configured groups, including explicitly authorized Docker access, persist
+  # across upgrades. Never grant membership from a package maintainer script.
+  for service_group in $(id -G neticora-runnerd); do
+    [ "$service_group" != 0 ] || { echo 'Runnerd must not belong to the root group.' >&2; exit 1; }
+  done
 fi
