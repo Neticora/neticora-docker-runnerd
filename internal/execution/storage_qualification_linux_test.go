@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -30,8 +31,9 @@ const storageLab = "/var/lib/neticora-cleanup-lab-20261115"
 
 type physicalRemote struct {
 	*fakeRemote
-	scope    agent.StoreScope
-	commands []protocol.StartCommand
+	scope         agent.StoreScope
+	commands      []protocol.StartCommand
+	inventoryFile string
 }
 
 func (r *physicalRemote) Recovery(context.Context, []agent.ExecutionCursor) (protocol.RecoveryState, error) {
@@ -40,6 +42,38 @@ func (r *physicalRemote) Recovery(context.Context, []agent.ExecutionCursor) (pro
 		entries = append(entries, protocol.RecoveryEntry{ExecutionId: s.Spec.ExecutionId, Generation: s.Generation, CommandId: s.CommandId, SpecHash: s.Spec.SpecHash, ContiguousSequence: "0"})
 	}
 	return protocol.RecoveryState{Identity: protocol.HostIdentity{HostId: r.scope.HostID, KeyId: "key-a", KeyVersion: "1", SessionEpoch: "1"}, EndpointIdentity: r.scope.EndpointIdentity, InventoryGeneration: r.inventory, Entries: entries}, nil
+}
+
+func (r *physicalRemote) Inventory(ctx context.Context, message protocol.Outbound) error {
+	var snapshot protocol.InventorySnapshot
+	if json.Unmarshal(message.Bytes(), &snapshot) != nil {
+		return ErrReconcile
+	}
+	previous, err := strconv.ParseUint(r.inventory, 10, 64)
+	if err != nil || snapshot.InventoryGeneration != strconv.FormatUint(previous+1, 10) {
+		return ErrReconcile
+	}
+	if err = r.fakeRemote.Inventory(ctx, message); err != nil {
+		return err
+	}
+	file, err := os.OpenFile(r.inventoryFile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+	if err != nil {
+		return err
+	}
+	_, err = file.Write([]byte(r.inventory))
+	if err == nil {
+		err = file.Sync()
+	}
+	file.Close()
+	if err != nil {
+		return err
+	}
+	dir, err := os.Open(filepath.Dir(r.inventoryFile))
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return dir.Sync()
 }
 
 type physicalRuntime struct {
@@ -204,7 +238,16 @@ func openPhysical(t *testing.T, name string, small, resume bool) *physicalFixtur
 		t.Fatal("fixture policy", err)
 	}
 	r := &physicalRuntime{Engine: e}
-	remote := &physicalRemote{fakeRemote: &fakeRemote{t: t, inventory: "1"}, scope: scope}
+	counterFile := filepath.Join(base, "fixture-platform-inventory")
+	inventory := "1"
+	if resume {
+		counter, err := os.ReadFile(counterFile)
+		if err != nil {
+			t.Fatal("original fixture platform counter required", err)
+		}
+		inventory = string(counter)
+	}
+	remote := &physicalRemote{fakeRemote: &fakeRemote{t: t, inventory: inventory}, scope: scope, inventoryFile: counterFile}
 	c := &Controller{Store: s, Runtime: r, Remote: remote, Scope: scope, Authority: journal.Authority{TenantID: scope.TenantID, HostID: scope.HostID, SessionEpoch: scope.SessionEpoch, EndpointIdentity: scope.EndpointIdentity, KeyID: "key-a"}, Profile: standardlinux.Settings{ImageRepository: image.Repository, NetworkID: image.Network, StorageRoot: storage, BootstrapRoot: bootstrap, RunnerUID: 10001, PidsLimit: 64}, Policy: func() *standardlinux.Policy { return policy }, VerifyImage: func(context.Context, *standardlinux.Policy, string, string, time.Time) error { return nil }, KeysDirectory: keys, Organization: "Neticora", Repository: "Neticora/" + name, Pool: "pool-a", Drained: func() bool { return false }, MinRuntimeFreeBytes: 64 << 20, RuntimeStoragePaths: []string{"/mnt/s0-cache/cleanup-docker-20261115", "/mnt/s0-cache/cleanup-containerd-20261115"}, cancelled: map[agent.ExecutionCursor]bool{}}
 	if resume {
 		rows, err := s.Incomplete(ctx, agent.ExecutionCursor{}, 100)
