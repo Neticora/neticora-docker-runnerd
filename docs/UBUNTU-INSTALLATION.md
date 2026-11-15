@@ -77,8 +77,26 @@ new read-only `/me/installation` handoff. The verified tenant, pool, original ke
 request, installation and session must all match before credentials are written.
 
 Keep failed setup state. Never delete it to retry with another token or create a
-replacement host. If the bounded server recovery window expires without a saved
-response, contact the operator; setup deliberately fails closed. Once the response
+replacement host. If the original token expired or is unavailable before enrollment
+completed, create a fresh token for the **same tenant and pool**, then run:
+
+```sh
+sudo neticora-runnerd setup --replace-token
+```
+
+Accept the saved bindings and paste the fresh token. Replacement requires an
+upgraded platform. The platform locks all prior tokens and the fresh token, checks
+that no prior token registered a host, and atomically revokes unused prior tokens
+while registering the fresh token. The original key, request and attempt remain
+unchanged; append-only local records retain token hashes, never token values.
+An interrupted replacement resumes with ordinary `setup` and the same fresh token.
+At most 16 replacements are retained; reaching this bound requires operator recovery.
+
+Replacement is rejected if local credentials, an enrollment response or runtime
+history already exists, or the platform reports a consumed/uncertain original or
+changed tenant/pool. A lost successful response must recover the original host
+with its saved token; it cannot authorize another host. If that response-recovery
+window expires, contact the operator; setup fails closed. Once the response
 is durable, retry does not need the enrollment secret. A partial credential/config
 write resumes using the original identity. Existing legacy installations, changed
 bindings, active daemons and histories without an original setup attempt are

@@ -71,6 +71,13 @@ func DecodeEnrollmentResponse(data []byte) (EnrollmentResponse, error) {
 	return value, err
 }
 
+// DecodeEnrollmentTokenReplacement validates the original wire bytes before binding the generated model.
+func DecodeEnrollmentTokenReplacement(data []byte) (EnrollmentTokenReplacement, error) {
+	var value EnrollmentTokenReplacement
+	err := decode("EnrollmentTokenReplacement", data, &value)
+	return value, err
+}
+
 // DecodeEventAck validates the original wire bytes before binding the generated model.
 func DecodeEventAck(data []byte) (EventAck, error) {
 	var value EventAck
@@ -390,6 +397,7 @@ var wireDecoders = map[string]func([]byte) (any, error){
 	"Digest":                       func(data []byte) (any, error) { return DecodeDigest(data) },
 	"EnrollmentRequest":            func(data []byte) (any, error) { return DecodeEnrollmentRequest(data) },
 	"EnrollmentResponse":           func(data []byte) (any, error) { return DecodeEnrollmentResponse(data) },
+	"EnrollmentTokenReplacement":   func(data []byte) (any, error) { return DecodeEnrollmentTokenReplacement(data) },
 	"EventAck":                     func(data []byte) (any, error) { return DecodeEventAck(data) },
 	"EventBatch":                   func(data []byte) (any, error) { return DecodeEventBatch(data) },
 	"ExecutionSpec":                func(data []byte) (any, error) { return DecodeExecutionSpec(data) },

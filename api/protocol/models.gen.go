@@ -894,13 +894,23 @@ type EnrollmentRequest struct {
 	EnrollmentToken string `json:"enrollmentToken"`
 	Proof           string `json:"proof"`
 	PublicKey       string `json:"publicKey"`
-	RequestId       string `json:"requestId"`
+
+	// Replacement Explicit unfinished-enrollment recovery. Proof binds the expected tenant/pool and all previous token hashes. The platform must lock and retire only unused matching tokens in the registration transaction. Consumed or ambiguous originals reject replacement.
+	Replacement *EnrollmentTokenReplacement `json:"replacement,omitempty"`
+	RequestId   string                      `json:"requestId"`
 }
 
 // EnrollmentResponse defines model for EnrollmentResponse.
 type EnrollmentResponse struct {
 	Identity HostIdentity          `json:"identity"`
 	Protocol ProtocolCompatibility `json:"protocol"`
+}
+
+// EnrollmentTokenReplacement Explicit unfinished-enrollment recovery. Proof binds the expected tenant/pool and all previous token hashes. The platform must lock and retire only unused matching tokens in the registration transaction. Consumed or ambiguous originals reject replacement.
+type EnrollmentTokenReplacement struct {
+	PriorTokenHashes   []string `json:"priorTokenHashes"`
+	RunnerDeploymentId string   `json:"runnerDeploymentId"`
+	TenantId           string   `json:"tenantId"`
 }
 
 // EventAck defines model for EventAck.

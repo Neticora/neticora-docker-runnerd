@@ -35,10 +35,11 @@ type Options struct {
 	ConfigPath, SetupDir, StateDir, CredentialPath string
 	PlatformURL, TenantID, PoolID, RuntimeEndpoint string
 	// These are injected by the installed CLI, never accepted from the platform.
-	BootID     string
-	Probe      func(context.Context) (string, error)
-	Token      func() ([]byte, error)
-	Checkpoint func(string) error // In-process fault tests only; no CLI/environment override.
+	BootID       string
+	ReplaceToken bool // Explicit CLI request; never inferred from a changed token.
+	Probe        func(context.Context) (string, error)
+	Token        func() ([]byte, error)
+	Checkpoint   func(string) error // In-process fault tests only; no CLI/environment override.
 }
 type attempt struct {
 	PlatformURL     string `json:"platformUrl"`
@@ -175,6 +176,14 @@ func Setup(ctx context.Context, p Platform, o Options) (transport.InstallationBi
 	if e != nil {
 		return zero, ErrState
 	}
+	if o.ReplaceToken {
+		if !present {
+			return zero, errors.New("no unfinished enrollment to replace; run setup")
+		}
+		if err := unfinishedReplacement(o); err != nil {
+			return zero, err
+		}
+	}
 	// Existing execution histories and legacy identities must use their original
 	// provisioning/recovery path; setup cannot rebind them as a fresh installation.
 	if !present {
@@ -268,10 +277,7 @@ func Setup(ctx context.Context, p Platform, o Options) (transport.InstallationBi
 				return zero, e
 			}
 		}
-		if digest(token) != a.TokenHash {
-			return zero, errors.New("retry requires the original enrollment token; original attempt retained")
-		}
-		message, e := identity.Enrollment(key, a.RequestID, string(token))
+		message, e := enrollmentMessage(o, key, a, token)
 		clear(token)
 		if e != nil {
 			return zero, e

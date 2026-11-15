@@ -1308,6 +1308,9 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 8192
+          },
+          "replacement": {
+            "$ref": "#/components/schemas/EnrollmentTokenReplacement"
           }
         },
         "required": [
@@ -2780,6 +2783,38 @@
           "status",
           "serverWatermarks",
           "verifiedAt"
+        ],
+        "additionalProperties": false
+      },
+      "EnrollmentTokenReplacement": {
+        "type": "object",
+        "description": "Explicit unfinished-enrollment recovery. Proof binds the expected tenant/pool and all previous token hashes. The platform must lock and retire only unused matching tokens in the registration transaction. Consumed or ambiguous originals reject replacement.",
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "runnerDeploymentId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "priorTokenHashes": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "required": [
+          "tenantId",
+          "runnerDeploymentId",
+          "priorTokenHashes"
         ],
         "additionalProperties": false
       }

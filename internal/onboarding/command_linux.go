@@ -34,8 +34,9 @@ func Command(args []string) (bool, error) {
 	if len(args) == 0 || (args[0] != "setup" && args[0] != "status" && args[0] != "doctor") {
 		return false, nil
 	}
-	if len(args) != 1 {
-		return true, errors.New("usage: neticora-runnerd setup|status|doctor")
+	replaceToken := len(args) == 2 && args[0] == "setup" && args[1] == "--replace-token"
+	if len(args) != 1 && !replaceToken {
+		return true, errors.New("usage: neticora-runnerd setup [--replace-token]|status|doctor")
 	}
 	account, e := user.Lookup("neticora-runnerd")
 	if e != nil {
@@ -121,6 +122,7 @@ func Command(args []string) (bool, error) {
 		return true, errors.New("cannot observe host boot identity")
 	}
 	o := Options{ConfigPath: configPath, SetupDir: "/etc/neticora-runnerd/setup", StateDir: "/var/lib/neticora-runnerd", CredentialPath: "/etc/neticora-runnerd/identity.json", PlatformURL: platform, TenantID: tenant, PoolID: pool, RuntimeEndpoint: endpoint, BootID: strings.TrimSpace(string(boot))}
+	o.ReplaceToken = replaceToken
 	o.Token = func() ([]byte, error) {
 		return promptToken(os.Stdin, os.Stdout)
 	}

@@ -1942,5 +1942,129 @@
       "action": "start"
     },
     "valid": false
+  },
+  {
+    "id": "enrollment-replacement",
+    "schema": "EnrollmentRequest",
+    "value": {
+      "requestId": "request-a",
+      "enrollmentToken": "example-token",
+      "publicKey": "example-public-key",
+      "proof": "example-proof",
+      "replacement": {
+        "tenantId": "tenant-a",
+        "runnerDeploymentId": "pool-a",
+        "priorTokenHashes": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ]
+      }
+    },
+    "valid": true
+  },
+  {
+    "id": "enrollment-replacement-empty",
+    "schema": "EnrollmentRequest",
+    "value": {
+      "requestId": "request-a",
+      "enrollmentToken": "example-token",
+      "publicKey": "example-public-key",
+      "proof": "example-proof",
+      "replacement": {
+        "tenantId": "tenant-a",
+        "runnerDeploymentId": "pool-a",
+        "priorTokenHashes": []
+      }
+    },
+    "valid": false
+  },
+  {
+    "id": "enrollment-replacement-duplicate",
+    "schema": "EnrollmentRequest",
+    "value": {
+      "requestId": "request-a",
+      "enrollmentToken": "example-token",
+      "publicKey": "example-public-key",
+      "proof": "example-proof",
+      "replacement": {
+        "tenantId": "tenant-a",
+        "runnerDeploymentId": "pool-a",
+        "priorTokenHashes": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "id": "enrollment-replacement-oversized",
+    "schema": "EnrollmentRequest",
+    "value": {
+      "requestId": "request-a",
+      "enrollmentToken": "example-token",
+      "publicKey": "example-public-key",
+      "proof": "example-proof",
+      "replacement": {
+        "tenantId": "tenant-a",
+        "runnerDeploymentId": "pool-a",
+        "priorTokenHashes": [
+          "0000000000000000000000000000000000000000000000000000000000000000",
+          "0000000000000000000000000000000000000000000000000000000000000001",
+          "0000000000000000000000000000000000000000000000000000000000000002",
+          "0000000000000000000000000000000000000000000000000000000000000003",
+          "0000000000000000000000000000000000000000000000000000000000000004",
+          "0000000000000000000000000000000000000000000000000000000000000005",
+          "0000000000000000000000000000000000000000000000000000000000000006",
+          "0000000000000000000000000000000000000000000000000000000000000007",
+          "0000000000000000000000000000000000000000000000000000000000000008",
+          "0000000000000000000000000000000000000000000000000000000000000009",
+          "000000000000000000000000000000000000000000000000000000000000000a",
+          "000000000000000000000000000000000000000000000000000000000000000b",
+          "000000000000000000000000000000000000000000000000000000000000000c",
+          "000000000000000000000000000000000000000000000000000000000000000d",
+          "000000000000000000000000000000000000000000000000000000000000000e",
+          "000000000000000000000000000000000000000000000000000000000000000f",
+          "0000000000000000000000000000000000000000000000000000000000000010"
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "id": "enrollment-replacement-invalid-hash",
+    "schema": "EnrollmentRequest",
+    "value": {
+      "requestId": "request-a",
+      "enrollmentToken": "example-token",
+      "publicKey": "example-public-key",
+      "proof": "example-proof",
+      "replacement": {
+        "tenantId": "tenant-a",
+        "runnerDeploymentId": "pool-a",
+        "priorTokenHashes": [
+          "not-a-token-hash"
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "id": "enrollment-replacement-unknown",
+    "schema": "EnrollmentRequest",
+    "value": {
+      "requestId": "request-a",
+      "enrollmentToken": "example-token",
+      "publicKey": "example-public-key",
+      "proof": "example-proof",
+      "replacement": {
+        "tenantId": "tenant-a",
+        "runnerDeploymentId": "pool-a",
+        "priorTokenHashes": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "unexpected": true
+      }
+    },
+    "valid": false
   }
 ]
