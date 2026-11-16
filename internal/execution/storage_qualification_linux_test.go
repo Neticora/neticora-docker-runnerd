@@ -541,8 +541,8 @@ func TestRunnerd08StoragePhysical(t *testing.T) {
 		if written >= 128<<20 {
 			t.Fatal("not bounded physical exhaustion")
 		}
-		if err = f.c.runtimeHeadroom(context.Background()); err == nil {
-			t.Fatal("disk-full admission open")
+		if err = f.c.runtimeHeadroom(context.Background()); err != nil {
+			t.Fatal("disk usage became mandatory admission policy", err)
 		}
 		f.clean(t, e)
 		t.Log("physical ENOSPC bytes", written)
@@ -835,8 +835,8 @@ func TestRunnerd08StorageAdditional(t *testing.T) {
 		if count == 8192 {
 			t.Fatal("inode limit not reached")
 		}
-		if err = f.c.runtimeHeadroom(context.Background()); err == nil {
-			t.Fatal("inode exhaustion admitted new work")
+		if err = f.c.runtimeHeadroom(context.Background()); err != nil {
+			t.Fatal("inode utilization became mandatory admission policy", err)
 		}
 		physicalAction(t, "record", f.base)
 		t.Log("physical inode exhaustion files", count)

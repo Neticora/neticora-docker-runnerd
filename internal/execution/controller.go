@@ -25,6 +25,7 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/internal/executionstorage"
 	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
 	"github.com/Neticora/neticora-docker-runnerd/internal/standardlinux"
+	"github.com/Neticora/neticora-docker-runnerd/internal/telemetry"
 	"github.com/Neticora/neticora-docker-runnerd/journal"
 	"github.com/Neticora/neticora-docker-runnerd/transport"
 )
@@ -46,7 +47,6 @@ type Runtime interface {
 	Stop(context.Context, string, dockerengine.Plan) error
 	Remove(context.Context, string, dockerengine.Plan) error
 	Watch(context.Context, func()) error
-	CheckHeadroom(context.Context, uint64) error
 }
 type Remote interface {
 	Recovery(context.Context, []agent.ExecutionCursor) (protocol.RecoveryState, error)
@@ -745,28 +745,13 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 	return c.Store.RecordObservation(ctx, c.Scope, event)
 }
 
+// Storage utilization never authorizes or rejects work. Verify only physical
+// ownership/recovery invariants; journal write failures retain their own fences.
 func (c *Controller) runtimeHeadroom(ctx context.Context) error {
-	minimum := c.MinRuntimeFreeBytes
-	if minimum == 0 {
-		minimum = 256 << 20
-	}
 	if c.Profile.StorageRoot != "" {
-		if len(c.RuntimeStoragePaths) == 0 {
-			return executionstorage.ErrPressure
-		}
-		if err := c.storage().Verify(ctx); err != nil {
-			return err
-		}
-		if err := c.storage().Headroom(minimum); err != nil {
-			return err
-		}
-		for _, path := range c.RuntimeStoragePaths {
-			if err := backingHeadroom(path, minimum); err != nil {
-				return err
-			}
-		}
+		return c.storage().Verify(ctx)
 	}
-	return c.Runtime.CheckHeadroom(ctx, minimum)
+	return nil
 }
 
 func requestID(e agent.Execution) string {
@@ -1061,4 +1046,58 @@ func (c *Controller) disposeStorage(ctx context.Context, e agent.Execution, p do
 		return err
 	}
 	return c.storage().Dispose(ctx, e.Identity)
+}
+
+// Resolve only original, currently verified runtime objects. Metrics never
+// repair the journal, establish ownership from labels, or grant execution.
+func (c *Controller) telemetryTargets(ctx context.Context, observer interface {
+	Inspect(context.Context, string, dockerengine.Plan) (dockerengine.Object, error)
+	Inventory(context.Context) ([]string, error)
+}) ([]telemetry.Target, bool) {
+	targets := []telemetry.Target{}
+	known := map[string]bool{}
+	if !c.Store.Health(ctx).Ready {
+		return targets, false
+	}
+	rows, err := c.executions(ctx)
+	if err != nil {
+		return targets, false
+	}
+	for _, e := range rows {
+		if e.State == "cleaned" || len(e.RuntimeRef) == 0 {
+			continue
+		}
+		if len(targets) == 32 {
+			return targets, false
+		}
+		p, err := c.plan(e)
+		if err != nil {
+			return targets, false
+		}
+		if c.Store.VerifyCreationClaim(ctx, c.Scope, e.Command) != nil {
+			return targets, false
+		}
+		var ref protocol.RuntimeRef
+		if json.Unmarshal(e.RuntimeRef, &ref) != nil {
+			return targets, false
+		}
+		o, err := observer.Inspect(ctx, ref.ResourceId, p)
+		if err != nil {
+			return targets, false
+		}
+		known[o.ID] = true
+		if o.State == "running" {
+			targets = append(targets, telemetry.Target{ExecutionID: e.Identity.ExecutionID, Generation: e.Identity.Generation, ResourceID: o.ID})
+		}
+	}
+	ids, err := observer.Inventory(ctx)
+	if err != nil {
+		return targets, false
+	}
+	for _, id := range ids {
+		if !known[id] {
+			return targets, false
+		}
+	}
+	return targets, true
 }

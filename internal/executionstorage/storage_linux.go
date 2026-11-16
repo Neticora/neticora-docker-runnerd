@@ -66,19 +66,6 @@ func (m Manager) root() (int, journal.StorageIdentity, error) {
 	if err != nil {
 		return -1, journal.StorageIdentity{}, err
 	}
-	fail := func() (int, journal.StorageIdentity, error) {
-		unix.Close(fd)
-		return -1, journal.StorageIdentity{}, ErrQuarantined
-	}
-	var fs unix.Statfs_t
-	if unix.Fstatfs(fd, &fs) != nil {
-		return fail()
-	}
-	switch uint64(fs.Type) {
-	case 0xef53, 0x58465342, 0x9123683e, 0xf2f52010:
-	default:
-		return fail()
-	}
 	id, err := fingerprint(fd)
 	if err != nil {
 		unix.Close(fd)

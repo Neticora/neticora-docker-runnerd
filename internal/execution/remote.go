@@ -15,6 +15,7 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
 	"github.com/Neticora/neticora-docker-runnerd/identity"
 	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
+	"github.com/Neticora/neticora-docker-runnerd/internal/telemetry"
 	"github.com/Neticora/neticora-docker-runnerd/transport"
 )
 
@@ -71,6 +72,7 @@ func ReadCredentials(path string) (Credentials, ed25519.PrivateKey, error) {
 }
 
 type HostRemote struct {
+	Telemetry        func(context.Context) *telemetry.Sample
 	Client           *transport.Client
 	Credentials      Credentials
 	Key              ed25519.PrivateKey
@@ -208,7 +210,13 @@ func (r *HostRemote) Heartbeat(ctx context.Context, generation string) error {
 	capabilities := r.Capabilities
 	capabilities.ObservedAt = time.Now().UTC().Format(wireTime)
 	capabilities.ProbeGeneration = generation
-	m, e := protocol.EncodeValidated("HostHeartbeat", map[string]any{"identity": r.Credentials.Identity, "agentVersion": r.Version, "protocolVersion": "1.0.0", "inventoryGeneration": generation, "effectivePolicyGeneration": r.PolicyGeneration(), "capabilities": capabilities})
+	payload := map[string]any{"identity": r.Credentials.Identity, "agentVersion": r.Version, "protocolVersion": "1.0.0", "inventoryGeneration": generation, "effectivePolicyGeneration": r.PolicyGeneration(), "capabilities": capabilities}
+	if r.Telemetry != nil {
+		if sample := r.Telemetry(ctx); sample != nil {
+			payload["telemetry"] = sample
+		}
+	}
+	m, e := protocol.EncodeValidated("HostHeartbeat", payload)
 	if e != nil {
 		return e
 	}

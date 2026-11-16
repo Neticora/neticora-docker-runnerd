@@ -13,6 +13,7 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/internal/dockerengine"
 	"github.com/Neticora/neticora-docker-runnerd/internal/execution"
 	"github.com/Neticora/neticora-docker-runnerd/internal/onboarding"
+	"github.com/Neticora/neticora-docker-runnerd/internal/telemetry"
 	"github.com/Neticora/neticora-docker-runnerd/transport"
 )
 
@@ -83,6 +84,12 @@ func connect(ctx context.Context, c config.Config, status *connectionStatus, loc
 		return
 	}
 	observer := &inventoryObserver{runtime: engine, remote: client, identity: credentials.Identity, endpoint: credentials.EndpointIdentity, localEmpty: localEmpty, hostname: os.Hostname, now: time.Now}
+	paths := append([]string{c.StateDir}, c.ObservationPaths...)
+	if c.Execution != nil {
+		paths = append(paths, c.Execution.StorageRoot)
+		paths = append(paths, c.Execution.RuntimeStoragePaths...)
+	}
+	sampler := &telemetry.Sampler{Paths: paths}
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -117,7 +124,8 @@ func connect(ctx context.Context, c config.Config, status *connectionStatus, loc
 				report, _ := observer.observe(requestCtx, access)
 				status.setInventory(report)
 				capabilities := protocol.HostCapabilities{Host: protocol.Platform{Os: "linux", Architecture: protocol.PlatformArchitecture(runtime.GOARCH), Build: "unqualified"}, Engine: protocol.Platform{Os: "linux", Architecture: protocol.PlatformArchitecture(runtime.GOARCH), Build: "unqualified"}, EndpointIdentity: binding, RuntimeVersion: "unqualified-observation", ConfigurationGeneration: "1", ProbeGeneration: "1", ObservedAt: time.Now().UTC().Format("2006-01-02T15:04:05.000Z"), Profiles: []string{}, SupportedImageFamilies: []string{}, RuntimeMechanism: "docker", Capacity: protocol.ResourceBudget{CpuMillis: "0", MemoryBytes: "0", StorageBytes: "0", Slots: "0"}}
-				m, x := protocol.EncodeValidated("HostHeartbeat", map[string]any{"identity": credentials.Identity, "agentVersion": execution.Version(), "protocolVersion": "1.0.0", "inventoryGeneration": report.Generation, "effectivePolicyGeneration": proposal.Policy.Generation, "capabilities": capabilities})
+				sample := sampler.Collect(requestCtx, binding, engine, nil, report.State == "accepted")
+				m, x := protocol.EncodeValidated("HostHeartbeat", map[string]any{"telemetry": sample, "identity": credentials.Identity, "agentVersion": execution.Version(), "protocolVersion": "1.0.0", "inventoryGeneration": report.Generation, "effectivePolicyGeneration": proposal.Policy.Generation, "capabilities": capabilities})
 				err = x
 				if err == nil {
 					_, err = client.Post(requestCtx, "/me/heartbeat", access, m, "ConfigResponse")

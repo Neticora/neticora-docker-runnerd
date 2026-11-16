@@ -22,6 +22,7 @@ type Config struct {
 	RequestTimeoutSeconds int         `json:"requestTimeoutSeconds"`
 	Execution             *Execution  `json:"execution,omitempty"`
 	Connection            *Connection `json:"connection,omitempty"`
+	ObservationPaths      []string    `json:"observationPaths,omitempty"`
 }
 
 // Connection enables authenticated observations only. It cannot pull commands,
@@ -93,6 +94,14 @@ func parse(data []byte, preparation bool) (Config, error) {
 	if err != nil || rel == "." || (rel != ".." && !bytes.HasPrefix([]byte(rel), []byte(".."+string(filepath.Separator)))) {
 		return Config{}, errors.New("credentials must remain outside state directory")
 	}
+	if len(c.ObservationPaths) > 32 {
+		return Config{}, errors.New("at most 32 filesystem observation paths")
+	}
+	for _, path := range c.ObservationPaths {
+		if !filepath.IsAbs(path) || filepath.Clean(path) != path || len(path) > 1024 {
+			return Config{}, errors.New("filesystem observation paths must be absolute and clean")
+		}
+	}
 	if c.RequestTimeoutSeconds < 1 || c.RequestTimeoutSeconds > 60 {
 		return Config{}, errors.New("request timeout must be between 1 and 60 seconds")
 	}
@@ -104,8 +113,8 @@ func parse(data []byte, preparation bool) (Config, error) {
 	}
 	if x := c.Execution; x != nil && (x.Enabled || preparation) {
 		if x.StorageRoot != "" {
-			if !filepath.IsAbs(x.StorageRoot) || filepath.Clean(x.StorageRoot) != x.StorageRoot || x.StorageRoot == "/" || len(x.RuntimeStoragePaths) == 0 {
-				return Config{}, errors.New("disk execution storage requires an explicit root and independently verified Docker backing paths")
+			if !filepath.IsAbs(x.StorageRoot) || filepath.Clean(x.StorageRoot) != x.StorageRoot || x.StorageRoot == "/" {
+				return Config{}, errors.New("execution storage requires an explicit private directory")
 			}
 			for _, path := range append([]string{c.StateDir, c.CredentialFile, x.BootstrapRoot, x.KeysDirectory, x.PolicyFile, x.CapabilitiesFile, x.TrustRoots, x.ImageBundles, x.CustomCAFile}, x.RuntimeStoragePaths...) {
 				if path == "" {
@@ -121,9 +130,8 @@ func parse(data []byte, preparation bool) (Config, error) {
 		} else if len(x.RuntimeStoragePaths) > 0 {
 			return Config{}, errors.New("backing path observations require execution storage root")
 		}
-		if x.MinRuntimeFreeBytes != 0 && x.MinRuntimeFreeBytes < 64<<20 {
-			return Config{}, errors.New("runtime storage headroom must be at least 64 MiB")
-		}
+		// Legacy headroom inputs are accepted for upgrades but have no scheduling
+		// effect. Storage capacity policy belongs to the customer.
 		for _, private := range []string{c.CredentialFile, x.KeysDirectory, x.PolicyFile, x.CapabilitiesFile, x.TrustRoots, x.ImageBundles, x.CustomCAFile} {
 			if private == "" {
 				continue

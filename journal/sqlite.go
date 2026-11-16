@@ -45,9 +45,8 @@ func (o Options) defaults() (Options, error) {
 	if limits != (agent.ReservationLimits{}) && (limits.CPUMillis == 0 || limits.MemoryBytes == 0 || limits.StorageBytes == 0 || limits.Slots == 0) {
 		return o, errors.New("incomplete reservation ceilings")
 	}
-	if o.MinFreeBytes == 0 {
-		o.MinFreeBytes = 64 << 20
-	}
+	// No mandatory free-space admission threshold. Explicit nonzero values are
+	// operator-selected journal headroom, not a Runnerd storage policy.
 	if o.MaxJournalBytes == 0 {
 		o.MaxJournalBytes = 1 << 30
 	}
@@ -379,12 +378,14 @@ func (s *SQLiteStore) acquireWithin(ctx context.Context, timeout time.Duration) 
 }
 
 func (s *SQLiteStore) capacity() error {
-	free, err := availableBytes(s.dir)
-	if err != nil {
-		return agent.ErrStoreUnavailable
-	}
-	if free < s.options.MinFreeBytes {
-		return agent.ErrCapacity
+	if s.options.MinFreeBytes > 0 {
+		free, err := availableBytes(s.dir)
+		if err != nil {
+			return agent.ErrStoreUnavailable
+		}
+		if free < s.options.MinFreeBytes {
+			return agent.ErrCapacity
+		}
 	}
 	var total int64
 	for _, name := range []string{databaseName, databaseName + "-wal", databaseName + "-shm"} {

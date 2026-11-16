@@ -12,7 +12,7 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/internal/standardlinux"
 )
 
-func TestRuntimePressureBlocksAdmissionButKeepsReceiptAndCleanup(t *testing.T) {
+func TestRuntimeUtilizationDoesNotOverrideCapacityOrCleanup(t *testing.T) {
 	c, runtime, _, execution := setup(t)
 	ctx := context.Background()
 	runtime.pressure = true
@@ -23,29 +23,24 @@ func TestRuntimePressureBlocksAdmissionButKeepsReceiptAndCleanup(t *testing.T) {
 	if c.Store.Health(ctx).Revision != before {
 		t.Fatal("receipt replay wrote journal")
 	}
-	next := storetest.Object(t, storetest.Start(t, "new"))
-	next["spec"].(map[string]any)["templateVersion"] = standardlinux.DiskTemplateVersion
-	if _, err := c.accept(ctx, storetest.Encode(t, "HostCommand", next)); !errors.Is(err, dockerengine.ErrStoragePressure) {
-		t.Fatal(err)
-	}
-	if err := c.execution(ctx, execution); !errors.Is(err, dockerengine.ErrStoragePressure) || runtime.creates != 0 {
-		t.Fatal(err)
-	}
-	runtime.pressure = false
-	if err := c.execution(ctx, execution); err != nil {
-		t.Fatal(err)
+	if err := c.execution(ctx, execution); err != nil || runtime.creates != 1 {
+		t.Fatal("utilization imposed storage admission policy", err)
 	}
 	execution = current(t, c)
-	runtime.pressure = true
 	command := storetest.Encode(t, "HostCommand", map[string]any{"commandId": "pressure-cleanup", "kind": "cleanup", "executionId": execution.Identity.ExecutionID, "generation": "1"})
 	if _, err := c.accept(ctx, command); err != nil {
-		t.Fatal("cleanup blocked by disk pressure", err)
+		t.Fatal("cleanup blocked by utilization", err)
 	}
 	if err := c.execution(ctx, execution); err != nil {
 		t.Fatal(err)
 	}
-	if row := current(t, c); row.State != "cleaned" || row.CleanupPending || runtime.starts != 1 {
-		t.Fatal("pressure lost cleanup", row.State)
+	if row := current(t, c); row.State != "cleaned" || row.CleanupPending {
+		t.Fatal("cleanup obligation lost")
+	}
+	next := storetest.Object(t, storetest.Start(t, "new"))
+	next["spec"].(map[string]any)["templateVersion"] = standardlinux.DiskTemplateVersion
+	if _, err := c.accept(ctx, storetest.Encode(t, "HostCommand", next)); err != nil {
+		t.Fatal("storage observation became admission policy", err)
 	}
 }
 

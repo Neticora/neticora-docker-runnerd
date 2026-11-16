@@ -18,6 +18,7 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/internal/dockerengine"
 	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
 	"github.com/Neticora/neticora-docker-runnerd/internal/standardlinux"
+	"github.com/Neticora/neticora-docker-runnerd/internal/telemetry"
 	"github.com/Neticora/neticora-docker-runnerd/journal"
 	"github.com/Neticora/neticora-docker-runnerd/transport"
 )
@@ -151,6 +152,34 @@ func Open(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drain
 		*ceilings[i] = min(*ceilings[i], limit)
 	}
 	controller.RuntimeStoragePaths = x.RuntimeStoragePaths
+	sampler := &telemetry.Sampler{Paths: append(append([]string{c.StateDir, x.StorageRoot}, c.ObservationPaths...), x.RuntimeStoragePaths...)}
+	// Observation timeouts must not invalidate the mutating runtime's journal
+	// checkpoint. This separate adapter has no invalidation/write callback.
+	metricsEngine, _ := dockerengine.OpenReadOnly(c.RuntimeEndpoint, credentials.InstallationID, func() {})
+	closeRuntime := cleanup
+	cleanup = func() {
+		if metricsEngine != nil {
+			metricsEngine.Close()
+		}
+		closeRuntime()
+	}
+	remote.Telemetry = func(ctx context.Context) *telemetry.Sample {
+		budget, cancel := context.WithTimeout(ctx, 6*time.Second)
+		defer cancel()
+		if metricsEngine == nil {
+			sample := sampler.Collect(budget, credentials.EndpointIdentity, nil, nil, false)
+			return &sample
+		}
+		endpoint, err := metricsEngine.Probe(budget)
+		if err != nil || endpoint != credentials.EndpointIdentity {
+			sample := sampler.Collect(budget, credentials.EndpointIdentity, nil, nil, false)
+			return &sample
+		}
+		targets, complete := controller.telemetryTargets(budget, metricsEngine)
+		sample := sampler.Collect(budget, credentials.EndpointIdentity, metricsEngine, targets, complete)
+		return &sample
+	}
+
 	controller.Repository = x.Repository
 	controller.MinRuntimeFreeBytes = x.MinRuntimeFreeBytes
 	return controller, cleanup, nil

@@ -50,3 +50,6 @@ inventory alone cannot satisfy these requirements.
 For new Standard executions, provision and independently qualify the
 [disk-backed storage lifecycle](EXECUTION-STORAGE.md) before activation.
 Legacy tmpfs-template acceptance remains recovery evidence only.
+
+Storage readiness checks ownership and journal safety, not customer disk
+partitioning, Docker backend selection, quotas or free-space thresholds.

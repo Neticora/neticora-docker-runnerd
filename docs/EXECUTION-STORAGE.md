@@ -16,41 +16,37 @@ a previous tmpfs-template approval does not authorize it.
 
 ## Operator provisioning
 
-Use a dedicated customer-managed filesystem for job data and Docker's actual
-writable backing storage, separate from the OS and protected Runnerd journal.
-Cleanup reclaims finished work; it cannot stop an active job filling a filesystem.
-Runnerd neither formats storage nor reconfigures or restarts Docker.
+Customers choose their filesystem layout, Docker storage backend, capacity and
+monitoring policy. A workspace, Docker data and protected journal may use the
+same filesystem. No dedicated disk/partition, quota or snapshotter is required.
+Cleanup cannot prevent an active job from filling shared storage. Runnerd never
+formats storage, changes Docker units/configuration or cancels work for disk use.
 
-Provision the execution root for the configured nonroot service UID/GID:
+Provision a private execution directory for the nonroot service account, for
+example on the existing root filesystem:
 
 ```bash
 sudo install -d -o neticora-runnerd -g neticora-runnerd -m 0700 \
   /mnt/neticora-runners/executions
 ```
 
-Add these fields to the existing complete, **inactive** execution configuration:
+`/mnt/neticora-runners` is an ordinary example directory, not a mount requirement.
+Set `execution.storageRoot` to that absolute path in the existing complete inactive
+configuration. Directory ownership, safe ancestors and separation from credentials,
+trust and the journal remain security requirements; separate filesystems do not.
 
-```json
-{
-  "storageRoot": "/mnt/neticora-runners/executions",
-  "runtimeStoragePaths": ["/var/lib/docker", "/var/lib/containerd"],
-  "minRuntimeFreeBytes": 268435456
-}
-```
-
-The example backing paths are not discovery or installation instructions. An
-administrator/independent qualifier must verify the running Docker backend and
-containerd configuration and replace them with **all actual backing paths**.
-With a containerd snapshotter, Docker's `DockerRootDir` alone is insufficient.
-Unreadable, missing, low-space or low-inode paths block new work. These checks
-only observe free space; they do not prove a quota or whole-host storage bound.
-Custom snapshotter relocation or unverified backing-path lists are unqualified.
+Optional top-level `observationPaths` adds up to 32 absolute paths for filesystem
+measurements. Default observations include `/`, the journal, configured workspaces
+and DockerRootDir when available. Paths can share the same filesystem; observations
+are not additive. There is no mandatory Docker/containerd backing-path list.
+Legacy `execution.runtimeStoragePaths` remains an optional observation list;
+`execution.minRuntimeFreeBytes` is accepted for upgrades but ignored by admission.
 
 The shipped unit permits writes to the default execution root. A custom root
 requires a reviewed systemd `ReadWritePaths` drop-in. Do not relax protection of
-the journal, credentials or host filesystem. The root must already exist on a
-supported local durable filesystem, with safe ancestors and private ownership;
-trust, bootstrap, Docker backing paths and journal must not overlap it.
+the journal, credentials or host filesystem. The root must exist with safe ancestors and private ownership. Trust, bootstrap
+and journal directories must not overlap it. Filesystems must support the required
+ownership, confined-open and durability operations; uncertainty fails closed.
 
 ## Cleanup and recovery
 
@@ -100,12 +96,17 @@ commands and immutable plans remain recoverable under their original semantics.
 Docker restart/endpoint change and unsupported reboot transitions retain the
 existing authoritative recovery fence, never silently adopt a new daemon.
 
-Low space/inodes stop new admission; below 64 MiB or 128 free inodes requires
-operator intervention. Authorized cleanup/reporting remain
-available. Space pressure is also checked during reconciliation of running work.
-Preserve protected recovery evidence on disk-full errors; never fabricate cleanup
-success or force-release a reservation. Inspect the reported pressure/quarantine
-reason and the original journal before any operator recovery action.
+There is no mandatory disk-usage/free-space admission threshold and no automatic
+cancellation based on utilization. The protected journal's default free-space
+margin is zero; explicitly configured journal maintenance/headroom options remain
+operator choices. Journal/outbox size bounds, authenticated qualified capacity,
+CPU/memory/PID/concurrency controls and original ownership fences remain intact.
+An actual failed durable write, failed fsync, uncertain anchor or unverifiable
+cleanup keeps the original obligation and prevents unsafe acknowledgment/reuse.
+Never reset a journal or force-release a reservation after disk exhaustion.
+
+[Resource observations](RESOURCE-TELEMETRY.md) provide timestamped measurements
+for customer monitoring. They neither qualify a host nor determine admission.
 
 ## Package compatibility
 

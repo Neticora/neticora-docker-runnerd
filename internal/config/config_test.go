@@ -28,7 +28,7 @@ func TestStrictConfiguration(t *testing.T) {
 	}
 }
 
-func TestRuntimeHeadroomConfigurationCannotDisableProtectedMargin(t *testing.T) {
+func TestLegacyHeadroomInputDoesNotImposeStoragePolicy(t *testing.T) {
 	c, err := Parse([]byte(valid))
 	if err != nil {
 		t.Fatal(err)
@@ -41,7 +41,7 @@ func TestRuntimeHeadroomConfigurationCannotDisableProtectedMargin(t *testing.T) 
 			t.Fatal(err)
 		}
 		_, err = Parse(raw)
-		valid := minimum == 0 || minimum >= 64<<20
+		valid := true
 		if (err == nil) != valid {
 			t.Fatalf("invalid margin validation: %d %v", minimum, err)
 		}
@@ -61,7 +61,7 @@ func TestPreparationValidatesDisabledConfigurationBeforeActivation(t *testing.T)
 	if _, err = ParsePreparation(raw); err != nil {
 		t.Fatal(err)
 	}
-	for _, mutate := range []func(*Execution){func(x *Execution) { x.Enabled = true }, func(x *Execution) { x.PidsLimit = 0 }, func(x *Execution) { x.NetworkID = "host" }, func(x *Execution) { x.NetworkID = "container:other" }, func(x *Execution) { x.ImageRepository = "image@sha256:unapproved" }, func(x *Execution) { x.PolicyFile = "relative" }, func(x *Execution) { x.BootstrapRoot = "/etc/runnerd" }, func(x *Execution) { x.Repository = "other/repo" }, func(x *Execution) { x.TrustProvisionedAt = "invalid" }, func(x *Execution) { x.MinRuntimeFreeBytes = 1 }} {
+	for _, mutate := range []func(*Execution){func(x *Execution) { x.Enabled = true }, func(x *Execution) { x.PidsLimit = 0 }, func(x *Execution) { x.NetworkID = "host" }, func(x *Execution) { x.NetworkID = "container:other" }, func(x *Execution) { x.ImageRepository = "image@sha256:unapproved" }, func(x *Execution) { x.PolicyFile = "relative" }, func(x *Execution) { x.BootstrapRoot = "/etc/runnerd" }, func(x *Execution) { x.Repository = "other/repo" }, func(x *Execution) { x.TrustProvisionedAt = "invalid" }} {
 		candidate := c
 		copy := *c.Execution
 		candidate.Execution = &copy
@@ -93,7 +93,7 @@ func TestDiskStorageCannotExposeJournalSecretsOrDockerBackingPaths(t *testing.T)
 	c.Execution.StorageRoot = "/mnt/neticora-runners/executions"
 	c.Execution.RuntimeStoragePaths = nil
 	raw, _ = json.Marshal(c)
-	if _, err = ParsePreparation(raw); err == nil {
-		t.Fatal("unobserved Docker backing accepted")
+	if _, err = ParsePreparation(raw); err != nil {
+		t.Fatal("optional backing observations became topology requirement", err)
 	}
 }

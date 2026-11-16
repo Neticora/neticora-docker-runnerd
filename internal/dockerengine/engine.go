@@ -205,8 +205,8 @@ func (e *Engine) check(ctx context.Context) error {
 	return nil
 }
 
-// CheckHeadroom fences new work only. Cleanup/reporting remain available under
-// pressure. This does not establish aggregate hard storage isolation.
+// CheckHeadroom is an explicit diagnostic helper, never called by Runnerd
+// admission or cleanup. Customers own their storage-capacity policy.
 func (e *Engine) CheckHeadroom(ctx context.Context, minimum uint64) error {
 	if err := e.check(ctx); err != nil {
 		return err
