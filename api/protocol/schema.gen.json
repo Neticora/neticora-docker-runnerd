@@ -3494,8 +3494,7 @@
             "$ref": "#/components/schemas/ConnectionResyncIntent"
           },
           "issuedAt": {
-            "type": "string",
-            "format": "date-time"
+            "$ref": "#/components/schemas/Timestamp"
           },
           "nonce": {
             "type": "string",

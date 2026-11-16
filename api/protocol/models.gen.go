@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/oapi-codegen/nullable"
 	"github.com/oapi-codegen/runtime"
@@ -1137,7 +1136,7 @@ type ConnectionResyncIntentDomain string
 type ConnectionResyncProof struct {
 	Domain            ConnectionResyncProofDomain            `json:"domain"`
 	InventoryComplete ConnectionResyncProofInventoryComplete `json:"inventoryComplete"`
-	IssuedAt          time.Time                              `json:"issuedAt"`
+	IssuedAt          Timestamp                              `json:"issuedAt"`
 	JournalEmpty      ConnectionResyncProofJournalEmpty      `json:"journalEmpty"`
 	Nonce             string                                 `json:"nonce"`
 	OwnedResourceIds  []string                               `json:"ownedResourceIds"`
