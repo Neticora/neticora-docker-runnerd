@@ -736,6 +736,10 @@
           },
           "capabilities": {
             "$ref": "#/components/schemas/HostCapabilities"
+          },
+          "telemetry": {
+            "$ref": "#/components/schemas/ResourceTelemetry",
+            "description": "Authenticated, timestamped observations only. Never execution qualification, capacity, cleanup evidence or scheduling policy. Optional for older agents."
           }
         },
         "required": [
@@ -2825,6 +2829,522 @@
           "tenantId",
           "runnerDeploymentId",
           "priorTokenHashes"
+        ],
+        "additionalProperties": false
+      },
+      "CpuUsageObservation": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "host"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "proc-stat-delta"
+            ]
+          },
+          "observedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "unavailable",
+              "unsupported",
+              "warming-up"
+            ]
+          },
+          "logicalCores": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 1048576
+          },
+          "utilizationBasisPoints": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "sampleMilliseconds": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "scope",
+          "source",
+          "observedAt",
+          "status",
+          "logicalCores",
+          "utilizationBasisPoints",
+          "sampleMilliseconds"
+        ],
+        "additionalProperties": false
+      },
+      "MemoryUsageObservation": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "host"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "proc-meminfo"
+            ]
+          },
+          "observedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "unavailable",
+              "unsupported",
+              "warming-up"
+            ]
+          },
+          "totalBytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "availableBytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "usedBytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "scope",
+          "source",
+          "observedAt",
+          "status",
+          "totalBytes",
+          "availableBytes",
+          "usedBytes"
+        ],
+        "additionalProperties": false
+      },
+      "FilesystemUsageObservation": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "filesystem"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "statfs"
+            ]
+          },
+          "observedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "unavailable",
+              "unsupported",
+              "warming-up"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "filesystemId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 128
+          },
+          "totalBytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "freeBytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "availableBytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "usedBytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "totalInodes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "freeInodes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "scope",
+          "source",
+          "observedAt",
+          "status",
+          "path",
+          "filesystemId",
+          "totalBytes",
+          "freeBytes",
+          "availableBytes",
+          "usedBytes",
+          "totalInodes",
+          "freeInodes"
+        ],
+        "additionalProperties": false
+      },
+      "DockerUsageObservation": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "docker-daemon"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "docker-system-df"
+            ]
+          },
+          "observedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "unavailable",
+              "unsupported",
+              "warming-up"
+            ]
+          },
+          "imagesBytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "writableLayersBytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "volumesBytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "buildCacheBytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "containers": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "activeContainers": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "scope",
+          "source",
+          "observedAt",
+          "status",
+          "imagesBytes",
+          "writableLayersBytes",
+          "volumesBytes",
+          "buildCacheBytes",
+          "containers",
+          "activeContainers"
+        ],
+        "additionalProperties": false
+      },
+      "ExecutionUsageObservation": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "execution"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "docker-container-stats"
+            ]
+          },
+          "observedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "unavailable",
+              "unsupported",
+              "warming-up"
+            ]
+          },
+          "executionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "generation": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "cpuUsageNanoseconds": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "memoryUsageBytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "memoryLimitBytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "writableLayerBytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pids": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "scope",
+          "source",
+          "observedAt",
+          "status",
+          "executionId",
+          "generation",
+          "resourceId",
+          "cpuUsageNanoseconds",
+          "memoryUsageBytes",
+          "memoryLimitBytes",
+          "writableLayerBytes",
+          "pids"
+        ],
+        "additionalProperties": false
+      },
+      "ResourceTelemetry": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "enum": [
+              "runnerd08-resource-observations-v1"
+            ]
+          },
+          "endpointIdentity": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "observedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "cpu": {
+            "$ref": "#/components/schemas/CpuUsageObservation"
+          },
+          "memory": {
+            "$ref": "#/components/schemas/MemoryUsageObservation"
+          },
+          "filesystems": {
+            "type": "array",
+            "maxItems": 32,
+            "items": {
+              "$ref": "#/components/schemas/FilesystemUsageObservation"
+            }
+          },
+          "docker": {
+            "$ref": "#/components/schemas/DockerUsageObservation"
+          },
+          "executionsComplete": {
+            "type": "boolean"
+          },
+          "executions": {
+            "type": "array",
+            "maxItems": 32,
+            "items": {
+              "$ref": "#/components/schemas/ExecutionUsageObservation"
+            }
+          }
+        },
+        "required": [
+          "version",
+          "endpointIdentity",
+          "observedAt",
+          "cpu",
+          "memory",
+          "filesystems",
+          "docker",
+          "executionsComplete",
+          "executions"
         ],
         "additionalProperties": false
       }

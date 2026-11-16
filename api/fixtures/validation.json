@@ -2339,5 +2339,904 @@
       "hostname": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     },
     "valid": false
+  },
+  {
+    "id": "resource-telemetry-observation",
+    "schema": "ResourceTelemetry",
+    "value": {
+      "version": "runnerd08-resource-observations-v1",
+      "endpointIdentity": "engine-a",
+      "observedAt": "2026-11-15T00:00:00.000Z",
+      "cpu": {
+        "scope": "host",
+        "source": "proc-stat-delta",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "available",
+        "logicalCores": 4,
+        "utilizationBasisPoints": 2400,
+        "sampleMilliseconds": "1000"
+      },
+      "memory": {
+        "scope": "host",
+        "source": "proc-meminfo",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "available",
+        "totalBytes": "4294967296",
+        "availableBytes": "2147483648",
+        "usedBytes": "2147483648"
+      },
+      "filesystems": [
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        }
+      ],
+      "docker": {
+        "scope": "docker-daemon",
+        "source": "docker-system-df",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "unsupported",
+        "imagesBytes": null,
+        "writableLayersBytes": null,
+        "volumesBytes": null,
+        "buildCacheBytes": null,
+        "containers": null,
+        "activeContainers": null
+      },
+      "executionsComplete": false,
+      "executions": []
+    },
+    "valid": true
+  },
+  {
+    "id": "heartbeat-with-resource-telemetry",
+    "schema": "HostHeartbeat",
+    "value": {
+      "identity": {
+        "hostId": "host-a",
+        "keyId": "key-a",
+        "keyVersion": "1",
+        "sessionEpoch": "1"
+      },
+      "agentVersion": "0.1.0",
+      "protocolVersion": "1.0.0",
+      "inventoryGeneration": "1",
+      "effectivePolicyGeneration": "1",
+      "capabilities": {
+        "host": {
+          "os": "linux",
+          "architecture": "amd64",
+          "build": "candidate"
+        },
+        "engine": {
+          "os": "linux",
+          "architecture": "amd64",
+          "build": "candidate"
+        },
+        "endpointIdentity": "engine-a",
+        "runtimeVersion": "candidate",
+        "configurationGeneration": "1",
+        "probeGeneration": "1",
+        "observedAt": "2026-10-25T00:00:00.000Z",
+        "profiles": [
+          "standard-linux-v1"
+        ],
+        "dockerBuild": false,
+        "hardStorageLimit": false,
+        "capacity": {
+          "cpuMillis": "1000",
+          "memoryBytes": "1073741824",
+          "storageBytes": "10737418240",
+          "slots": "1"
+        },
+        "supportedImageFamilies": [
+          "linux"
+        ],
+        "runtimeMechanism": "process"
+      },
+      "telemetry": {
+        "version": "runnerd08-resource-observations-v1",
+        "endpointIdentity": "engine-a",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "cpu": {
+          "scope": "host",
+          "source": "proc-stat-delta",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "logicalCores": 4,
+          "utilizationBasisPoints": 2400,
+          "sampleMilliseconds": "1000"
+        },
+        "memory": {
+          "scope": "host",
+          "source": "proc-meminfo",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "totalBytes": "4294967296",
+          "availableBytes": "2147483648",
+          "usedBytes": "2147483648"
+        },
+        "filesystems": [
+          {
+            "scope": "filesystem",
+            "source": "statfs",
+            "observedAt": "2026-11-15T00:00:00.000Z",
+            "status": "available",
+            "path": "/",
+            "filesystemId": "fixture-shared",
+            "totalBytes": "107374182400",
+            "freeBytes": "64424509440",
+            "availableBytes": "63350767616",
+            "usedBytes": "42949672960",
+            "totalInodes": "1000000",
+            "freeInodes": "900000"
+          }
+        ],
+        "docker": {
+          "scope": "docker-daemon",
+          "source": "docker-system-df",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "unsupported",
+          "imagesBytes": null,
+          "writableLayersBytes": null,
+          "volumesBytes": null,
+          "buildCacheBytes": null,
+          "containers": null,
+          "activeContainers": null
+        },
+        "executionsComplete": false,
+        "executions": []
+      }
+    },
+    "valid": true
+  },
+  {
+    "id": "resource-telemetry-reject-cpu-range",
+    "schema": "ResourceTelemetry",
+    "value": {
+      "version": "runnerd08-resource-observations-v1",
+      "endpointIdentity": "engine-a",
+      "observedAt": "2026-11-15T00:00:00.000Z",
+      "cpu": {
+        "scope": "host",
+        "source": "proc-stat-delta",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "available",
+        "logicalCores": 4,
+        "utilizationBasisPoints": 10001,
+        "sampleMilliseconds": "1000"
+      },
+      "memory": {
+        "scope": "host",
+        "source": "proc-meminfo",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "available",
+        "totalBytes": "4294967296",
+        "availableBytes": "2147483648",
+        "usedBytes": "2147483648"
+      },
+      "filesystems": [
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        }
+      ],
+      "docker": {
+        "scope": "docker-daemon",
+        "source": "docker-system-df",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "unsupported",
+        "imagesBytes": null,
+        "writableLayersBytes": null,
+        "volumesBytes": null,
+        "buildCacheBytes": null,
+        "containers": null,
+        "activeContainers": null
+      },
+      "executionsComplete": false,
+      "executions": []
+    },
+    "valid": false
+  },
+  {
+    "id": "resource-telemetry-reject-numeric-bytes",
+    "schema": "ResourceTelemetry",
+    "value": {
+      "version": "runnerd08-resource-observations-v1",
+      "endpointIdentity": "engine-a",
+      "observedAt": "2026-11-15T00:00:00.000Z",
+      "cpu": {
+        "scope": "host",
+        "source": "proc-stat-delta",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "available",
+        "logicalCores": 4,
+        "utilizationBasisPoints": 2400,
+        "sampleMilliseconds": "1000"
+      },
+      "memory": {
+        "scope": "host",
+        "source": "proc-meminfo",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "available",
+        "totalBytes": "4294967296",
+        "availableBytes": "2147483648",
+        "usedBytes": 9007199254740993
+      },
+      "filesystems": [
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        }
+      ],
+      "docker": {
+        "scope": "docker-daemon",
+        "source": "docker-system-df",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "unsupported",
+        "imagesBytes": null,
+        "writableLayersBytes": null,
+        "volumesBytes": null,
+        "buildCacheBytes": null,
+        "containers": null,
+        "activeContainers": null
+      },
+      "executionsComplete": false,
+      "executions": []
+    },
+    "valid": false
+  },
+  {
+    "id": "resource-telemetry-reject-negative-counter",
+    "schema": "ResourceTelemetry",
+    "value": {
+      "version": "runnerd08-resource-observations-v1",
+      "endpointIdentity": "engine-a",
+      "observedAt": "2026-11-15T00:00:00.000Z",
+      "cpu": {
+        "scope": "host",
+        "source": "proc-stat-delta",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "available",
+        "logicalCores": 4,
+        "utilizationBasisPoints": 2400,
+        "sampleMilliseconds": "1000"
+      },
+      "memory": {
+        "scope": "host",
+        "source": "proc-meminfo",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "available",
+        "totalBytes": "4294967296",
+        "availableBytes": "2147483648",
+        "usedBytes": "-1"
+      },
+      "filesystems": [
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        }
+      ],
+      "docker": {
+        "scope": "docker-daemon",
+        "source": "docker-system-df",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "unsupported",
+        "imagesBytes": null,
+        "writableLayersBytes": null,
+        "volumesBytes": null,
+        "buildCacheBytes": null,
+        "containers": null,
+        "activeContainers": null
+      },
+      "executionsComplete": false,
+      "executions": []
+    },
+    "valid": false
+  },
+  {
+    "id": "resource-telemetry-reject-authority-field",
+    "schema": "ResourceTelemetry",
+    "value": {
+      "version": "runnerd08-resource-observations-v1",
+      "endpointIdentity": "engine-a",
+      "observedAt": "2026-11-15T00:00:00.000Z",
+      "cpu": {
+        "scope": "host",
+        "source": "proc-stat-delta",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "available",
+        "logicalCores": 4,
+        "utilizationBasisPoints": 2400,
+        "sampleMilliseconds": "1000"
+      },
+      "memory": {
+        "scope": "host",
+        "source": "proc-meminfo",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "available",
+        "totalBytes": "4294967296",
+        "availableBytes": "2147483648",
+        "usedBytes": "2147483648"
+      },
+      "filesystems": [
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        }
+      ],
+      "docker": {
+        "scope": "docker-daemon",
+        "source": "docker-system-df",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "unsupported",
+        "imagesBytes": null,
+        "writableLayersBytes": null,
+        "volumesBytes": null,
+        "buildCacheBytes": null,
+        "containers": null,
+        "activeContainers": null
+      },
+      "executionsComplete": false,
+      "executions": [],
+      "admissionEnabled": true
+    },
+    "valid": false
+  },
+  {
+    "id": "resource-telemetry-reject-filesystem-bound",
+    "schema": "ResourceTelemetry",
+    "value": {
+      "version": "runnerd08-resource-observations-v1",
+      "endpointIdentity": "engine-a",
+      "observedAt": "2026-11-15T00:00:00.000Z",
+      "cpu": {
+        "scope": "host",
+        "source": "proc-stat-delta",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "available",
+        "logicalCores": 4,
+        "utilizationBasisPoints": 2400,
+        "sampleMilliseconds": "1000"
+      },
+      "memory": {
+        "scope": "host",
+        "source": "proc-meminfo",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "available",
+        "totalBytes": "4294967296",
+        "availableBytes": "2147483648",
+        "usedBytes": "2147483648"
+      },
+      "filesystems": [
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        }
+      ],
+      "docker": {
+        "scope": "docker-daemon",
+        "source": "docker-system-df",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "unsupported",
+        "imagesBytes": null,
+        "writableLayersBytes": null,
+        "volumesBytes": null,
+        "buildCacheBytes": null,
+        "containers": null,
+        "activeContainers": null
+      },
+      "executionsComplete": false,
+      "executions": []
+    },
+    "valid": false
   }
 ]

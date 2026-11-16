@@ -29,6 +29,13 @@ func DecodeControlCommand(data []byte) (ControlCommand, error) {
 	return value, err
 }
 
+// DecodeCpuUsageObservation validates the original wire bytes before binding the generated model.
+func DecodeCpuUsageObservation(data []byte) (CpuUsageObservation, error) {
+	var value CpuUsageObservation
+	err := decode("CpuUsageObservation", data, &value)
+	return value, err
+}
+
 // DecodeCustomerManagedPolicy validates the original wire bytes before binding the generated model.
 func DecodeCustomerManagedPolicy(data []byte) (CustomerManagedPolicy, error) {
 	var value CustomerManagedPolicy
@@ -54,6 +61,13 @@ func DecodeDecimalString(data []byte) (DecimalString, error) {
 func DecodeDigest(data []byte) (Digest, error) {
 	var value Digest
 	err := decode("Digest", data, &value)
+	return value, err
+}
+
+// DecodeDockerUsageObservation validates the original wire bytes before binding the generated model.
+func DecodeDockerUsageObservation(data []byte) (DockerUsageObservation, error) {
+	var value DockerUsageObservation
+	err := decode("DockerUsageObservation", data, &value)
 	return value, err
 }
 
@@ -96,6 +110,20 @@ func DecodeEventBatch(data []byte) (EventBatch, error) {
 func DecodeExecutionSpec(data []byte) (ExecutionSpec, error) {
 	var value ExecutionSpec
 	err := decode("ExecutionSpec", data, &value)
+	return value, err
+}
+
+// DecodeExecutionUsageObservation validates the original wire bytes before binding the generated model.
+func DecodeExecutionUsageObservation(data []byte) (ExecutionUsageObservation, error) {
+	var value ExecutionUsageObservation
+	err := decode("ExecutionUsageObservation", data, &value)
+	return value, err
+}
+
+// DecodeFilesystemUsageObservation validates the original wire bytes before binding the generated model.
+func DecodeFilesystemUsageObservation(data []byte) (FilesystemUsageObservation, error) {
+	var value FilesystemUsageObservation
+	err := decode("FilesystemUsageObservation", data, &value)
 	return value, err
 }
 
@@ -159,6 +187,13 @@ func DecodeKeyRotationRequest(data []byte) (KeyRotationRequest, error) {
 func DecodeLocalPolicy(data []byte) (LocalPolicy, error) {
 	var value LocalPolicy
 	err := decode("LocalPolicy", data, &value)
+	return value, err
+}
+
+// DecodeMemoryUsageObservation validates the original wire bytes before binding the generated model.
+func DecodeMemoryUsageObservation(data []byte) (MemoryUsageObservation, error) {
+	var value MemoryUsageObservation
+	err := decode("MemoryUsageObservation", data, &value)
 	return value, err
 }
 
@@ -309,6 +344,13 @@ func DecodeResourceBudget(data []byte) (ResourceBudget, error) {
 	return value, err
 }
 
+// DecodeResourceTelemetry validates the original wire bytes before binding the generated model.
+func DecodeResourceTelemetry(data []byte) (ResourceTelemetry, error) {
+	var value ResourceTelemetry
+	err := decode("ResourceTelemetry", data, &value)
+	return value, err
+}
+
 // DecodeRuntimeObservation validates the original wire bytes before binding the generated model.
 func DecodeRuntimeObservation(data []byte) (RuntimeObservation, error) {
 	var value RuntimeObservation
@@ -391,16 +433,20 @@ var wireDecoders = map[string]func([]byte) (any, error){
 	"CommandAck":                   func(data []byte) (any, error) { return DecodeCommandAck(data) },
 	"ConfigResponse":               func(data []byte) (any, error) { return DecodeConfigResponse(data) },
 	"ControlCommand":               func(data []byte) (any, error) { return DecodeControlCommand(data) },
+	"CpuUsageObservation":          func(data []byte) (any, error) { return DecodeCpuUsageObservation(data) },
 	"CustomerManagedPolicy":        func(data []byte) (any, error) { return DecodeCustomerManagedPolicy(data) },
 	"CustomerPolicy":               func(data []byte) (any, error) { return DecodeCustomerPolicy(data) },
 	"DecimalString":                func(data []byte) (any, error) { return DecodeDecimalString(data) },
 	"Digest":                       func(data []byte) (any, error) { return DecodeDigest(data) },
+	"DockerUsageObservation":       func(data []byte) (any, error) { return DecodeDockerUsageObservation(data) },
 	"EnrollmentRequest":            func(data []byte) (any, error) { return DecodeEnrollmentRequest(data) },
 	"EnrollmentResponse":           func(data []byte) (any, error) { return DecodeEnrollmentResponse(data) },
 	"EnrollmentTokenReplacement":   func(data []byte) (any, error) { return DecodeEnrollmentTokenReplacement(data) },
 	"EventAck":                     func(data []byte) (any, error) { return DecodeEventAck(data) },
 	"EventBatch":                   func(data []byte) (any, error) { return DecodeEventBatch(data) },
 	"ExecutionSpec":                func(data []byte) (any, error) { return DecodeExecutionSpec(data) },
+	"ExecutionUsageObservation":    func(data []byte) (any, error) { return DecodeExecutionUsageObservation(data) },
+	"FilesystemUsageObservation":   func(data []byte) (any, error) { return DecodeFilesystemUsageObservation(data) },
 	"Generation":                   func(data []byte) (any, error) { return DecodeGeneration(data) },
 	"HostCapabilities":             func(data []byte) (any, error) { return DecodeHostCapabilities(data) },
 	"HostCommand":                  func(data []byte) (any, error) { return DecodeHostCommand(data) },
@@ -410,6 +456,7 @@ var wireDecoders = map[string]func([]byte) (any, error){
 	"InventorySnapshot":            func(data []byte) (any, error) { return DecodeInventorySnapshot(data) },
 	"KeyRotationRequest":           func(data []byte) (any, error) { return DecodeKeyRotationRequest(data) },
 	"LocalPolicy":                  func(data []byte) (any, error) { return DecodeLocalPolicy(data) },
+	"MemoryUsageObservation":       func(data []byte) (any, error) { return DecodeMemoryUsageObservation(data) },
 	"NeverStartedCommand":          func(data []byte) (any, error) { return DecodeNeverStartedCommand(data) },
 	"NeverStartedProof":            func(data []byte) (any, error) { return DecodeNeverStartedProof(data) },
 	"PeerRecoveryAbsenceWitness":   func(data []byte) (any, error) { return DecodePeerRecoveryAbsenceWitness(data) },
@@ -431,6 +478,7 @@ var wireDecoders = map[string]func([]byte) (any, error){
 	"RecoveryRequest":              func(data []byte) (any, error) { return DecodeRecoveryRequest(data) },
 	"RecoveryState":                func(data []byte) (any, error) { return DecodeRecoveryState(data) },
 	"ResourceBudget":               func(data []byte) (any, error) { return DecodeResourceBudget(data) },
+	"ResourceTelemetry":            func(data []byte) (any, error) { return DecodeResourceTelemetry(data) },
 	"RuntimeObservation":           func(data []byte) (any, error) { return DecodeRuntimeObservation(data) },
 	"RuntimeRef":                   func(data []byte) (any, error) { return DecodeRuntimeRef(data) },
 	"SignedPeerRecoveryApproval":   func(data []byte) (any, error) { return DecodeSignedPeerRecoveryApproval(data) },
