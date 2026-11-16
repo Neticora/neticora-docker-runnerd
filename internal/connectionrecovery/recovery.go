@@ -218,7 +218,7 @@ func (m *Manager) Step(ctx context.Context, original execution.Credentials) (exe
 	if err != nil {
 		return effective, id, "proof-unavailable", err
 	}
-	proof := protocol.ConnectionResyncProof{Domain: "neticora-runnerd-connection-resync-proof-v1", Request: r, IssuedAt: time.Now().UTC().Format("2006-01-02T15:04:05.000Z"), Nonce: nonce, JournalEmpty: true, InventoryComplete: true, OwnedResourceIds: []string{}}
+	proof := protocol.ConnectionResyncProof{Domain: "neticora-runnerd-connection-resync-proof-v1", Request: r, IssuedAt: time.Now().UTC().Format("2006-01-02T15:04:05.000Z"), Nonce: nonce, JournalSettled: true, InventoryComplete: true, OwnedResourceIds: []string{}}
 	canonical, err := peerrecovery.Canonical(proof)
 	if err != nil {
 		return effective, id, "proof-invalid", err

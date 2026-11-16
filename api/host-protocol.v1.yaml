@@ -3508,7 +3508,7 @@
           "request",
           "issuedAt",
           "nonce",
-          "journalEmpty",
+          "journalSettled",
           "inventoryComplete",
           "ownedResourceIds"
         ],
@@ -3531,12 +3531,6 @@
             "minLength": 48,
             "maxLength": 48
           },
-          "journalEmpty": {
-            "type": "boolean",
-            "enum": [
-              true
-            ]
-          },
           "inventoryComplete": {
             "type": "boolean",
             "enum": [
@@ -3551,6 +3545,12 @@
               "minLength": 1,
               "maxLength": 256
             }
+          },
+          "journalSettled": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
           }
         }
       },

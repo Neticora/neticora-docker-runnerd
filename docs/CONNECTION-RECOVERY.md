@@ -27,15 +27,17 @@ and enrollment credentials must exist for the shipped unit to start.
 ## Automatic observation transition
 
 The observer authenticates the current Docker daemon and verifies the original
-journal. This narrow path requires no local execution history, commands,
-reservations, storage ownership, signed recovery records or established execution
-scope, and no installation-labeled Docker objects. Historical execution hosts use
-the existing signed execution-recovery protocol, even when they appear idle.
+journal. This narrow path requires zero unresolved local executions, unacknowledged events,
+reservations, cleanup/storage ownership or signed recovery obligations, and no
+installation-labeled Docker objects. Completed immutable execution, command,
+cleanup and disposal history is retained and does not block ordinary recovery.
+Historical scope is checked against the original installation and retained unchanged.
 
 The platform independently checks the original key/enrollment/pool binding,
 source session/boot/endpoint and all execution, command, recovery, inventory and
-reservation obligations under the host row lock. Qualified capacity must remain
-zero, qualification absent, profiles empty and admission disabled. A never-reported
+reservation obligations under the host row lock. Admission must remain disabled. Recorded qualification, capacity and profiles
+are preserved; an old qualification is unusable on the new session/endpoint under
+the existing verifier. Recovery does not qualify or promote those records. A never-reported
 host may use its original-key-attested source endpoint only if it has no recorded
 inventory, qualification or capacity. Unknown or unresolved facts fail closed.
 
@@ -63,8 +65,7 @@ POST /api/v1/tenants/{tenantId}/runner-hosts/{hostId}/connection-resync/{operati
 ```
 
 Approval expires after fifteen minutes and may be renewed for the same operation.
-Approval cannot override unknown resources, unresolved obligations, execution
-history or qualification. Such cases remain fenced for operator investigation and
+Approval cannot override unknown resources or unresolved obligations. Such cases remain fenced for operator investigation and
 the existing genuine execution-recovery authorization process. No new signing
 authority or live qualification signer is introduced.
 

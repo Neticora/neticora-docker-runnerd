@@ -72,15 +72,15 @@ func (e ConnectionResyncProofInventoryComplete) Valid() bool {
 	}
 }
 
-// Defines values for ConnectionResyncProofJournalEmpty.
+// Defines values for ConnectionResyncProofJournalSettled.
 const (
-	ConnectionResyncProofJournalEmptyTrue ConnectionResyncProofJournalEmpty = true
+	ConnectionResyncProofJournalSettledTrue ConnectionResyncProofJournalSettled = true
 )
 
-// Valid indicates whether the value is a known member of the ConnectionResyncProofJournalEmpty enum.
-func (e ConnectionResyncProofJournalEmpty) Valid() bool {
+// Valid indicates whether the value is a known member of the ConnectionResyncProofJournalSettled enum.
+func (e ConnectionResyncProofJournalSettled) Valid() bool {
 	switch e {
-	case ConnectionResyncProofJournalEmptyTrue:
+	case ConnectionResyncProofJournalSettledTrue:
 		return true
 	default:
 		return false
@@ -1167,7 +1167,7 @@ type ConnectionResyncProof struct {
 	Domain            ConnectionResyncProofDomain            `json:"domain"`
 	InventoryComplete ConnectionResyncProofInventoryComplete `json:"inventoryComplete"`
 	IssuedAt          Timestamp                              `json:"issuedAt"`
-	JournalEmpty      ConnectionResyncProofJournalEmpty      `json:"journalEmpty"`
+	JournalSettled    ConnectionResyncProofJournalSettled    `json:"journalSettled"`
 	Nonce             string                                 `json:"nonce"`
 	OwnedResourceIds  []string                               `json:"ownedResourceIds"`
 	Request           ConnectionResyncIntent                 `json:"request"`
@@ -1179,8 +1179,8 @@ type ConnectionResyncProofDomain string
 // ConnectionResyncProofInventoryComplete defines model for ConnectionResyncProof.InventoryComplete.
 type ConnectionResyncProofInventoryComplete bool
 
-// ConnectionResyncProofJournalEmpty defines model for ConnectionResyncProof.JournalEmpty.
-type ConnectionResyncProofJournalEmpty bool
+// ConnectionResyncProofJournalSettled defines model for ConnectionResyncProof.JournalSettled.
+type ConnectionResyncProofJournalSettled bool
 
 // ConnectionResyncResponse defines model for ConnectionResyncResponse.
 type ConnectionResyncResponse struct {

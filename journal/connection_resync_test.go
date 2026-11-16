@@ -117,3 +117,52 @@ func TestConnectionReceiptPersistenceFailuresResumeExactOperation(t *testing.T) 
 		})
 	}
 }
+
+func TestSettledHistoricalRowsPermitObservationRecoveryWithoutReconciliation(t *testing.T) {
+	ctx := context.Background()
+	s := recovery(t, privateDir(t), Options{})
+	start := accepted(t, s)
+	if err := s.RequireCleanup(ctx, storetest.Scope, storetest.Event(t, start, 1, "cleanup-pending")); err != nil {
+		t.Fatal(err)
+	}
+	event := storetest.Event(t, start, 2, "cleaned")
+	if err := s.CompleteCleanup(ctx, storetest.Scope, event, storetest.Proof(t, event, "1")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AckEvents(ctx, storetest.Scope, agent.Watermark{ExecutionID: "exec-a", Generation: "1", ContiguousSequence: "2"}); err != nil {
+		t.Fatal(err)
+	}
+	// Restart before connection recovery: the old execution scope is historical,
+	// never a fresh checkpoint for the new observation session.
+	dir := s.dir
+	s.Close()
+	s, err := OpenRecovery(ctx, dir, testOptions(Options{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	var commandBefore, scopeBefore []byte
+	s.db.QueryRow("SELECT command FROM executions").Scan(&commandBefore)
+	s.db.QueryRow("SELECT scope FROM metadata").Scan(&scopeBefore)
+	intent := connectionIntent(t, s)
+	if err = s.BeginConnectionRecovery(ctx, intent); err != nil {
+		t.Fatal("completed history blocked", err)
+	}
+	h, _ := peerrecovery.Hash(intent)
+	receipt := protocol.ConnectionResyncResponse{OperationId: intent.OperationId, RequestHash: h, State: "committed", Reason: "observation-only-binding-committed", Identity: intent.Identity, TenantId: intent.TenantId, InstallationId: intent.InstallationId, RunnerDeploymentId: intent.RunnerDeploymentId, BootId: intent.TargetBootId, EndpointIdentity: intent.TargetEndpointIdentity}
+	receipt.Identity.SessionEpoch = "2"
+	if err = s.RecordConnectionRecovery(ctx, intent, receipt, true); err != nil {
+		t.Fatal(err)
+	}
+	var commandAfter, scopeAfter []byte
+	s.db.QueryRow("SELECT command FROM executions").Scan(&commandAfter)
+	s.db.QueryRow("SELECT scope FROM metadata").Scan(&scopeAfter)
+	if string(commandBefore) != string(commandAfter) || string(scopeBefore) != string(scopeAfter) || s.Health(ctx).Ready {
+		t.Fatal("history or execution checkpoint changed")
+	}
+	var released bool
+	s.db.QueryRow("SELECT released FROM reservations").Scan(&released)
+	if !released {
+		t.Fatal("completed historical release changed")
+	}
+}

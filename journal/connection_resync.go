@@ -18,24 +18,56 @@ type ConnectionRecovery struct {
 	Completed bool
 }
 
-// Connection-only recovery refuses ANY execution history or established execution
-// scope. Such installations must use the existing signed execution peer recovery.
-// This method cannot reconcile a journal or establish execution readiness.
-func connectionEmpty(ctx context.Context, q recoveryReader) error {
-	for _, table := range []string{"executions", "commands", "reservations", "start_intents", "outbox_events", "cleanup_tasks", "execution_storage", "peer_recovery_approvals", "peer_recovery_completion_intents"} {
-		var n int
-		if err := q.QueryRowContext(ctx, "SELECT count(*) FROM "+table).Scan(&n); err != nil {
+// Completed immutable history is retained. Only unresolved obligations block
+// observation recovery; metadata scope and historical resource identities remain
+// unchanged and are never used as a new execution checkpoint.
+func connectionSettled(ctx context.Context, q recoveryReader) error {
+	checks := []string{
+		"SELECT EXISTS(SELECT 1 FROM executions WHERE json_valid(identity)=0 OR json_valid(command)=0)",
+		"SELECT EXISTS(SELECT 1 FROM executions WHERE state<>'cleaned' OR runtime_terminal<>1 OR cleanup_pending<>0 OR last_sequence<>ack_sequence)",
+		"SELECT EXISTS(SELECT 1 FROM reservations WHERE released<>1)",
+		"SELECT EXISTS(SELECT 1 FROM outbox_events o JOIN executions e USING(execution_id,generation) WHERE o.sequence>e.ack_sequence OR o.payload IS NOT NULL)",
+		"SELECT EXISTS(SELECT 1 FROM cleanup_tasks WHERE complete<>1 OR evidence IS NULL OR json_valid(evidence)=0)",
+		"SELECT EXISTS(SELECT 1 FROM execution_storage WHERE state<>'disposed' OR json_valid(record)=0)",
+		"SELECT EXISTS(SELECT 1 FROM peer_recovery_approvals WHERE completed=0 AND superseded=0)",
+		"SELECT EXISTS(SELECT 1 FROM peer_recovery_completion_intents i JOIN peer_recovery_approvals a USING(approval_id) WHERE a.completed=0 AND a.superseded=0)",
+	}
+	for _, query := range checks {
+		var unresolved bool
+		if err := q.QueryRowContext(ctx, query).Scan(&unresolved); err != nil {
 			return err
 		}
-		if n != 0 {
+		if unresolved {
 			return agent.ErrRecoveryRequired
 		}
 	}
-	var scope []byte
-	if err := q.QueryRowContext(ctx, "SELECT scope FROM metadata WHERE singleton=1").Scan(&scope); err != nil {
+	var raw []byte
+	var history bool
+	if err := q.QueryRowContext(ctx, "SELECT scope,EXISTS(SELECT 1 FROM executions) FROM metadata WHERE singleton=1").Scan(&raw, &history); err != nil {
 		return err
 	}
-	if len(scope) != 0 {
+	if len(raw) == 0 {
+		if history {
+			return agent.ErrRecoveryRequired
+		}
+		return nil
+	}
+	var scope agent.StoreScope
+	if json.Unmarshal(raw, &scope) != nil || !validScope(scope) {
+		return agent.ErrRecoveryRequired
+	}
+	return nil
+}
+func connectionHistoryBinding(ctx context.Context, q recoveryReader, intent protocol.ConnectionResyncIntent) error {
+	var raw []byte
+	if err := q.QueryRowContext(ctx, "SELECT scope FROM metadata WHERE singleton=1").Scan(&raw); err != nil {
+		return err
+	}
+	if len(raw) == 0 {
+		return nil
+	}
+	var scope agent.StoreScope
+	if json.Unmarshal(raw, &scope) != nil || scope.InstallationID != intent.InstallationId || scope.TenantID != intent.TenantId || scope.HostID != intent.Identity.HostId || padded(scope.SessionEpoch) > padded(intent.Identity.SessionEpoch) {
 		return agent.ErrRecoveryRequired
 	}
 	return nil
@@ -50,7 +82,25 @@ func (s *SQLiteStore) ConnectionRecovery(ctx context.Context) (*ConnectionRecove
 	if s.failed.Load() || s.checkFiles() != nil {
 		return nil, agent.ErrStoreUnavailable
 	}
-	if err = connectionEmpty(ctx, s.db); err != nil {
+	if !s.anchorUncertain {
+		if err = s.receiptIntegrity(ctx); err != nil {
+			return nil, err
+		}
+	}
+	rows, e := s.db.QueryContext(ctx, "PRAGMA foreign_key_check")
+	if e != nil {
+		return nil, e
+	}
+	violation := rows.Next()
+	rowErr := rows.Err()
+	rows.Close()
+	if rowErr != nil {
+		return nil, rowErr
+	}
+	if violation {
+		return nil, agent.ErrRecoveryRequired
+	}
+	if err = connectionSettled(ctx, s.db); err != nil {
 		return nil, err
 	}
 	var raw, response []byte
@@ -86,6 +136,13 @@ func (s *SQLiteStore) ConnectionRecovery(ctx context.Context) (*ConnectionRecove
 	if completed && result.Receipt == nil {
 		return nil, agent.ErrRecoveryRequired
 	}
+	historyIntent := intent
+	if completed && result.Receipt != nil {
+		historyIntent.Identity = result.Receipt.Identity
+	}
+	if err = connectionHistoryBinding(ctx, s.db, historyIntent); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
@@ -101,7 +158,10 @@ func (s *SQLiteStore) BeginConnectionRecovery(ctx context.Context, intent protoc
 		return err
 	}
 	return s.transaction(ctx, false, false, false, func(ctx context.Context, tx *sql.Tx) error {
-		if err := connectionEmpty(ctx, tx); err != nil {
+		if err := connectionSettled(ctx, tx); err != nil {
+			return err
+		}
+		if err := connectionHistoryBinding(ctx, tx, intent); err != nil {
 			return err
 		}
 		if intent.JournalId != s.anchor.JournalID || intent.JournalRevision != strconv.FormatInt(s.anchor.Revision, 10) {
@@ -140,7 +200,7 @@ func (s *SQLiteStore) RecordConnectionRecovery(ctx context.Context, intent proto
 		return err
 	}
 	return s.transaction(ctx, false, false, true, func(ctx context.Context, tx *sql.Tx) error {
-		if err := connectionEmpty(ctx, tx); err != nil {
+		if err := connectionSettled(ctx, tx); err != nil {
 			return err
 		}
 		if prior.Receipt != nil {

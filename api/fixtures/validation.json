@@ -3294,9 +3294,9 @@
       },
       "issuedAt": "2026-11-16T00:00:00.000Z",
       "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "journalEmpty": true,
       "inventoryComplete": true,
-      "ownedResourceIds": []
+      "ownedResourceIds": [],
+      "journalSettled": true
     }
   },
   {
@@ -3328,11 +3328,11 @@
       },
       "issuedAt": "2026-11-16T00:00:00.000Z",
       "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "journalEmpty": true,
       "inventoryComplete": true,
       "ownedResourceIds": [
         "unknown"
-      ]
+      ],
+      "journalSettled": true
     }
   },
   {
@@ -3392,9 +3392,9 @@
         },
         "issuedAt": "2026-11-16T00:00:00.000Z",
         "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "journalEmpty": true,
         "inventoryComplete": true,
-        "ownedResourceIds": []
+        "ownedResourceIds": [],
+        "journalSettled": true
       },
       "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     }
