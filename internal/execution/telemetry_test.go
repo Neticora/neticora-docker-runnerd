@@ -31,7 +31,9 @@ func TestTelemetryOnlyObservesOriginalClaimsAndCannotReconcileUnknownResources(t
 	if after.Revision != before.Revision || r.creates != 1 || r.starts != 1 || r.stops != 0 || r.removes != 0 {
 		t.Fatal("observation changed original lifecycle")
 	}
-	c.Store.Invalidate(ctx, "test unknown recovery")
+	if err := c.Store.InvalidateRuntime(ctx); err != nil {
+		t.Fatal(err)
+	}
 	targets, complete = c.telemetryTargets(ctx, r)
 	if complete || len(targets) != 0 {
 		t.Fatal("unreconciled journal granted resource ownership")
