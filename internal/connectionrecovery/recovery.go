@@ -23,7 +23,7 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/journal"
 )
 
-var ErrBlocked = errors.New("connection resynchronization blocked; retain original operation and use administrator recovery")
+var ErrBlocked = errors.New("connection resynchronization blocked; retain original operation and intervention required where safety is uncertain")
 
 type Runtime interface {
 	Probe(context.Context) (string, error)

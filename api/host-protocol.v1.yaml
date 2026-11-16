@@ -439,7 +439,7 @@
       "post": {
         "operationId": "connectionResynchronize",
         "security": [],
-        "description": "Original Ed25519 key proves an exact persisted observation-only transition. Explicit tenant administrator approval and empty authoritative obligations are required. Grants no token, execution, cleanup or release authority.",
+        "description": "Original Ed25519 key proves one durable observation-only transition. Verified empty normal reboot transitions commit automatically; exceptional empty endpoint transitions require existing tenant administrative approval. Grants no token, execution, cleanup or release authority.",
         "requestBody": {
           "required": true,
           "content": {

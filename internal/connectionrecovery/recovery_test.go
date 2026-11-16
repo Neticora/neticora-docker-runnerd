@@ -203,3 +203,15 @@ func TestConcurrentRecoveryKeepsOneDurableOperation(t *testing.T) {
 		t.Fatal("concurrent operations conflicted", err)
 	}
 }
+
+func TestVerifiedRebootAcceptsImmediateAutomaticCommit(t *testing.T) {
+	m, original, remote := setup(t)
+	remote.approved = true
+	current, id, reason, err := m.Step(context.Background(), original)
+	if err != nil || reason != "committed" || id == "" || current.Identity.SessionEpoch != "2" {
+		t.Fatal("automatic result did not resume", reason, err)
+	}
+	if remote.calls != 1 || remote.commits != 1 || m.Store.Health(context.Background()).Ready {
+		t.Fatal("automatic observation changed execution authority")
+	}
+}

@@ -1,15 +1,15 @@
 # Connection-only reboot recovery
 
-An enrolled observation-only installation retains its installation ID, tenant,
-pool and original Ed25519 key across reboot. A new boot or authenticated Docker
-endpoint never silently becomes execution authority. Normal startup runs the
-read-only observer and waits for an explicitly approved observation transition.
+Customers enroll once and enable startup. Ordinary reboots automatically restore
+monitoring using the original installation ID, tenant, pool and Ed25519 key.
+No administrator approval is required for a verified clean connection-only reboot.
+Execution and genuine execution-recovery authorization remain separate.
 
-## Operator workflow
+## Startup
 
 Complete setup and answer **yes** to “Start Runnerd now and enable startup on
 boot?”. Package installation alone never starts or enables an unenrolled agent.
-For an already enrolled installation, run:
+For an already enrolled installation:
 
 ```sh
 sudo neticora-runnerd enable-startup
@@ -17,79 +17,106 @@ sudo systemctl start neticora-runnerd
 sudo neticora-runnerd status
 ```
 
-Startup is independent of execution qualification. `enable-startup` validates the
-protected enrolled configuration and only enables the systemd unit; it does not
-start it, change Docker access, or grant execution authority. Both configuration
+Startup is independent of qualification. `enable-startup` validates the protected
+enrolled configuration and enables the unit; it does not start it, grant Docker
+access or enable execution. If setup has never started the service, its empty
+journal may be initialized on the original enrollment boot only. Missing journal
+evidence after a boot change cannot be replaced by a fresh store. Both configuration
 and enrollment credentials must exist for the shipped unit to start.
 
-After boot/endpoint change, status reports `connection-resynchronization-blocked`,
-the exact `connectionRecoveryOperationId` and reason. A tenant superuser or platform
-administrator reviews the pending transition through the normal authenticated API:
+## Automatic observation transition
+
+The observer authenticates the current Docker daemon and verifies the original
+journal. This narrow path requires no local execution history, commands,
+reservations, storage ownership, signed recovery records or established execution
+scope, and no installation-labeled Docker objects. Historical execution hosts use
+the existing signed execution-recovery protocol, even when they appear idle.
+
+The platform independently checks the original key/enrollment/pool binding,
+source session/boot/endpoint and all execution, command, recovery, inventory and
+reservation obligations under the host row lock. Qualified capacity must remain
+zero, qualification absent, profiles empty and admission disabled. A never-reported
+host may use its original-key-attested source endpoint only if it has no recorded
+inventory, qualification or capacity. Unknown or unresolved facts fail closed.
+
+When both boot and authenticated Docker endpoint change consistently and all
+checks pass, the platform atomically commits the one immutable operation and
+advances the observation session exactly once. Old tokens and ordinary assertions
+for the old session are fenced. Heartbeats, hostname, continuous read-only inventory
+and telemetry resume. Inventory generation advances through the existing accepted
+generation protocol. State, qualification, capabilities/profiles, capacity,
+reservations, admission and execution recovery readiness are not promoted or
+rewritten by the transition. Fresh monitoring does not establish qualification.
+
+## Exceptional cases
+
+A same-boot Docker endpoint change or inconsistent boot/endpoint tuple does not
+use the normal reboot policy. For an otherwise verified empty installation, status
+shows `connection-resynchronization-blocked`, the exact operation ID and reason.
+A tenant superuser or platform administrator may review and approve that exact
+exception through the existing authenticated management API:
 
 ```text
 GET /api/v1/tenants/{tenantId}/runner-hosts/{hostId}/connection-resync
 POST /api/v1/tenants/{tenantId}/runner-hosts/{hostId}/connection-resync/{operationId}/approve
-{"requestHash":"<the exact listed payloadHash>","reason":"Reviewed observation-only reboot"}
+{"requestHash":"<the exact listed payloadHash>","reason":"Reviewed exceptional empty endpoint transition"}
 ```
 
-Review the installation/key fingerprint, old/new boot and endpoint, and journal
-identity. Approval expires in fifteen minutes; an administrator can renew the same
-operation. The service polls automatically and requires no new enrollment token.
-Approval is an audited existing tenant-administration action, not a qualification
-signature or a new signing authority. No live qualification signer is involved.
-A reboot will wait for this approval; startup enablement does not preapprove a
-future boot. Existing general administrative resynchronization and signed execution
-peer recovery retain their original meaning and are not bypassed by this flow.
+Approval expires after fifteen minutes and may be renewed for the same operation.
+Approval cannot override unknown resources, unresolved obligations, execution
+history or qualification. Such cases remain fenced for operator investigation and
+the existing genuine execution-recovery authorization process. No new signing
+authority or live qualification signer is introduced.
 
-## Safety boundary
+## Restricted recovery observations
 
-The narrow path requires an intact original journal with no execution history,
-commands, reservations, storage ownership or existing signed recovery records, and
-no established execution scope. Historical execution installations use the signed
-execution peer-recovery procedure, even when they appear idle. Missing/corrupt
-journal evidence, unknown installation-labeled Docker objects, outstanding platform
-resources/commands/operations, held capacity or an obsolete source session block.
-Unrelated customer Docker objects are outside installation-owned inventory; no
-universal trusted-host reference claim is made.
+A blocked connection may POST a fresh original-key signature to
+`/api/v1/runner-hosts/connection-status`. It uses the separate
+`neticora-runnerd-restricted-status-v1` purpose, not session authentication. The
+bounded proof contains installation/key binding, a diagnostic claimed epoch,
+observed boot/endpoint, operation ID and reason. It returns a diagnostic receipt
+only. No access token, command, cleanup permission, inventory acceptance or
+reservation-release authority exists on this channel.
 
-Both approval and commit use the same platform obligation verifier under the host
-row lock. Commit rechecks all conditions and active original enrollment/pool/key
-bindings. It advances the session once, revokes old access tokens, clears previous
-qualification/capacity and inventory freshness, and keeps the host pending with
-admission disabled. It never changes execution reservations or creates a command.
-Inventory generation is preserved and the ordinary accepted-generation protocol
-continues. Fresh inventory and metrics remain separate from qualification.
+The platform verifies the active original key and tenant/enrollment/pool binding,
+fresh timestamp and one-use nonce. The reported epoch is diagnostic context; an
+older value never becomes an accepted execution session. Future epochs reject.
+Only the latest `connectionRecoveryObservation` JSON column and short-lived replay
+record change. Heartbeat `lastSeenAt`, session/boot/endpoint, inventory, telemetry,
+qualification, capacity and admission stay unchanged. Exact timestamp replays do
+not refresh the measurement receipt. The tenant-authenticated host API exposes
+these observations with observed/received timestamps and an explicit
+`executionSessionAccepted:false` marker. Interpret them as timestamped reports,
+not current readiness or a substitute for normal heartbeat connectivity.
 
-The original credential file is immutable. A protected journal operation and
-`connection-binding.json` in the state directory hold the accepted observation
-binding. Only connection-only code and read-only diagnostics use that overlay;
-execution startup continues to require its original signed continuity procedure
-and authoritative execution checkpoint. Systemd needs no writable `/etc` exception.
+Reporting can run without opening or repairing a damaged journal. If the original
+key/configuration is unavailable or revoked, or the platform is offline, only local
+diagnostics are possible; there is no unauthenticated fallback. The nullable
+platform diagnostic-column migration is required before deploying that endpoint.
 
-## Persistence and recovery
+## Durable recovery
 
 Before HTTP, SQLite persists one random operation ID, canonical request/hash and
-original journal identity/revision through the normal WAL + anchor mechanism.
-Fresh purpose-scoped Ed25519 proofs authenticate that same operation on retries;
-short-lived proof nonces cannot be replayed as ordinary session assertions.
-The platform stores the immutable request in an existing operation row, records
-administrative approval through existing claim/state fields, and commits the new
-binding and terminal operation atomically. A committed response is deterministic.
+original journal identity/revision through the normal WAL and anchor mechanism.
+Fresh purpose-scoped Ed25519 proofs authenticate the same operation on retries.
+The platform stores the immutable request and commits the binding and terminal
+operation atomically. The committed response is deterministic. Repeated and
+concurrent requests cannot advance the session twice or silently accept old
+ordinary assertions.
 
-After receiving the exact committed response, the agent re-observes Docker,
-persists the receipt, atomically fsyncs the observation overlay, then records local
-completion. Failure at any step retains the same operation. Response loss uses a
-fresh signed proof to recover that original result. A lagging local anchor can be
-recovered only for its exact known connection operation after authenticated server
-confirmation; this never establishes execution readiness. A newer boot/endpoint
-during an unfinished operation blocks rather than allocating a replacement.
-Concurrent processes remain excluded by the existing installation lock.
+The original credential file remains immutable. After authenticated acceptance,
+the observer rechecks Docker, persists the receipt, atomically fsyncs
+`connection-binding.json`, then records completion. Failures retain the exact
+operation. A newer boot during an unfinished ambiguous operation blocks rather
+than allocating replacement authority. A lagging anchor is repaired only for its
+exact known transition after authenticated server confirmation; execution readiness
+is never established. The original installation lock excludes concurrent processes.
 
-Connection recovery never starts, adopts, stops or removes a Docker resource,
-ACKs work, releases a reservation, reconciles execution scope, or enables admission.
-Do not remove enrollment, journal, anchor, pending operation or overlay files to
-bypass a blocked transition. Preserve evidence and use administrative recovery.
+Only connection-only code and diagnostics use the observation overlay. Execution
+startup still requires its original signed continuity procedure and authoritative
+checkpoint. No writable `/etc` systemd exception is needed. Recovery never starts,
+adopts, stops or removes Docker resources, ACKs work, releases reservations, or
+reconciles execution scope. Preserve original evidence when blocked.
 
-The local schema adds `connection_resync` (version 5). Older binaries intentionally
-reject the newer schema; package rollback requires an independently reviewed state
-compatibility procedure, not deletion or downgrading of the journal.
+Local journal schema version 5 adds `connection_resync`. Older binaries reject it;
+rollback requires reviewed state compatibility, never deletion or journal downgrade.
