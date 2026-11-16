@@ -108,6 +108,36 @@ func (e ConnectionResyncResponseState) Valid() bool {
 	}
 }
 
+// Defines values for ConnectionStatusProofDomain.
+const (
+	ConnectionStatusProofDomainNeticoraRunnerdRestrictedStatusV1 ConnectionStatusProofDomain = "neticora-runnerd-restricted-status-v1"
+)
+
+// Valid indicates whether the value is a known member of the ConnectionStatusProofDomain enum.
+func (e ConnectionStatusProofDomain) Valid() bool {
+	switch e {
+	case ConnectionStatusProofDomainNeticoraRunnerdRestrictedStatusV1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConnectionStatusReceiptChannel.
+const (
+	ConnectionStatusReceiptChannelRestrictedInstallationObservation ConnectionStatusReceiptChannel = "restricted-installation-observation"
+)
+
+// Valid indicates whether the value is a known member of the ConnectionStatusReceiptChannel enum.
+func (e ConnectionStatusReceiptChannel) Valid() bool {
+	switch e {
+	case ConnectionStatusReceiptChannelRestrictedInstallationObservation:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ControlCommandKind.
 const (
 	ControlCommandKindCancel  ControlCommandKind = "cancel"
@@ -1169,6 +1199,38 @@ type ConnectionResyncResponse struct {
 // ConnectionResyncResponseState defines model for ConnectionResyncResponse.State.
 type ConnectionResyncResponseState string
 
+// ConnectionStatusProof defines model for ConnectionStatusProof.
+type ConnectionStatusProof struct {
+	Domain                   ConnectionStatusProofDomain `json:"domain"`
+	EnrollmentRequestId      string                      `json:"enrollmentRequestId"`
+	HostId                   string                      `json:"hostId"`
+	InstallationId           string                      `json:"installationId"`
+	KeyId                    string                      `json:"keyId"`
+	KeyVersion               UInt64String                `json:"keyVersion"`
+	Nonce                    string                      `json:"nonce"`
+	ObservedAt               Timestamp                   `json:"observedAt"`
+	ObservedBootId           string                      `json:"observedBootId"`
+	ObservedEndpointIdentity nullable.Nullable[string]   `json:"observedEndpointIdentity"`
+	OperationId              nullable.Nullable[string]   `json:"operationId"`
+	PublicKeyFingerprint     string                      `json:"publicKeyFingerprint"`
+	Reason                   string                      `json:"reason"`
+	ReportedSessionEpoch     UInt64String                `json:"reportedSessionEpoch"`
+	RunnerDeploymentId       string                      `json:"runnerDeploymentId"`
+	TenantId                 string                      `json:"tenantId"`
+}
+
+// ConnectionStatusProofDomain defines model for ConnectionStatusProof.Domain.
+type ConnectionStatusProofDomain string
+
+// ConnectionStatusReceipt defines model for ConnectionStatusReceipt.
+type ConnectionStatusReceipt struct {
+	Accepted bool                           `json:"accepted"`
+	Channel  ConnectionStatusReceiptChannel `json:"channel"`
+}
+
+// ConnectionStatusReceiptChannel defines model for ConnectionStatusReceipt.Channel.
+type ConnectionStatusReceiptChannel string
+
 // ControlCommand defines model for ControlCommand.
 type ControlCommand struct {
 	CommandId   string             `json:"commandId"`
@@ -1902,6 +1964,12 @@ type SignedConnectionResyncRequest struct {
 	Signature string                `json:"signature"`
 }
 
+// SignedConnectionStatus defines model for SignedConnectionStatus.
+type SignedConnectionStatus struct {
+	Proof     ConnectionStatusProof `json:"proof"`
+	Signature string                `json:"signature"`
+}
+
 // SignedPeerRecoveryApproval defines model for SignedPeerRecoveryApproval.
 type SignedPeerRecoveryApproval struct {
 	Manifest  PeerRecoveryApprovalManifest `json:"manifest"`
@@ -1981,6 +2049,9 @@ type LookupRecoveryState200JSONResponseBody struct {
 
 // ConnectionResynchronizeJSONRequestBody defines body for ConnectionResynchronize for application/json ContentType.
 type ConnectionResynchronizeJSONRequestBody = SignedConnectionResyncRequest
+
+// ConnectionStatusJSONRequestBody defines body for ConnectionStatus for application/json ContentType.
+type ConnectionStatusJSONRequestBody = SignedConnectionStatus
 
 // EnrollmentResponseEnrollJSONRequestBody defines body for EnrollmentResponseEnroll for application/json ContentType.
 type EnrollmentResponseEnrollJSONRequestBody = EnrollmentRequest

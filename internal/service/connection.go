@@ -123,6 +123,8 @@ func connect(ctx context.Context, c config.Config, status *connectionStatus, loc
 		current, operation, reason, err := manager.Step(requestCtx, credentials)
 		status.setRecovery(operation, reason, current.Identity.SessionEpoch, current.BootID, current.EndpointIdentity)
 		if err != nil {
+			observed, _ := engine.Probe(requestCtx)
+			_ = connectionrecovery.ReportBlocked(requestCtx, c, current, key, client, reason, operation, observed)
 			status.set("connection-resynchronization-blocked", "")
 			report, _ := status.inventoryStatus()
 			report.State = reason

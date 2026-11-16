@@ -3420,5 +3420,87 @@
       "bootId": "boot_current_0123456",
       "endpointIdentity": "engine-b"
     }
+  },
+  {
+    "id": "restricted-connection-status",
+    "schema": "ConnectionStatusProof",
+    "valid": true,
+    "value": {
+      "domain": "neticora-runnerd-restricted-status-v1",
+      "hostId": "host-a",
+      "keyId": "key-a",
+      "keyVersion": "1",
+      "tenantId": "tenant-a",
+      "installationId": "install-a",
+      "runnerDeploymentId": "pool-a",
+      "enrollmentRequestId": "enroll-a",
+      "publicKeyFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "reportedSessionEpoch": "1",
+      "observedBootId": "boot_current_012345",
+      "observedEndpointIdentity": null,
+      "operationId": null,
+      "reason": "unknown-runtime-resources",
+      "observedAt": "2026-11-16T00:00:00.000Z",
+      "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  },
+  {
+    "id": "restricted-connection-status-signed",
+    "schema": "SignedConnectionStatus",
+    "valid": true,
+    "value": {
+      "proof": {
+        "domain": "neticora-runnerd-restricted-status-v1",
+        "hostId": "host-a",
+        "keyId": "key-a",
+        "keyVersion": "1",
+        "tenantId": "tenant-a",
+        "installationId": "install-a",
+        "runnerDeploymentId": "pool-a",
+        "enrollmentRequestId": "enroll-a",
+        "publicKeyFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "reportedSessionEpoch": "1",
+        "observedBootId": "boot_current_012345",
+        "observedEndpointIdentity": null,
+        "operationId": null,
+        "reason": "unknown-runtime-resources",
+        "observedAt": "2026-11-16T00:00:00.000Z",
+        "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  {
+    "id": "restricted-connection-status-receipt",
+    "schema": "ConnectionStatusReceipt",
+    "valid": true,
+    "value": {
+      "accepted": true,
+      "channel": "restricted-installation-observation"
+    }
+  },
+  {
+    "id": "restricted-status-no-authority",
+    "schema": "ConnectionStatusProof",
+    "valid": false,
+    "value": {
+      "domain": "neticora-runnerd-restricted-status-v1",
+      "hostId": "host-a",
+      "keyId": "key-a",
+      "keyVersion": "1",
+      "tenantId": "tenant-a",
+      "installationId": "install-a",
+      "runnerDeploymentId": "pool-a",
+      "enrollmentRequestId": "enroll-a",
+      "publicKeyFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "reportedSessionEpoch": "1",
+      "observedBootId": "boot_current_012345",
+      "observedEndpointIdentity": null,
+      "operationId": null,
+      "reason": "unknown-runtime-resources",
+      "observedAt": "2026-11-16T00:00:00.000Z",
+      "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "admissionEnabled": true
+    }
   }
 ]

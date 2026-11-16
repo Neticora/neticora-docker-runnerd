@@ -463,6 +463,35 @@
           }
         }
       }
+    },
+    "/connection-status": {
+      "post": {
+        "operationId": "connectionStatus",
+        "security": [],
+        "description": "Original active installation key authenticates a restricted diagnostic report, never an execution session. No token, inventory, authority or binding is returned or modified.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignedConnectionStatus"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Diagnostic receipt only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionStatusReceipt"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3613,6 +3642,162 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 256
+          }
+        }
+      },
+      "ConnectionStatusProof": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "domain",
+          "hostId",
+          "keyId",
+          "keyVersion",
+          "tenantId",
+          "installationId",
+          "runnerDeploymentId",
+          "enrollmentRequestId",
+          "publicKeyFingerprint",
+          "reportedSessionEpoch",
+          "observedBootId",
+          "observedEndpointIdentity",
+          "operationId",
+          "reason",
+          "observedAt",
+          "nonce"
+        ],
+        "properties": {
+          "domain": {
+            "type": "string",
+            "enum": [
+              "neticora-runnerd-restricted-status-v1"
+            ]
+          },
+          "hostId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "keyId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "keyVersion": {
+            "$ref": "#/components/schemas/UInt64String"
+          },
+          "tenantId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "installationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "runnerDeploymentId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "enrollmentRequestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "publicKeyFingerprint": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "reportedSessionEpoch": {
+            "$ref": "#/components/schemas/UInt64String"
+          },
+          "observedBootId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{16,128}$",
+            "minLength": 16,
+            "maxLength": 128
+          },
+          "observedEndpointIdentity": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "operationId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{48}$",
+                "minLength": 48,
+                "maxLength": 48
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,127}$",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "observedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "nonce": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{48}$",
+            "minLength": 48,
+            "maxLength": 48
+          }
+        }
+      },
+      "SignedConnectionStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "proof",
+          "signature"
+        ],
+        "properties": {
+          "proof": {
+            "$ref": "#/components/schemas/ConnectionStatusProof"
+          },
+          "signature": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{86}$",
+            "minLength": 86,
+            "maxLength": 86
+          }
+        }
+      },
+      "ConnectionStatusReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "accepted",
+          "channel"
+        ],
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "restricted-installation-observation"
+            ]
           }
         }
       }

@@ -43,6 +43,20 @@ func DecodeConnectionResyncResponse(data []byte) (ConnectionResyncResponse, erro
 	return value, err
 }
 
+// DecodeConnectionStatusProof validates the original wire bytes before binding the generated model.
+func DecodeConnectionStatusProof(data []byte) (ConnectionStatusProof, error) {
+	var value ConnectionStatusProof
+	err := decode("ConnectionStatusProof", data, &value)
+	return value, err
+}
+
+// DecodeConnectionStatusReceipt validates the original wire bytes before binding the generated model.
+func DecodeConnectionStatusReceipt(data []byte) (ConnectionStatusReceipt, error) {
+	var value ConnectionStatusReceipt
+	err := decode("ConnectionStatusReceipt", data, &value)
+	return value, err
+}
+
 // DecodeControlCommand validates the original wire bytes before binding the generated model.
 func DecodeControlCommand(data []byte) (ControlCommand, error) {
 	var value ControlCommand
@@ -393,6 +407,13 @@ func DecodeSignedConnectionResyncRequest(data []byte) (SignedConnectionResyncReq
 	return value, err
 }
 
+// DecodeSignedConnectionStatus validates the original wire bytes before binding the generated model.
+func DecodeSignedConnectionStatus(data []byte) (SignedConnectionStatus, error) {
+	var value SignedConnectionStatus
+	err := decode("SignedConnectionStatus", data, &value)
+	return value, err
+}
+
 // DecodeSignedPeerRecoveryApproval validates the original wire bytes before binding the generated model.
 func DecodeSignedPeerRecoveryApproval(data []byte) (SignedPeerRecoveryApproval, error) {
 	var value SignedPeerRecoveryApproval
@@ -463,6 +484,8 @@ var wireDecoders = map[string]func([]byte) (any, error){
 	"ConnectionResyncIntent":        func(data []byte) (any, error) { return DecodeConnectionResyncIntent(data) },
 	"ConnectionResyncProof":         func(data []byte) (any, error) { return DecodeConnectionResyncProof(data) },
 	"ConnectionResyncResponse":      func(data []byte) (any, error) { return DecodeConnectionResyncResponse(data) },
+	"ConnectionStatusProof":         func(data []byte) (any, error) { return DecodeConnectionStatusProof(data) },
+	"ConnectionStatusReceipt":       func(data []byte) (any, error) { return DecodeConnectionStatusReceipt(data) },
 	"ControlCommand":                func(data []byte) (any, error) { return DecodeControlCommand(data) },
 	"CpuUsageObservation":           func(data []byte) (any, error) { return DecodeCpuUsageObservation(data) },
 	"CustomerManagedPolicy":         func(data []byte) (any, error) { return DecodeCustomerManagedPolicy(data) },
@@ -513,6 +536,7 @@ var wireDecoders = map[string]func([]byte) (any, error){
 	"RuntimeObservation":            func(data []byte) (any, error) { return DecodeRuntimeObservation(data) },
 	"RuntimeRef":                    func(data []byte) (any, error) { return DecodeRuntimeRef(data) },
 	"SignedConnectionResyncRequest": func(data []byte) (any, error) { return DecodeSignedConnectionResyncRequest(data) },
+	"SignedConnectionStatus":        func(data []byte) (any, error) { return DecodeSignedConnectionStatus(data) },
 	"SignedPeerRecoveryApproval":    func(data []byte) (any, error) { return DecodeSignedPeerRecoveryApproval(data) },
 	"SignedPeerRecoveryPlan":        func(data []byte) (any, error) { return DecodeSignedPeerRecoveryPlan(data) },
 	"StartCommand":                  func(data []byte) (any, error) { return DecodeStartCommand(data) },

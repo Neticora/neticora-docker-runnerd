@@ -13,6 +13,7 @@ import (
 
 	"github.com/Neticora/neticora-docker-runnerd/agent"
 	"github.com/Neticora/neticora-docker-runnerd/internal/config"
+	"github.com/Neticora/neticora-docker-runnerd/internal/connectionrecovery"
 	"github.com/Neticora/neticora-docker-runnerd/internal/control"
 	"github.com/Neticora/neticora-docker-runnerd/internal/execution"
 	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
@@ -47,6 +48,7 @@ func Run(ctx context.Context, c config.Config, socket string) error {
 		if strings.TrimSpace(string(boot)) != credentials.BootID {
 			for _, name := range []string{"journal.db", "recovery.anchor.json"} {
 				if _, e = os.Lstat(filepath.Join(c.StateDir, name)); e != nil {
+					connectionrecovery.StartupFailure(c, "original-journal-missing")
 					return errors.New("connection recovery blocked: original journal or anchor missing; retain enrollment and restore original recovery evidence")
 				}
 			}
@@ -54,6 +56,7 @@ func Run(ctx context.Context, c config.Config, socket string) error {
 	}
 	store, err := journal.OpenRecovery(ctx, c.StateDir, options)
 	if err != nil {
+		connectionrecovery.StartupFailure(c, "journal-integrity-unavailable")
 		return err
 	}
 	defer store.Close()
