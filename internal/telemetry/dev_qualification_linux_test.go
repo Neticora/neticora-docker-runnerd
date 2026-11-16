@@ -85,6 +85,9 @@ func TestRunnerd08CustomerTelemetryDev(t *testing.T) {
 	if _, err = s.AcceptCommand(ctx, scope, start); err != nil {
 		t.Fatal(err)
 	}
+	if err = s.PutStartIntent(ctx, scope, storetest.Intent(t, start)); err != nil {
+		t.Fatal(err)
+	}
 	rows, err := s.Incomplete(ctx, agent.ExecutionCursor{}, 100)
 	if err != nil || len(rows) != 1 {
 		t.Fatal(err)
