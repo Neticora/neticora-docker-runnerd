@@ -147,15 +147,18 @@ func commandAsService(args []string, identity serviceIdentity) error {
 			return err
 		}
 	}
+	if args[0] == "enable-startup" {
+		return exec.Command("/usr/bin/systemctl", "enable", "neticora-runnerd.service").Run()
+	}
 	if args[0] == "setup" {
-		answer, err := prompt("Start Runnerd now? [y/N]: ", "")
+		answer, err := prompt("Start Runnerd now and enable startup on boot? [y/N]: ", "")
 		if err != nil {
 			return err
 		}
 		if strings.EqualFold(answer, "y") || strings.EqualFold(answer, "yes") {
 			// start does not restart an already running service. Setup itself
 			// retains the original instance lock and rejects active execution state.
-			start := exec.Command("/usr/bin/systemctl", "start", "neticora-runnerd.service")
+			start := exec.Command("/usr/bin/systemctl", "enable", "--now", "neticora-runnerd.service")
 			start.Stdout, start.Stderr = os.Stdout, os.Stderr
 			if start.Run() != nil {
 				return errors.New("service did not start; use doctor and journalctl")

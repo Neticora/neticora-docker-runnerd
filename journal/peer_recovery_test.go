@@ -567,6 +567,9 @@ func TestSchemaV2RecoveryUpgradePreservesApprovalAndObligations(t *testing.T) {
 			if _, err = db.Exec("DROP TABLE peer_recovery_completion_intents"); err != nil {
 				t.Fatal(err)
 			}
+			if _, err = db.Exec("DROP TABLE connection_resync"); err != nil {
+				t.Fatal(err)
+			}
 			if _, err = db.Exec("DROP TABLE execution_storage"); err != nil {
 				t.Fatal(err)
 			}

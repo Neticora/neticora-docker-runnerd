@@ -215,6 +215,8 @@ integrity; the package digest cannot be authenticated from inside the package.
 Exit failure indicates a failed check; an offline status reports service unavailable
 without opening/migrating SQLite. Setup and doctor do not clear journal locks.
 
+For enrolled connection-only installations, see [connection-only reboot recovery](CONNECTION-RECOVERY.md) for explicit startup enablement and exact administrative approval without execution.
+
 Docker restart or host reboot changes the original endpoint identity. Preserve
 the journal/credentials and use the existing Runnerd08 signed continuity-recovery
 procedure. Connection/setup cannot treat a new boot, missing object or changed

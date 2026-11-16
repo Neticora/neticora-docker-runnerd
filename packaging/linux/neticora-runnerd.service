@@ -3,6 +3,7 @@ Description=Neticora Runnerd
 After=network-online.target
 Wants=network-online.target
 ConditionPathExists=/etc/neticora-runnerd/config.json
+ConditionPathExists=/etc/neticora-runnerd/identity.json
 
 [Service]
 Type=simple

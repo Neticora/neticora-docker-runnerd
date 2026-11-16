@@ -570,6 +570,13 @@ func (s *SQLiteStore) Reconcile(ctx context.Context, c agent.RecoveryCheckpoint)
 		return agent.ErrRecoveryRequired
 	}
 	err := s.transaction(ctx, false, false, true, func(ctx context.Context, tx *sql.Tx) error {
+		var pendingConnection int
+		if err := tx.QueryRowContext(ctx, "SELECT count(*) FROM connection_resync WHERE completed=0").Scan(&pendingConnection); err != nil {
+			return err
+		}
+		if pendingConnection != 0 {
+			return agent.ErrRecoveryRequired
+		}
 		if c.JournalID != s.anchor.JournalID || c.Revision != strconv.FormatInt(s.anchor.Revision, 10) {
 			return agent.ErrRecoveryRequired
 		}

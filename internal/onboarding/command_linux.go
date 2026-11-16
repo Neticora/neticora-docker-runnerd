@@ -16,11 +16,14 @@ import (
 	"time"
 
 	"github.com/Neticora/neticora-docker-runnerd/internal/config"
+	"github.com/Neticora/neticora-docker-runnerd/internal/connectionrecovery"
 	"github.com/Neticora/neticora-docker-runnerd/internal/dockerengine"
 	"github.com/Neticora/neticora-docker-runnerd/internal/execution"
 	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
+	"github.com/Neticora/neticora-docker-runnerd/journal"
 	"github.com/Neticora/neticora-docker-runnerd/transport"
 	"golang.org/x/term"
+	"path/filepath"
 )
 
 const configPath = "/etc/neticora-runnerd/config.json"
@@ -29,7 +32,7 @@ const configPath = "/etc/neticora-runnerd/config.json"
 // or environment variables are accepted. Root initializes the service account's
 // configured groups instead of inheriting any groups from the invoking caller.
 func Command(args []string) (bool, error) {
-	if len(args) == 0 || (args[0] != "setup" && args[0] != "status" && args[0] != "doctor" && args[0] != "prepare-execution") {
+	if len(args) == 0 || (args[0] != "setup" && args[0] != "status" && args[0] != "doctor" && args[0] != "prepare-execution" && args[0] != "enable-startup") {
 		return false, nil
 	}
 	replaceToken := len(args) == 2 && args[0] == "setup" && args[1] == "--replace-token"
@@ -64,6 +67,42 @@ func Command(args []string) (bool, error) {
 		}
 		if !report.ConfigurationValid {
 			return true, errors.New("execution preparation blocked; no configuration, authority or recovery state changed")
+		}
+		return true, nil
+	}
+	if args[0] == "enable-startup" {
+		raw, err := hostfs.ReadPrivate(configPath, config.MaxConfigBytes)
+		if err != nil {
+			return true, err
+		}
+		c, err := config.Parse(raw)
+		if err != nil {
+			return true, err
+		}
+		credentials, key, err := execution.ReadCredentials(c.CredentialFile)
+		clear(key)
+		if err != nil {
+			return true, err
+		}
+		if c.Connection == nil || c.Connection.TenantID != credentials.TenantID {
+			return true, ErrState
+		}
+		_, dbErr := os.Lstat(filepath.Join(c.StateDir, "journal.db"))
+		_, anchorErr := os.Lstat(filepath.Join(c.StateDir, "recovery.anchor.json"))
+		if os.IsNotExist(dbErr) && os.IsNotExist(anchorErr) {
+			boot, err := os.ReadFile("/proc/sys/kernel/random/boot_id")
+			if err != nil || strings.TrimSpace(string(boot)) != credentials.BootID {
+				return true, errors.New("original journal missing after boot change; retain enrollment and recover original evidence")
+			}
+			store, err := journal.OpenRecovery(context.Background(), c.StateDir, journal.Options{})
+			if err != nil {
+				return true, err
+			}
+			if err = store.Close(); err != nil {
+				return true, err
+			}
+		} else if dbErr != nil || anchorErr != nil {
+			return true, errors.New("original journal or anchor incomplete; startup enablement blocked")
 		}
 		return true, nil
 	}
@@ -196,6 +235,10 @@ func diagnose(command string) error {
 		return e
 	}
 	defer clear(key)
+	credentials, e = connectionrecovery.Load(c, credentials)
+	if e != nil {
+		return e
+	}
 	report["installation"] = "enrolled"
 	report["tenantId"] = credentials.TenantID
 	report["hostId"] = credentials.Identity.HostId

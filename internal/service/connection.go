@@ -10,14 +10,18 @@ import (
 
 	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
 	"github.com/Neticora/neticora-docker-runnerd/internal/config"
+	"github.com/Neticora/neticora-docker-runnerd/internal/connectionrecovery"
 	"github.com/Neticora/neticora-docker-runnerd/internal/dockerengine"
 	"github.com/Neticora/neticora-docker-runnerd/internal/execution"
 	"github.com/Neticora/neticora-docker-runnerd/internal/onboarding"
 	"github.com/Neticora/neticora-docker-runnerd/internal/telemetry"
+	"github.com/Neticora/neticora-docker-runnerd/journal"
 	"github.com/Neticora/neticora-docker-runnerd/transport"
 )
 
+type recoveryStatus struct{ operation, reason, epoch, boot, endpoint string }
 type connectionStatus struct {
+	recovery recoveryStatus
 	sync.Mutex
 	state, heartbeat string
 	inventory        inventoryReport
@@ -37,6 +41,16 @@ func (s *connectionStatus) get() (string, string) {
 	return s.state, s.heartbeat
 }
 
+func (s *connectionStatus) setRecovery(operation, reason, epoch, boot, endpoint string) {
+	s.Lock()
+	defer s.Unlock()
+	s.recovery = recoveryStatus{operation, reason, epoch, boot, endpoint}
+}
+func (s *connectionStatus) recoveryStatus() recoveryStatus {
+	s.Lock()
+	defer s.Unlock()
+	return s.recovery
+}
 func (s *connectionStatus) setInventory(report inventoryReport) {
 	s.Lock()
 	defer s.Unlock()
@@ -59,7 +73,7 @@ func (s *connectionStatus) inventoryStatus() (inventoryReport, bool) {
 
 // connect reports zero capacity and no supported profiles. It never opens the
 // mutating engine, pulls/acks commands, or emits execution/cleanup evidence.
-func connect(ctx context.Context, c config.Config, status *connectionStatus, localEmpty func(context.Context) (bool, error)) {
+func connect(ctx context.Context, c config.Config, status *connectionStatus, localEmpty func(context.Context) (bool, error), store *journal.SQLiteStore) {
 	credentials, key, e := execution.ReadCredentials(c.CredentialFile)
 	if e != nil {
 		status.set("identity-invalid", "")
@@ -72,18 +86,7 @@ func connect(ctx context.Context, c config.Config, status *connectionStatus, loc
 		return
 	}
 	defer client.Close()
-	engine, e := dockerengine.OpenReadOnly(c.RuntimeEndpoint, credentials.InstallationID, func() {})
-	if e != nil {
-		status.set("runtime-unavailable", "")
-		return
-	}
-	defer engine.Close()
-	boot, e := os.ReadFile("/proc/sys/kernel/random/boot_id")
-	if e != nil || strings.TrimSpace(string(boot)) != credentials.BootID {
-		status.set("boot-unavailable", "")
-		return
-	}
-	observer := &inventoryObserver{runtime: engine, remote: client, identity: credentials.Identity, endpoint: credentials.EndpointIdentity, localEmpty: localEmpty, hostname: os.Hostname, now: time.Now}
+	var observer *inventoryObserver
 	paths := append([]string{c.StateDir}, c.ObservationPaths...)
 	if c.Execution != nil {
 		paths = append(paths, c.Execution.StorageRoot)
@@ -93,23 +96,57 @@ func connect(ctx context.Context, c config.Config, status *connectionStatus, loc
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 	for {
-		status.set("connecting", "")
-		requestCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		binding, e := engine.Probe(requestCtx)
-		if e != nil || binding != credentials.EndpointIdentity {
-			status.set("runtime-continuity-recovery-required", "")
-			report, _ := status.inventoryStatus()
-			report.State = "runtime-continuity-required"
-			status.setInventory(report)
-			cancel()
+		if ctx.Err() != nil {
 			return
 		}
-		access, err := onboarding.Authenticate(requestCtx, client, key, credentials.Identity, strings.TrimSpace(string(boot)))
+		status.set("connecting", "")
+		requestCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		engine, err := dockerengine.OpenReadOnly(c.RuntimeEndpoint, credentials.InstallationID, func() {})
+		if err != nil {
+			status.set("runtime-unavailable", "")
+			cancel()
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+			continue
+		}
+		boot, e := os.ReadFile("/proc/sys/kernel/random/boot_id")
+		if e != nil {
+			engine.Close()
+			cancel()
+			status.set("boot-unavailable", "")
+			return
+		}
+		manager := connectionrecovery.Manager{Store: store, Runtime: engine, Remote: client, Config: c, Key: key, Boot: strings.TrimSpace(string(boot))}
+		current, operation, reason, err := manager.Step(requestCtx, credentials)
+		status.setRecovery(operation, reason, current.Identity.SessionEpoch, current.BootID, current.EndpointIdentity)
+		if err != nil {
+			status.set("connection-resynchronization-blocked", "")
+			report, _ := status.inventoryStatus()
+			report.State = reason
+			status.setInventory(report)
+			engine.Close()
+			cancel()
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+			continue
+		}
+		binding := current.EndpointIdentity
+		if observer == nil || observer.identity != current.Identity || observer.endpoint != binding {
+			observer = &inventoryObserver{remote: client, identity: current.Identity, endpoint: binding, localEmpty: localEmpty, hostname: os.Hostname, now: time.Now}
+		}
+		observer.runtime = engine
+		access, err := onboarding.Authenticate(requestCtx, client, key, current.Identity, strings.TrimSpace(string(boot)))
 		if err == nil {
 			installation, x := client.Installation(requestCtx, access)
 			err = x
 			b := c.Connection
-			if err == nil && (installation.Identity != credentials.Identity || installation.InstallationID != credentials.InstallationID || installation.TenantID != credentials.TenantID || installation.TenantID != b.TenantID || installation.RunnerDeploymentID != b.RunnerDeploymentID || installation.EnrollmentRequestID != b.EnrollmentRequestID || installation.PublicKeyFingerprint != b.PublicKeyFingerprint) {
+			if err == nil && (installation.Identity != current.Identity || installation.InstallationID != credentials.InstallationID || installation.TenantID != credentials.TenantID || installation.TenantID != b.TenantID || installation.RunnerDeploymentID != b.RunnerDeploymentID || installation.EnrollmentRequestID != b.EnrollmentRequestID || installation.PublicKeyFingerprint != b.PublicKeyFingerprint) {
 				err = onboarding.ErrState
 			}
 		}
@@ -125,13 +162,14 @@ func connect(ctx context.Context, c config.Config, status *connectionStatus, loc
 				status.setInventory(report)
 				capabilities := protocol.HostCapabilities{Host: protocol.Platform{Os: "linux", Architecture: protocol.PlatformArchitecture(runtime.GOARCH), Build: "unqualified"}, Engine: protocol.Platform{Os: "linux", Architecture: protocol.PlatformArchitecture(runtime.GOARCH), Build: "unqualified"}, EndpointIdentity: binding, RuntimeVersion: "unqualified-observation", ConfigurationGeneration: "1", ProbeGeneration: "1", ObservedAt: time.Now().UTC().Format("2006-01-02T15:04:05.000Z"), Profiles: []string{}, SupportedImageFamilies: []string{}, RuntimeMechanism: "docker", Capacity: protocol.ResourceBudget{CpuMillis: "0", MemoryBytes: "0", StorageBytes: "0", Slots: "0"}}
 				sample := sampler.Collect(requestCtx, binding, engine, nil, report.State == "accepted")
-				m, x := protocol.EncodeValidated("HostHeartbeat", map[string]any{"telemetry": sample, "identity": credentials.Identity, "agentVersion": execution.Version(), "protocolVersion": "1.0.0", "inventoryGeneration": report.Generation, "effectivePolicyGeneration": proposal.Policy.Generation, "capabilities": capabilities})
+				m, x := protocol.EncodeValidated("HostHeartbeat", map[string]any{"telemetry": sample, "identity": current.Identity, "agentVersion": execution.Version(), "protocolVersion": "1.0.0", "inventoryGeneration": report.Generation, "effectivePolicyGeneration": proposal.Policy.Generation, "capabilities": capabilities})
 				err = x
 				if err == nil {
 					_, err = client.Post(requestCtx, "/me/heartbeat", access, m, "ConfigResponse")
 				}
 			}
 		}
+		engine.Close()
 		cancel()
 		if err != nil {
 			status.set("authentication-or-connection-failed", "")

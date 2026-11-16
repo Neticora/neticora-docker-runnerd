@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -31,6 +32,25 @@ func Run(ctx context.Context, c config.Config, socket string) error {
 			return e
 		}
 		options.ReservationLimits = policy.Get().Limits()
+	}
+	// A reboot must never turn loss of the original journal into a fresh store.
+	if !executing && c.Connection != nil {
+		credentials, key, e := execution.ReadCredentials(c.CredentialFile)
+		clear(key)
+		if e != nil {
+			return e
+		}
+		boot, e := os.ReadFile("/proc/sys/kernel/random/boot_id")
+		if e != nil {
+			return e
+		}
+		if strings.TrimSpace(string(boot)) != credentials.BootID {
+			for _, name := range []string{"journal.db", "recovery.anchor.json"} {
+				if _, e = os.Lstat(filepath.Join(c.StateDir, name)); e != nil {
+					return errors.New("connection recovery blocked: original journal or anchor missing; retain enrollment and restore original recovery evidence")
+				}
+			}
+		}
 	}
 	store, err := journal.OpenRecovery(ctx, c.StateDir, options)
 	if err != nil {
@@ -58,7 +78,7 @@ func Run(ctx context.Context, c config.Config, socket string) error {
 				}
 				rows, err := store.Incomplete(ctx, agent.ExecutionCursor{}, 1)
 				return err == nil && len(rows) == 0, err
-			})
+			}, store)
 		}()
 		defer func() { stopController(); <-done }()
 	}
@@ -99,7 +119,8 @@ func Run(ctx context.Context, c config.Config, socket string) error {
 		}
 		platform, lastHeartbeat := connection.get()
 		inventory, inventoryFresh := connection.inventoryStatus()
-		return control.Snapshot{InventoryState: inventory.State, InventoryGeneration: inventory.Generation, InventoryObservedAt: inventory.ObservedAt, InventoryFresh: inventoryFresh, Platform: platform, LastHeartbeat: lastHeartbeat, ExecutionReason: reason, ExecutionEnabled: executing, State: state, AdmissionEnabled: executing && !draining.Load() && health.Ready, RuntimeQualified: false, RecoveryReady: health.Ready, RecoveryReason: health.Reason}
+		recovery := connection.recoveryStatus()
+		return control.Snapshot{ConnectionRecoveryOperationID: recovery.operation, ConnectionRecoveryReason: recovery.reason, ObservationSessionEpoch: recovery.epoch, ObservationBootID: recovery.boot, ObservationEndpointIdentity: recovery.endpoint, InventoryState: inventory.State, InventoryGeneration: inventory.Generation, InventoryObservedAt: inventory.ObservedAt, InventoryFresh: inventoryFresh, Platform: platform, LastHeartbeat: lastHeartbeat, ExecutionReason: reason, ExecutionEnabled: executing, State: state, AdmissionEnabled: executing && !draining.Load() && health.Ready, RuntimeQualified: false, RecoveryReady: health.Ready, RecoveryReason: health.Reason}
 	}, func() {
 		draining.Store(true)
 	}, func(event string) { log.Print(event) })
