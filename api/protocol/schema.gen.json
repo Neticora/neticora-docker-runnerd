@@ -434,6 +434,35 @@
           }
         }
       }
+    },
+    "/connection-resync": {
+      "post": {
+        "operationId": "connectionResynchronize",
+        "security": [],
+        "description": "Original Ed25519 key proves an exact persisted observation-only transition. Explicit tenant administrator approval and empty authoritative obligations are required. Grants no token, execution, cleanup or release authority.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignedConnectionResyncRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Pending, blocked, or committed observation-only binding",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionResyncResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3347,6 +3376,246 @@
           "executions"
         ],
         "additionalProperties": false
+      },
+      "ConnectionResyncIntent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "domain",
+          "operationId",
+          "identity",
+          "tenantId",
+          "installationId",
+          "runnerDeploymentId",
+          "enrollmentRequestId",
+          "publicKeyFingerprint",
+          "sourceBootId",
+          "sourceEndpointIdentity",
+          "targetBootId",
+          "targetEndpointIdentity",
+          "journalId",
+          "journalRevision"
+        ],
+        "properties": {
+          "domain": {
+            "type": "string",
+            "enum": [
+              "neticora-runnerd-connection-resync-v1"
+            ]
+          },
+          "operationId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{48}$",
+            "minLength": 48,
+            "maxLength": 48
+          },
+          "identity": {
+            "$ref": "#/components/schemas/HostIdentity"
+          },
+          "tenantId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "installationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "runnerDeploymentId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "enrollmentRequestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "publicKeyFingerprint": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "sourceBootId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{16,128}$",
+            "minLength": 16,
+            "maxLength": 128
+          },
+          "sourceEndpointIdentity": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "targetBootId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{16,128}$",
+            "minLength": 16,
+            "maxLength": 128
+          },
+          "targetEndpointIdentity": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "journalId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "journalRevision": {
+            "$ref": "#/components/schemas/UInt64String"
+          }
+        }
+      },
+      "ConnectionResyncProof": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "domain",
+          "request",
+          "issuedAt",
+          "nonce",
+          "journalEmpty",
+          "inventoryComplete",
+          "ownedResourceIds"
+        ],
+        "properties": {
+          "domain": {
+            "type": "string",
+            "enum": [
+              "neticora-runnerd-connection-resync-proof-v1"
+            ]
+          },
+          "request": {
+            "$ref": "#/components/schemas/ConnectionResyncIntent"
+          },
+          "issuedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "nonce": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{48}$",
+            "minLength": 48,
+            "maxLength": 48
+          },
+          "journalEmpty": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "inventoryComplete": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "ownedResourceIds": {
+            "type": "array",
+            "maxItems": 0,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        }
+      },
+      "SignedConnectionResyncRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "proof",
+          "signature"
+        ],
+        "properties": {
+          "proof": {
+            "$ref": "#/components/schemas/ConnectionResyncProof"
+          },
+          "signature": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{86}$",
+            "minLength": 86,
+            "maxLength": 86
+          }
+        }
+      },
+      "ConnectionResyncResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "operationId",
+          "requestHash",
+          "state",
+          "reason",
+          "identity",
+          "tenantId",
+          "installationId",
+          "runnerDeploymentId",
+          "bootId",
+          "endpointIdentity"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{48}$",
+            "minLength": 48,
+            "maxLength": 48
+          },
+          "requestHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending-approval",
+              "committed",
+              "blocked"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "identity": {
+            "$ref": "#/components/schemas/HostIdentity"
+          },
+          "tenantId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "installationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "runnerDeploymentId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "bootId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{16,128}$",
+            "minLength": 16,
+            "maxLength": 128
+          },
+          "endpointIdentity": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        }
       }
     }
   }

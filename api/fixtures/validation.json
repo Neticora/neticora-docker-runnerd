@@ -3238,5 +3238,128 @@
       "executions": []
     },
     "valid": false
+  },
+  {
+    "id": "connection-resync-intent",
+    "schema": "ConnectionResyncIntent",
+    "valid": true,
+    "value": {
+      "domain": "neticora-runnerd-connection-resync-v1",
+      "operationId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "identity": {
+        "hostId": "host-a",
+        "keyId": "key-a",
+        "keyVersion": "1",
+        "sessionEpoch": "1"
+      },
+      "tenantId": "tenant-a",
+      "installationId": "install-a",
+      "runnerDeploymentId": "pool-a",
+      "enrollmentRequestId": "enroll-a",
+      "publicKeyFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceBootId": "boot_original_012345",
+      "sourceEndpointIdentity": "engine-a",
+      "targetBootId": "boot_current_0123456",
+      "targetEndpointIdentity": "engine-b",
+      "journalId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "journalRevision": "0"
+    }
+  },
+  {
+    "id": "connection-resync-proof",
+    "schema": "ConnectionResyncProof",
+    "valid": true,
+    "value": {
+      "domain": "neticora-runnerd-connection-resync-proof-v1",
+      "request": {
+        "domain": "neticora-runnerd-connection-resync-v1",
+        "operationId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "identity": {
+          "hostId": "host-a",
+          "keyId": "key-a",
+          "keyVersion": "1",
+          "sessionEpoch": "1"
+        },
+        "tenantId": "tenant-a",
+        "installationId": "install-a",
+        "runnerDeploymentId": "pool-a",
+        "enrollmentRequestId": "enroll-a",
+        "publicKeyFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sourceBootId": "boot_original_012345",
+        "sourceEndpointIdentity": "engine-a",
+        "targetBootId": "boot_current_0123456",
+        "targetEndpointIdentity": "engine-b",
+        "journalId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "journalRevision": "0"
+      },
+      "issuedAt": "2026-11-16T00:00:00.000Z",
+      "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "journalEmpty": true,
+      "inventoryComplete": true,
+      "ownedResourceIds": []
+    }
+  },
+  {
+    "id": "connection-resync-unknown-resource",
+    "schema": "ConnectionResyncProof",
+    "valid": false,
+    "value": {
+      "domain": "neticora-runnerd-connection-resync-proof-v1",
+      "request": {
+        "domain": "neticora-runnerd-connection-resync-v1",
+        "operationId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "identity": {
+          "hostId": "host-a",
+          "keyId": "key-a",
+          "keyVersion": "1",
+          "sessionEpoch": "1"
+        },
+        "tenantId": "tenant-a",
+        "installationId": "install-a",
+        "runnerDeploymentId": "pool-a",
+        "enrollmentRequestId": "enroll-a",
+        "publicKeyFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sourceBootId": "boot_original_012345",
+        "sourceEndpointIdentity": "engine-a",
+        "targetBootId": "boot_current_0123456",
+        "targetEndpointIdentity": "engine-b",
+        "journalId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "journalRevision": "0"
+      },
+      "issuedAt": "2026-11-16T00:00:00.000Z",
+      "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "journalEmpty": true,
+      "inventoryComplete": true,
+      "ownedResourceIds": [
+        "unknown"
+      ]
+    }
+  },
+  {
+    "id": "connection-resync-no-execution-authority",
+    "schema": "ConnectionResyncIntent",
+    "valid": false,
+    "value": {
+      "domain": "neticora-runnerd-connection-resync-v1",
+      "operationId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "identity": {
+        "hostId": "host-a",
+        "keyId": "key-a",
+        "keyVersion": "1",
+        "sessionEpoch": "1"
+      },
+      "tenantId": "tenant-a",
+      "installationId": "install-a",
+      "runnerDeploymentId": "pool-a",
+      "enrollmentRequestId": "enroll-a",
+      "publicKeyFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceBootId": "boot_original_012345",
+      "sourceEndpointIdentity": "engine-a",
+      "targetBootId": "boot_current_0123456",
+      "targetEndpointIdentity": "engine-b",
+      "journalId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "journalRevision": "0",
+      "admissionEnabled": true
+    }
   }
 ]

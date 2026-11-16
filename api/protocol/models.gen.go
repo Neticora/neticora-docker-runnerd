@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/oapi-codegen/nullable"
 	"github.com/oapi-codegen/runtime"
@@ -21,6 +22,87 @@ const (
 func (e CommandAckAcceptance) Valid() bool {
 	switch e {
 	case CommandAckAcceptanceDurable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConnectionResyncIntentDomain.
+const (
+	ConnectionResyncIntentDomainNeticoraRunnerdConnectionResyncV1 ConnectionResyncIntentDomain = "neticora-runnerd-connection-resync-v1"
+)
+
+// Valid indicates whether the value is a known member of the ConnectionResyncIntentDomain enum.
+func (e ConnectionResyncIntentDomain) Valid() bool {
+	switch e {
+	case ConnectionResyncIntentDomainNeticoraRunnerdConnectionResyncV1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConnectionResyncProofDomain.
+const (
+	ConnectionResyncProofDomainNeticoraRunnerdConnectionResyncProofV1 ConnectionResyncProofDomain = "neticora-runnerd-connection-resync-proof-v1"
+)
+
+// Valid indicates whether the value is a known member of the ConnectionResyncProofDomain enum.
+func (e ConnectionResyncProofDomain) Valid() bool {
+	switch e {
+	case ConnectionResyncProofDomainNeticoraRunnerdConnectionResyncProofV1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConnectionResyncProofInventoryComplete.
+const (
+	ConnectionResyncProofInventoryCompleteTrue ConnectionResyncProofInventoryComplete = true
+)
+
+// Valid indicates whether the value is a known member of the ConnectionResyncProofInventoryComplete enum.
+func (e ConnectionResyncProofInventoryComplete) Valid() bool {
+	switch e {
+	case ConnectionResyncProofInventoryCompleteTrue:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConnectionResyncProofJournalEmpty.
+const (
+	ConnectionResyncProofJournalEmptyTrue ConnectionResyncProofJournalEmpty = true
+)
+
+// Valid indicates whether the value is a known member of the ConnectionResyncProofJournalEmpty enum.
+func (e ConnectionResyncProofJournalEmpty) Valid() bool {
+	switch e {
+	case ConnectionResyncProofJournalEmptyTrue:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConnectionResyncResponseState.
+const (
+	ConnectionResyncResponseStateBlocked         ConnectionResyncResponseState = "blocked"
+	ConnectionResyncResponseStateCommitted       ConnectionResyncResponseState = "committed"
+	ConnectionResyncResponseStatePendingApproval ConnectionResyncResponseState = "pending-approval"
+)
+
+// Valid indicates whether the value is a known member of the ConnectionResyncResponseState enum.
+func (e ConnectionResyncResponseState) Valid() bool {
+	switch e {
+	case ConnectionResyncResponseStateBlocked:
+		return true
+	case ConnectionResyncResponseStateCommitted:
+		return true
+	case ConnectionResyncResponseStatePendingApproval:
 		return true
 	default:
 		return false
@@ -1030,6 +1112,64 @@ type ConfigResponse struct {
 	Protocol         ProtocolCompatibility `json:"protocol"`
 }
 
+// ConnectionResyncIntent defines model for ConnectionResyncIntent.
+type ConnectionResyncIntent struct {
+	Domain                 ConnectionResyncIntentDomain `json:"domain"`
+	EnrollmentRequestId    string                       `json:"enrollmentRequestId"`
+	Identity               HostIdentity                 `json:"identity"`
+	InstallationId         string                       `json:"installationId"`
+	JournalId              string                       `json:"journalId"`
+	JournalRevision        UInt64String                 `json:"journalRevision"`
+	OperationId            string                       `json:"operationId"`
+	PublicKeyFingerprint   string                       `json:"publicKeyFingerprint"`
+	RunnerDeploymentId     string                       `json:"runnerDeploymentId"`
+	SourceBootId           string                       `json:"sourceBootId"`
+	SourceEndpointIdentity string                       `json:"sourceEndpointIdentity"`
+	TargetBootId           string                       `json:"targetBootId"`
+	TargetEndpointIdentity string                       `json:"targetEndpointIdentity"`
+	TenantId               string                       `json:"tenantId"`
+}
+
+// ConnectionResyncIntentDomain defines model for ConnectionResyncIntent.Domain.
+type ConnectionResyncIntentDomain string
+
+// ConnectionResyncProof defines model for ConnectionResyncProof.
+type ConnectionResyncProof struct {
+	Domain            ConnectionResyncProofDomain            `json:"domain"`
+	InventoryComplete ConnectionResyncProofInventoryComplete `json:"inventoryComplete"`
+	IssuedAt          time.Time                              `json:"issuedAt"`
+	JournalEmpty      ConnectionResyncProofJournalEmpty      `json:"journalEmpty"`
+	Nonce             string                                 `json:"nonce"`
+	OwnedResourceIds  []string                               `json:"ownedResourceIds"`
+	Request           ConnectionResyncIntent                 `json:"request"`
+}
+
+// ConnectionResyncProofDomain defines model for ConnectionResyncProof.Domain.
+type ConnectionResyncProofDomain string
+
+// ConnectionResyncProofInventoryComplete defines model for ConnectionResyncProof.InventoryComplete.
+type ConnectionResyncProofInventoryComplete bool
+
+// ConnectionResyncProofJournalEmpty defines model for ConnectionResyncProof.JournalEmpty.
+type ConnectionResyncProofJournalEmpty bool
+
+// ConnectionResyncResponse defines model for ConnectionResyncResponse.
+type ConnectionResyncResponse struct {
+	BootId             string                        `json:"bootId"`
+	EndpointIdentity   string                        `json:"endpointIdentity"`
+	Identity           HostIdentity                  `json:"identity"`
+	InstallationId     string                        `json:"installationId"`
+	OperationId        string                        `json:"operationId"`
+	Reason             string                        `json:"reason"`
+	RequestHash        string                        `json:"requestHash"`
+	RunnerDeploymentId string                        `json:"runnerDeploymentId"`
+	State              ConnectionResyncResponseState `json:"state"`
+	TenantId           string                        `json:"tenantId"`
+}
+
+// ConnectionResyncResponseState defines model for ConnectionResyncResponse.State.
+type ConnectionResyncResponseState string
+
 // ControlCommand defines model for ControlCommand.
 type ControlCommand struct {
 	CommandId   string             `json:"commandId"`
@@ -1757,6 +1897,12 @@ type RuntimeRef struct {
 // RuntimeRefEngine defines model for RuntimeRef.Engine.
 type RuntimeRefEngine string
 
+// SignedConnectionResyncRequest defines model for SignedConnectionResyncRequest.
+type SignedConnectionResyncRequest struct {
+	Proof     ConnectionResyncProof `json:"proof"`
+	Signature string                `json:"signature"`
+}
+
 // SignedPeerRecoveryApproval defines model for SignedPeerRecoveryApproval.
 type SignedPeerRecoveryApproval struct {
 	Manifest  PeerRecoveryApprovalManifest `json:"manifest"`
@@ -1833,6 +1979,9 @@ type LookupRecoveryStateJSONBody struct {
 type LookupRecoveryState200JSONResponseBody struct {
 	union json.RawMessage
 }
+
+// ConnectionResynchronizeJSONRequestBody defines body for ConnectionResynchronize for application/json ContentType.
+type ConnectionResynchronizeJSONRequestBody = SignedConnectionResyncRequest
 
 // EnrollmentResponseEnrollJSONRequestBody defines body for EnrollmentResponseEnroll for application/json ContentType.
 type EnrollmentResponseEnrollJSONRequestBody = EnrollmentRequest

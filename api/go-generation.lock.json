@@ -12,20 +12,20 @@
     "fixtures/canonicalization.json": "15c0658fd0da5c948b70c9abd033fc3aeb8b3f86fcf8f3fc64d3b19e572addea",
     "fixtures/duplicate-keys.json": "4f0adb5499373d59fb2e49c51cc06cab7ddd0393e28e753ae20d2d4ba196c70d",
     "fixtures/identities.json": "8d610e85fcda5bead511962e32c7e6ed735210893e5adb1d9a0c1e1f80c6df77",
-    "fixtures/manifest.json": "100a142749f681c9681cf33feabdae748454a7d54f6b1f042e38cef049110587",
+    "fixtures/manifest.json": "9cafc00443ff917c1bf82fca5e6820760a30bf376844db3c4ad117a8126f4263",
     "fixtures/outbound-wire.json": "b063e613421fd84419268ca48c6e25c88c85b82f8e9b0119323bd049658230e8",
     "fixtures/unicode-wire.json": "510e4afc924b82f1b79ebde9c13c638a32b997fa069412aae14398638a9feae4",
-    "fixtures/validation.json": "e72a12d17998afc3a9b415a30cba719f989912c9c60cad8d6509b5b2c114556b",
+    "fixtures/validation.json": "247f73b79e615274d7a5d500cf0bdb0b46c027620a717af9da7053d52c33f92c",
     "go-codegen-overlay.yaml": "654bab71e0ac40306a624dca1a95038415e610ebb7e0e71ae0adf136ab86536f",
     "go-codegen.yaml": "1394287e30f53b03e52d8f171e2ec067e0f5edd09f019890a9471a2b6b3abbbe",
-    "host-protocol.v1.yaml": "5243364f14366e902244958aa8f1c9db094657df7a8f429c56a3665c51495aea",
+    "host-protocol.v1.yaml": "1b3571294d7385455cb9fc4844a72eb1993f12ac247961ae94a0f87dccbb3c78",
     "tools/cmd/contract/main.go": "c7736da2684390a7590cd01967c2bc8356a2e7a275208562982f638af6daa179",
     "tools/go.mod": "436ee56dafbd999b1657b721f688d96b968a27f7845255550deab0cc8ed1a823",
     "tools/go.sum": "9223e7ae692c6954b0872fc2b030bfc79a78622ec37dce09df127a756f76ba72"
   },
   "outputs": {
-    "protocol/decode.gen.go": "2e865d0840285097af2660d6431ce7a48efcecab8010c0897fc044eb976f978f",
-    "protocol/models.gen.go": "23fe56d7cf3282a60ac19c8fe07c158b0bec19cd62f0bb3b30560d3dc20c5e18",
-    "protocol/schema.gen.json": "5243364f14366e902244958aa8f1c9db094657df7a8f429c56a3665c51495aea"
+    "protocol/decode.gen.go": "f1a4fbd18b81a2f60c571a09be7d36ad5fb3327ce70fddb54d6621d8fb90e8a7",
+    "protocol/models.gen.go": "149ecbf6cdada0fa4f7abcd433cc7d226a696fd4afcc74600c390217eebd6e39",
+    "protocol/schema.gen.json": "1b3571294d7385455cb9fc4844a72eb1993f12ac247961ae94a0f87dccbb3c78"
   }
 }
