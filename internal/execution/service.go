@@ -66,6 +66,8 @@ func Open(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drain
 		clear(key)
 		return nil, nil, agent.ErrRecoveryRequired
 	}
+	// Expired/missing new-work qualification must not prevent recovery or cleanup.
+	// HostRemote checks current acceptance at every start authorization below.
 	if err = hostfs.CheckAncestors(filepath.Dir(x.BootstrapRoot)); err != nil {
 		return nil, nil, err
 	}
@@ -120,6 +122,14 @@ func Open(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drain
 	provisioned, _ := time.Parse(time.RFC3339Nano, x.TrustProvisionedAt)
 	verifier := standardlinux.ImageVerifier{RootDirectory: x.TrustRoots, BundleDirectory: x.ImageBundles, ProvisionedAt: provisioned}
 	remote := &HostRemote{Client: client, Credentials: credentials, Key: key, Capabilities: capabilities, PolicyGeneration: func() string { return policy.Get().Generation() }, Version: Version()}
+	remote.CheckQualification = func() error { _, e := Qualification(c, credentials, time.Now()); return e }
+	remote.CheckExecutionQualification = func(spec protocol.ExecutionSpec) error {
+		accepted, err := Qualification(c, credentials, time.Now())
+		if err != nil || !sameQualifiedTemplate(accepted, spec) {
+			return ErrQualification
+		}
+		return nil
+	}
 	remote.CheckTransport = func() error {
 		req, e := http.NewRequest("GET", c.ControlPlaneURL, nil)
 		if e != nil {

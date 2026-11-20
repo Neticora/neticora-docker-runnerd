@@ -178,6 +178,9 @@ func setup(t *testing.T) (*Controller, *fakeRuntime, *fakeRemote, agent.Executio
 	return setupTemplate(t, standardlinux.TemplateVersion)
 }
 func setupTemplate(t *testing.T, template string) (*Controller, *fakeRuntime, *fakeRemote, agent.Execution) {
+	return setupTemplateAt(t, template, "")
+}
+func setupTemplateAt(t *testing.T, template, journalDir string) (*Controller, *fakeRuntime, *fakeRemote, agent.Execution) {
 	t.Helper()
 	ctx := context.Background()
 	dir := func() string {
@@ -187,7 +190,10 @@ func setupTemplate(t *testing.T, template string) (*Controller, *fakeRuntime, *f
 		}
 		return d
 	}
-	s, err := journal.OpenRecovery(ctx, dir(), journal.Options{ReservationLimits: agent.ReservationLimits{CPUMillis: 1000, MemoryBytes: 1073741824, StorageBytes: 10737418240, Slots: 1}})
+	if journalDir == "" {
+		journalDir = dir()
+	}
+	s, err := journal.OpenRecovery(ctx, journalDir, journal.Options{ReservationLimits: agent.ReservationLimits{CPUMillis: 1000, MemoryBytes: 1073741824, StorageBytes: 10737418240, Slots: 1}})
 	if err != nil {
 		t.Fatal(err)
 	}

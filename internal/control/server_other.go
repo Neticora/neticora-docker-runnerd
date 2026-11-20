@@ -8,20 +8,27 @@ import (
 )
 
 type Snapshot struct {
-	ConnectionRecoveryOperationID string `json:"connectionRecoveryOperationId,omitempty"`
-	ConnectionRecoveryReason      string `json:"connectionRecoveryReason,omitempty"`
-	ObservationSessionEpoch       string `json:"observationSessionEpoch,omitempty"`
-	ObservationBootID             string `json:"observationBootId,omitempty"`
-	ObservationEndpointIdentity   string `json:"observationEndpointIdentity,omitempty"`
-	Platform                      string `json:"platform,omitempty"`
-	LastHeartbeat                 string `json:"lastHeartbeat,omitempty"`
-	ExecutionReason               string `json:"executionReason,omitempty"`
-	ExecutionEnabled              bool   `json:"executionEnabled,omitempty"`
-	State                         string `json:"state"`
-	AdmissionEnabled              bool   `json:"admissionEnabled"`
-	RuntimeQualified              bool   `json:"runtimeQualified"`
-	RecoveryReady                 bool   `json:"recoveryReady"`
-	RecoveryReason                string `json:"recoveryReason"`
+	QualificationState            string   `json:"qualificationState"`
+	PlatformAdmissionEnabled      bool     `json:"platformAdmissionEnabled"`
+	DispatchBlockers              []string `json:"dispatchBlockers"`
+	InventoryState                string   `json:"inventoryState,omitempty"`
+	InventoryGeneration           string   `json:"inventoryGeneration,omitempty"`
+	InventoryObservedAt           string   `json:"inventoryObservedAt,omitempty"`
+	InventoryFresh                bool     `json:"inventoryFresh"`
+	ConnectionRecoveryOperationID string   `json:"connectionRecoveryOperationId,omitempty"`
+	ConnectionRecoveryReason      string   `json:"connectionRecoveryReason,omitempty"`
+	ObservationSessionEpoch       string   `json:"observationSessionEpoch,omitempty"`
+	ObservationBootID             string   `json:"observationBootId,omitempty"`
+	ObservationEndpointIdentity   string   `json:"observationEndpointIdentity,omitempty"`
+	Platform                      string   `json:"platform,omitempty"`
+	LastHeartbeat                 string   `json:"lastHeartbeat,omitempty"`
+	ExecutionReason               string   `json:"executionReason,omitempty"`
+	ExecutionEnabled              bool     `json:"executionEnabled,omitempty"`
+	State                         string   `json:"state"`
+	AdmissionEnabled              bool     `json:"admissionEnabled"`
+	RuntimeQualified              bool     `json:"runtimeQualified"`
+	RecoveryReady                 bool     `json:"recoveryReady"`
+	RecoveryReason                string   `json:"recoveryReason"`
 }
 type Server struct{}
 

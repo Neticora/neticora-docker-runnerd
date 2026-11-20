@@ -61,6 +61,12 @@ func TestPreparationValidatesDisabledConfigurationBeforeActivation(t *testing.T)
 	if _, err = ParsePreparation(raw); err != nil {
 		t.Fatal(err)
 	}
+	c.Execution.Repository = "org"
+	raw, _ = json.Marshal(c)
+	if _, err = ParsePreparation(raw); err != nil {
+		t.Fatal(err)
+	}
+	c.Execution.Repository = "org/repo"
 	for _, mutate := range []func(*Execution){func(x *Execution) { x.Enabled = true }, func(x *Execution) { x.PidsLimit = 0 }, func(x *Execution) { x.NetworkID = "host" }, func(x *Execution) { x.NetworkID = "container:other" }, func(x *Execution) { x.ImageRepository = "image@sha256:unapproved" }, func(x *Execution) { x.PolicyFile = "relative" }, func(x *Execution) { x.BootstrapRoot = "/etc/runnerd" }, func(x *Execution) { x.Repository = "other/repo" }, func(x *Execution) { x.TrustProvisionedAt = "invalid" }} {
 		candidate := c
 		copy := *c.Execution

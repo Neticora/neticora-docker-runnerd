@@ -123,7 +123,24 @@ func Run(ctx context.Context, c config.Config, socket string) error {
 		platform, lastHeartbeat := connection.get()
 		inventory, inventoryFresh := connection.inventoryStatus()
 		recovery := connection.recoveryStatus()
-		return control.Snapshot{ConnectionRecoveryOperationID: recovery.operation, ConnectionRecoveryReason: recovery.reason, ObservationSessionEpoch: recovery.epoch, ObservationBootID: recovery.boot, ObservationEndpointIdentity: recovery.endpoint, InventoryState: inventory.State, InventoryGeneration: inventory.Generation, InventoryObservedAt: inventory.ObservedAt, InventoryFresh: inventoryFresh, Platform: platform, LastHeartbeat: lastHeartbeat, ExecutionReason: reason, ExecutionEnabled: executing, State: state, AdmissionEnabled: executing && !draining.Load() && health.Ready, RuntimeQualified: false, RecoveryReady: health.Ready, RecoveryReason: health.Reason}
+		readiness := execution.Readiness{QualificationState: "unqualified", DispatchBlockers: []string{"execution-disabled"}}
+		if controller != nil {
+			readiness = controller.Readiness(time.Now())
+		}
+		if executing && controller == nil {
+			readiness.DispatchBlockers = []string{reason}
+		}
+		if !health.Ready {
+			readiness.DispatchBlockers = append(readiness.DispatchBlockers, health.Reason)
+		}
+		admitted := executing && !draining.Load() && health.Ready && len(readiness.DispatchBlockers) == 0
+		if executing && !admitted {
+			state = "blocked"
+			if draining.Load() {
+				state = "drained"
+			}
+		}
+		return control.Snapshot{QualificationState: readiness.QualificationState, DispatchBlockers: readiness.DispatchBlockers, PlatformAdmissionEnabled: readiness.PlatformAdmissionEnabled, ConnectionRecoveryOperationID: recovery.operation, ConnectionRecoveryReason: recovery.reason, ObservationSessionEpoch: recovery.epoch, ObservationBootID: recovery.boot, ObservationEndpointIdentity: recovery.endpoint, InventoryState: inventory.State, InventoryGeneration: inventory.Generation, InventoryObservedAt: inventory.ObservedAt, InventoryFresh: inventoryFresh, Platform: platform, LastHeartbeat: lastHeartbeat, ExecutionReason: reason, ExecutionEnabled: executing, State: state, AdmissionEnabled: admitted, RuntimeQualified: readiness.RuntimeQualified, RecoveryReady: health.Ready, RecoveryReason: health.Reason}
 	}, func() {
 		draining.Store(true)
 	}, func(event string) { log.Print(event) })

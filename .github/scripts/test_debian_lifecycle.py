@@ -4,6 +4,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('deb_builder', ROOT / 'packaging/build-deb.py')
@@ -12,6 +13,15 @@ spec.loader.exec_module(builder)
 
 
 class ServiceStateGuards(unittest.TestCase):
+    def test_manifest_records_real_version_without_assuming_commit_equality(self):
+        for version in ('v0.0.0-20261116031906-3b8403344202', '1.2.3', 'a' * 40):
+            with patch.object(builder, 'run', return_value=version):
+                self.assertEqual(builder.executable_version(Path('/test/runnerd')), version)
+        for version in ('development', '', 'v0.0.0+dirty', 'bad\nversion'):
+            with patch.object(builder, 'run', return_value=version):
+                with self.assertRaises(ValueError):
+                    builder.executable_version(Path('/test/runnerd'))
+
     def test_upgrade_preserves_configured_groups_and_rejects_root_identity(self):
         # Run the actual account guard with a controlled OS identity database.
         account_guard = 'if getent passwd' + (ROOT / 'packaging/debian/preinst').read_text().split('if getent passwd', 1)[1]

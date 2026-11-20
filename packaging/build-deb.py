@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Build an unsigned local-engineering Ubuntu 26.04 amd64 package from Git.
 
-The source checkout is cloned at the recorded commit, excluding all ignored and
-untracked files. SOURCE_DATE_EPOCH defaults to that commit's timestamp.
+Candidate builds clone the recorded commit. Local working-tree builds snapshot
+tracked changes and nonignored untracked files. SOURCE_DATE_EPOCH defaults to
+the base commit's timestamp.
 """
 import argparse
 import datetime
@@ -30,6 +31,37 @@ def write_json(path, data):
     path.write_text(json.dumps(data, indent=2, sort_keys=True) + '\n')
 
 
+def executable_version(binary, source_dirty):
+    # Go may embed a module pseudoversion even for a local VCS build. Record
+    # the actual executable output separately from the full source commit.
+    version = run(str(binary), '--version')
+    if (not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.+_-]{0,255}', version)
+            or version == 'development' or (not source_dirty and 'dirty' in version)):
+        raise ValueError('A versioned executable matching the source state is required for package provenance')
+    return version
+
+
+def snapshot_changes(source):
+    changes = subprocess.check_output(
+        ['git', 'diff', '--binary', '--full-index', '--no-ext-diff', '--no-textconv', 'HEAD', '--'], cwd=ROOT,
+    )
+    if changes:
+        subprocess.run(['git', 'apply', '--index', '--whitespace=nowarn', '-'], cwd=source, input=changes, check=True)
+
+    untracked = subprocess.check_output(['git', 'ls-files', '-z', '--others', '--exclude-standard'], cwd=ROOT)
+    files = [Path(os.fsdecode(name)) for name in untracked.split(b'\0') if name]
+    for name in files:
+        origin = ROOT / name
+        if not origin.is_symlink() and not origin.is_file():
+            raise ValueError(f'Unsupported untracked source path: {name}')
+        destination = source / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(origin, destination, follow_symlinks=False)
+    if files:
+        subprocess.run(['git', '--literal-pathspecs', 'add', '-f', '--', *files], cwd=source, check=True)
+    return run('git', 'write-tree', cwd=source)
+
+
 def maintainer_script(source, name):
     content = (source / 'packaging/debian' / name).read_text()
     if name in ('preinst', 'prerm'):
@@ -46,8 +78,10 @@ def build():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--version', help='Debian version; defaults to commit version')
     parser.add_argument('--output', type=Path, default=ROOT / 'dist/ubuntu-amd64')
+    parser.add_argument('--allow-dirty', action='store_true', help='snapshot the working tree for a local engineering build')
     args = parser.parse_args()
-    if run('git', 'status', '--porcelain', '--untracked-files=all'):
+    source_dirty = bool(run('git', 'status', '--porcelain', '--untracked-files=all'))
+    if source_dirty and not args.allow_dirty:
         raise SystemExit('Commit all source changes before building a candidate.')
     commit = run('git', 'rev-parse', 'HEAD')
     tree = run('git', 'rev-parse', 'HEAD^{tree}')
@@ -70,6 +104,8 @@ def build():
         source = work / 'source'
         subprocess.run(['git', 'clone', '--quiet', '--shared', '--no-checkout', str(ROOT), str(source)], check=True)
         subprocess.run(['git', 'checkout', '--quiet', '--detach', commit], cwd=source, check=True)
+        if source_dirty:
+            tree = snapshot_changes(source)
         stage = work / 'package'
         bins = stage / 'usr/bin'
         bins.mkdir(parents=True)
@@ -86,13 +122,14 @@ def build():
             'docs/UBUNTU-INSTALLATION.md': 'usr/share/doc/neticora-runnerd/UBUNTU-INSTALLATION.md',
             'docs/EXECUTION-STORAGE.md': 'usr/share/doc/neticora-runnerd/EXECUTION-STORAGE.md',
             'docs/EXECUTION-PREPARATION.md': 'usr/share/doc/neticora-runnerd/EXECUTION-PREPARATION.md',
+            'docs/EXECUTION-ACTIVATION.md': 'usr/share/doc/neticora-runnerd/EXECUTION-ACTIVATION.md',
         }
         for origin, target in contents.items():
             destination = stage / target
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source / origin, destination)
             destination.chmod(0o644)
-        provenance = dict(product='neticora-runnerd', version=version, distribution='ubuntu', ubuntuRelease='26.04', architecture='amd64', sourceCommit=commit, sourceTree=tree, runnerd08Baseline='2a8c68145e5d', goVersion=toolchain, buildTimestamp=timestamp.isoformat(), buildMode='local-engineering', productionApproved=False, sourceDirty=False, executableSha256=binary_hashes)
+        provenance = dict(manifestSchemaVersion=2, agentVersion=executable_version(bins / 'runnerd', source_dirty), product='neticora-runnerd', version=version, distribution='ubuntu', ubuntuRelease='26.04', architecture='amd64', sourceCommit=commit, sourceTree=tree, runnerd08Baseline='2a8c68145e5d', goVersion=toolchain, buildTimestamp=timestamp.isoformat(), buildMode='local-engineering', productionApproved=False, sourceDirty=source_dirty, executableSha256=binary_hashes)
         share = stage / 'usr/share/neticora-runnerd'
         write_json(share / 'build-provenance.json', provenance)
         module_stream = run('go', 'list', '-m', '-json', 'all', cwd=source, env=env)

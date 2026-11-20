@@ -195,6 +195,10 @@ independently qualified, and explicitly schedulable are separate states. Enablin
 execution requires the existing reviewed local policy, capabilities and trust
 provisioning plus independent platform admission; setup never supplies these.
 
+Use [installed execution activation](EXECUTION-ACTIVATION.md) for the explicit
+identity-preserving transition from connection mode to reviewed disk-backed
+Standard execution and current-build evidence requirements.
+
 ## Inspect and recover
 
 ```sh

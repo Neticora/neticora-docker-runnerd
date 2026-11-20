@@ -32,13 +32,14 @@ const configPath = "/etc/neticora-runnerd/config.json"
 // or environment variables are accepted. Root initializes the service account's
 // configured groups instead of inheriting any groups from the invoking caller.
 func Command(args []string) (bool, error) {
-	if len(args) == 0 || (args[0] != "setup" && args[0] != "status" && args[0] != "doctor" && args[0] != "prepare-execution" && args[0] != "enable-startup") {
+	if len(args) == 0 || (args[0] != "setup" && args[0] != "status" && args[0] != "doctor" && args[0] != "prepare-execution" && args[0] != "activate-execution" && args[0] != "resume-execution" && args[0] != "enable-startup") {
 		return false, nil
 	}
 	replaceToken := len(args) == 2 && args[0] == "setup" && args[1] == "--replace-token"
 	prepare := len(args) == 2 && args[0] == "prepare-execution"
-	if len(args) != 1 && !replaceToken && !prepare {
-		return true, errors.New("usage: neticora-runnerd setup [--replace-token]|status|doctor|prepare-execution FILE")
+	activate := len(args) == 2 && args[0] == "activate-execution"
+	if len(args) != 1 && !replaceToken && !prepare && !activate {
+		return true, errors.New("usage: neticora-runnerd setup [--replace-token]|status|doctor|prepare-execution FILE|activate-execution FILE|resume-execution|enable-startup")
 	}
 	identity, e := resolveServiceIdentity()
 	if e != nil {
@@ -49,6 +50,55 @@ func Command(args []string) (bool, error) {
 	}
 	if e = identity.verifyCurrent(); e != nil {
 		return true, e
+	}
+	if args[0] == "activate-execution" || args[0] == "resume-execution" {
+		path := configPath
+		resume := args[0] == "resume-execution"
+		if !resume {
+			if !activate {
+				return true, errors.New("usage: neticora-runnerd activate-execution ABSOLUTE_CONFIG_FILE")
+			}
+			path = args[1]
+		}
+		raw, err := hostfs.ReadPrivate(path, config.MaxConfigBytes)
+		if err != nil {
+			return true, err
+		}
+		defer clear(raw)
+		c, err := config.Parse(raw)
+		if err != nil || c.Execution == nil {
+			return true, ErrState
+		}
+		if resume {
+			c.Execution.Enabled = false
+			raw, err = json.Marshal(c)
+			if err != nil {
+				return true, err
+			}
+		}
+		var ca []byte
+		if c.Execution.CustomCAFile != "" {
+			ca, err = hostfs.ReadPrivate(c.Execution.CustomCAFile, 1<<20)
+			if err != nil {
+				return true, err
+			}
+		}
+		client, err := transport.NewWithRoots(c.ControlPlaneURL, c.Timeout(), ca)
+		if err != nil {
+			return true, err
+		}
+		defer client.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		if err = ActivateExecution(ctx, configPath, raw, client, resume); err != nil {
+			return true, err
+		}
+		if resume {
+			fmt.Println("Local drain lifted after verified platform admission. Start the stopped service explicitly.")
+		} else {
+			fmt.Println("Execution configuration installed; local drain retained. Start the stopped service explicitly to reconcile before platform admission.")
+		}
+		return true, nil
 	}
 	if args[0] == "prepare-execution" {
 		if !prepare {

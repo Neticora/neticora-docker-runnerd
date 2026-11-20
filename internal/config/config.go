@@ -37,24 +37,27 @@ type Connection struct {
 // Execution is an explicit operator opt-in. Old foundation configurations remain
 // drained and never open Docker or contact the platform.
 type Execution struct {
-	StorageRoot         string   `json:"storageRoot,omitempty"`
-	RuntimeStoragePaths []string `json:"runtimeStoragePaths,omitempty"`
-	Repository          string   `json:"repository"`
-	CustomCAFile        string   `json:"customCaFile,omitempty"`
-	Enabled             bool     `json:"enabled"`
-	PolicyFile          string   `json:"policyFile"`
-	CapabilitiesFile    string   `json:"capabilitiesFile"`
-	ImageRepository     string   `json:"imageRepository"`
-	NetworkID           string   `json:"networkId"`
-	BootstrapRoot       string   `json:"bootstrapRoot"`
-	KeysDirectory       string   `json:"keysDirectory"`
-	TrustRoots          string   `json:"trustRoots"`
-	ImageBundles        string   `json:"imageBundles"`
-	TrustProvisionedAt  string   `json:"trustProvisionedAt"`
-	Organization        string   `json:"organization"`
-	Pool                string   `json:"pool"`
-	PidsLimit           int64    `json:"pidsLimit"`
-	MinRuntimeFreeBytes uint64   `json:"minRuntimeFreeBytes,omitempty"`
+	QualificationFile          string   `json:"qualificationFile,omitempty"`
+	QualificationPublicKeyFile string   `json:"qualificationPublicKeyFile,omitempty"`
+	RunnerSize                 string   `json:"runnerSize,omitempty"`
+	StorageRoot                string   `json:"storageRoot,omitempty"`
+	RuntimeStoragePaths        []string `json:"runtimeStoragePaths,omitempty"`
+	Repository                 string   `json:"repository"`
+	CustomCAFile               string   `json:"customCaFile,omitempty"`
+	Enabled                    bool     `json:"enabled"`
+	PolicyFile                 string   `json:"policyFile"`
+	CapabilitiesFile           string   `json:"capabilitiesFile"`
+	ImageRepository            string   `json:"imageRepository"`
+	NetworkID                  string   `json:"networkId"`
+	BootstrapRoot              string   `json:"bootstrapRoot"`
+	KeysDirectory              string   `json:"keysDirectory"`
+	TrustRoots                 string   `json:"trustRoots"`
+	ImageBundles               string   `json:"imageBundles"`
+	TrustProvisionedAt         string   `json:"trustProvisionedAt"`
+	Organization               string   `json:"organization"`
+	Pool                       string   `json:"pool"`
+	PidsLimit                  int64    `json:"pidsLimit"`
+	MinRuntimeFreeBytes        uint64   `json:"minRuntimeFreeBytes,omitempty"`
 }
 
 func Parse(data []byte) (Config, error) { return parse(data, false) }
@@ -132,7 +135,7 @@ func parse(data []byte, preparation bool) (Config, error) {
 		}
 		// Legacy headroom inputs are accepted for upgrades but have no scheduling
 		// effect. Storage capacity policy belongs to the customer.
-		for _, private := range []string{c.CredentialFile, x.KeysDirectory, x.PolicyFile, x.CapabilitiesFile, x.TrustRoots, x.ImageBundles, x.CustomCAFile} {
+		for _, private := range []string{c.CredentialFile, x.KeysDirectory, x.PolicyFile, x.CapabilitiesFile, x.TrustRoots, x.ImageBundles, x.CustomCAFile, x.QualificationFile, x.QualificationPublicKeyFile} {
 			if private == "" {
 				continue
 			}
@@ -141,9 +144,14 @@ func parse(data []byte, preparation bool) (Config, error) {
 				return Config{}, errors.New("host credentials, policy and trust must remain outside bootstrap mounts")
 			}
 		}
+		for _, path := range []string{x.QualificationFile, x.QualificationPublicKeyFile} {
+			if path != "" && (!filepath.IsAbs(path) || filepath.Clean(path) != path || strings.HasPrefix(path, c.StateDir+"/") || path == c.StateDir || (x.StorageRoot != "" && (path == x.StorageRoot || strings.HasPrefix(path, x.StorageRoot+"/")))) {
+				return Config{}, errors.New("qualification files must remain outside journal and execution storage")
+			}
+		}
 		repo := strings.Split(x.Repository, "/")
-		if len(repo) != 2 || repo[0] != x.Organization || repo[1] == "" || strings.ContainsAny(x.Repository, "?#\\\r\n ") {
-			return Config{}, errors.New("execution repository must match the configured GitHub organization")
+		if repo[0] != x.Organization || len(repo) > 2 || (len(repo) == 2 && repo[1] == "") || strings.ContainsAny(x.Repository, "?#\\\r\n ") {
+			return Config{}, errors.New("execution registration scope must name the configured GitHub organization or a repository in it")
 		}
 		if x.CustomCAFile != "" && (!filepath.IsAbs(x.CustomCAFile) || filepath.Clean(x.CustomCAFile) != x.CustomCAFile) {
 			return Config{}, errors.New("custom CA path must be explicit and absolute")
