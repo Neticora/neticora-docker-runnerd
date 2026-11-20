@@ -16,11 +16,15 @@ class ServiceStateGuards(unittest.TestCase):
     def test_manifest_records_real_version_without_assuming_commit_equality(self):
         for version in ('v0.0.0-20261116031906-3b8403344202', '1.2.3', 'a' * 40):
             with patch.object(builder, 'run', return_value=version):
-                self.assertEqual(builder.executable_version(Path('/test/runnerd')), version)
+                self.assertEqual(builder.executable_version(Path('/test/runnerd'), source_dirty=False), version)
         for version in ('development', '', 'v0.0.0+dirty', 'bad\nversion'):
             with patch.object(builder, 'run', return_value=version):
                 with self.assertRaises(ValueError):
-                    builder.executable_version(Path('/test/runnerd'))
+                    builder.executable_version(Path('/test/runnerd'), source_dirty=False)
+
+    def test_local_working_tree_build_records_dirty_version(self):
+        with patch.object(builder, 'run', return_value='v0.0.0+dirty'):
+            self.assertEqual(builder.executable_version(Path('/test/runnerd'), source_dirty=True), 'v0.0.0+dirty')
 
     def test_upgrade_preserves_configured_groups_and_rejects_root_identity(self):
         # Run the actual account guard with a controlled OS identity database.
