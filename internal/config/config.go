@@ -15,36 +15,58 @@ import (
 const MaxConfigBytes = 65536
 
 type Config struct {
-	ControlPlaneURL       string     `json:"controlPlaneUrl"`
-	StateDir              string     `json:"stateDir"`
-	RuntimeEndpoint       string     `json:"runtimeEndpoint"`
-	CredentialFile        string     `json:"credentialFile"`
-	RequestTimeoutSeconds int        `json:"requestTimeoutSeconds"`
-	Execution             *Execution `json:"execution,omitempty"`
+	ControlPlaneURL       string      `json:"controlPlaneUrl"`
+	StateDir              string      `json:"stateDir"`
+	RuntimeEndpoint       string      `json:"runtimeEndpoint"`
+	CredentialFile        string      `json:"credentialFile"`
+	RequestTimeoutSeconds int         `json:"requestTimeoutSeconds"`
+	Execution             *Execution  `json:"execution,omitempty"`
+	Connection            *Connection `json:"connection,omitempty"`
+	ObservationPaths      []string    `json:"observationPaths,omitempty"`
+}
+
+// Connection enables authenticated observations only. It cannot pull commands,
+// authorize starts, or promote the independent local execution policy.
+type Connection struct {
+	TenantID             string `json:"tenantId"`
+	RunnerDeploymentID   string `json:"runnerDeploymentId"`
+	EnrollmentRequestID  string `json:"enrollmentRequestId"`
+	PublicKeyFingerprint string `json:"publicKeyFingerprint"`
 }
 
 // Execution is an explicit operator opt-in. Old foundation configurations remain
 // drained and never open Docker or contact the platform.
 type Execution struct {
-	Repository          string `json:"repository"`
-	CustomCAFile        string `json:"customCaFile,omitempty"`
-	Enabled             bool   `json:"enabled"`
-	PolicyFile          string `json:"policyFile"`
-	CapabilitiesFile    string `json:"capabilitiesFile"`
-	ImageRepository     string `json:"imageRepository"`
-	NetworkID           string `json:"networkId"`
-	BootstrapRoot       string `json:"bootstrapRoot"`
-	KeysDirectory       string `json:"keysDirectory"`
-	TrustRoots          string `json:"trustRoots"`
-	ImageBundles        string `json:"imageBundles"`
-	TrustProvisionedAt  string `json:"trustProvisionedAt"`
-	Organization        string `json:"organization"`
-	Pool                string `json:"pool"`
-	PidsLimit           int64  `json:"pidsLimit"`
-	MinRuntimeFreeBytes uint64 `json:"minRuntimeFreeBytes,omitempty"`
+	QualificationFile          string   `json:"qualificationFile,omitempty"`
+	QualificationPublicKeyFile string   `json:"qualificationPublicKeyFile,omitempty"`
+	RunnerSize                 string   `json:"runnerSize,omitempty"`
+	StorageRoot                string   `json:"storageRoot,omitempty"`
+	RuntimeStoragePaths        []string `json:"runtimeStoragePaths,omitempty"`
+	Repository                 string   `json:"repository"`
+	CustomCAFile               string   `json:"customCaFile,omitempty"`
+	Enabled                    bool     `json:"enabled"`
+	PolicyFile                 string   `json:"policyFile"`
+	CapabilitiesFile           string   `json:"capabilitiesFile"`
+	ImageRepository            string   `json:"imageRepository"`
+	NetworkID                  string   `json:"networkId"`
+	BootstrapRoot              string   `json:"bootstrapRoot"`
+	KeysDirectory              string   `json:"keysDirectory"`
+	TrustRoots                 string   `json:"trustRoots"`
+	ImageBundles               string   `json:"imageBundles"`
+	TrustProvisionedAt         string   `json:"trustProvisionedAt"`
+	Organization               string   `json:"organization"`
+	Pool                       string   `json:"pool"`
+	PidsLimit                  int64    `json:"pidsLimit"`
+	MinRuntimeFreeBytes        uint64   `json:"minRuntimeFreeBytes,omitempty"`
 }
 
-func Parse(data []byte) (Config, error) {
+func Parse(data []byte) (Config, error) { return parse(data, false) }
+
+// ParsePreparation validates a complete inactive execution configuration without
+// changing the live opt-in or the legacy disabled foundation configuration.
+func ParsePreparation(data []byte) (Config, error) { return parse(data, true) }
+
+func parse(data []byte, preparation bool) (Config, error) {
 	var c Config
 	if len(data) > MaxConfigBytes {
 		return c, errors.New("configuration exceeds size limit")
@@ -75,14 +97,45 @@ func Parse(data []byte) (Config, error) {
 	if err != nil || rel == "." || (rel != ".." && !bytes.HasPrefix([]byte(rel), []byte(".."+string(filepath.Separator)))) {
 		return Config{}, errors.New("credentials must remain outside state directory")
 	}
+	if len(c.ObservationPaths) > 32 {
+		return Config{}, errors.New("at most 32 filesystem observation paths")
+	}
+	for _, path := range c.ObservationPaths {
+		if !filepath.IsAbs(path) || filepath.Clean(path) != path || len(path) > 1024 {
+			return Config{}, errors.New("filesystem observation paths must be absolute and clean")
+		}
+	}
 	if c.RequestTimeoutSeconds < 1 || c.RequestTimeoutSeconds > 60 {
 		return Config{}, errors.New("request timeout must be between 1 and 60 seconds")
 	}
-	if x := c.Execution; x != nil && x.Enabled {
-		if x.MinRuntimeFreeBytes != 0 && x.MinRuntimeFreeBytes < 64<<20 {
-			return Config{}, errors.New("runtime storage headroom must be at least 64 MiB")
+	if b := c.Connection; b != nil && (b.TenantID == "" || b.RunnerDeploymentID == "" || b.EnrollmentRequestID == "" || len(b.PublicKeyFingerprint) != 64) {
+		return Config{}, errors.New("incomplete onboarding binding")
+	}
+	if preparation && (c.Execution == nil || c.Execution.Enabled) {
+		return Config{}, errors.New("preparation requires a complete execution configuration with enabled=false")
+	}
+	if x := c.Execution; x != nil && (x.Enabled || preparation) {
+		if x.StorageRoot != "" {
+			if !filepath.IsAbs(x.StorageRoot) || filepath.Clean(x.StorageRoot) != x.StorageRoot || x.StorageRoot == "/" {
+				return Config{}, errors.New("execution storage requires an explicit private directory")
+			}
+			for _, path := range append([]string{c.StateDir, c.CredentialFile, x.BootstrapRoot, x.KeysDirectory, x.PolicyFile, x.CapabilitiesFile, x.TrustRoots, x.ImageBundles, x.CustomCAFile}, x.RuntimeStoragePaths...) {
+				if path == "" {
+					continue
+				}
+				if !filepath.IsAbs(path) || filepath.Clean(path) != path {
+					return Config{}, errors.New("storage backing paths must be absolute and clean")
+				}
+				if path == x.StorageRoot || strings.HasPrefix(path, x.StorageRoot+"/") || strings.HasPrefix(x.StorageRoot, path+"/") {
+					return Config{}, errors.New("execution storage must not overlap journal, credentials, bootstrap, trust or Docker backing paths")
+				}
+			}
+		} else if len(x.RuntimeStoragePaths) > 0 {
+			return Config{}, errors.New("backing path observations require execution storage root")
 		}
-		for _, private := range []string{c.CredentialFile, x.KeysDirectory, x.PolicyFile, x.CapabilitiesFile, x.TrustRoots, x.ImageBundles, x.CustomCAFile} {
+		// Legacy headroom inputs are accepted for upgrades but have no scheduling
+		// effect. Storage capacity policy belongs to the customer.
+		for _, private := range []string{c.CredentialFile, x.KeysDirectory, x.PolicyFile, x.CapabilitiesFile, x.TrustRoots, x.ImageBundles, x.CustomCAFile, x.QualificationFile, x.QualificationPublicKeyFile} {
 			if private == "" {
 				continue
 			}
@@ -91,9 +144,14 @@ func Parse(data []byte) (Config, error) {
 				return Config{}, errors.New("host credentials, policy and trust must remain outside bootstrap mounts")
 			}
 		}
+		for _, path := range []string{x.QualificationFile, x.QualificationPublicKeyFile} {
+			if path != "" && (!filepath.IsAbs(path) || filepath.Clean(path) != path || strings.HasPrefix(path, c.StateDir+"/") || path == c.StateDir || (x.StorageRoot != "" && (path == x.StorageRoot || strings.HasPrefix(path, x.StorageRoot+"/")))) {
+				return Config{}, errors.New("qualification files must remain outside journal and execution storage")
+			}
+		}
 		repo := strings.Split(x.Repository, "/")
-		if len(repo) != 2 || repo[0] != x.Organization || repo[1] == "" || strings.ContainsAny(x.Repository, "?#\\\r\n ") {
-			return Config{}, errors.New("execution repository must match the configured GitHub organization")
+		if repo[0] != x.Organization || len(repo) > 2 || (len(repo) == 2 && repo[1] == "") || strings.ContainsAny(x.Repository, "?#\\\r\n ") {
+			return Config{}, errors.New("execution registration scope must name the configured GitHub organization or a repository in it")
 		}
 		if x.CustomCAFile != "" && (!filepath.IsAbs(x.CustomCAFile) || filepath.Clean(x.CustomCAFile) != x.CustomCAFile) {
 			return Config{}, errors.New("custom CA path must be explicit and absolute")
@@ -107,7 +165,7 @@ func Parse(data []byte) (Config, error) {
 				return Config{}, errors.New("execution trust and secrets must remain outside journal")
 			}
 		}
-		if x.Organization == "" || x.Pool == "" || x.ImageRepository == "" || x.NetworkID == "" || x.PidsLimit < 16 || x.PidsLimit > 4096 {
+		if x.Organization == "" || x.Pool == "" || x.ImageRepository == "" || strings.ContainsAny(x.ImageRepository, "@ \t\r\n") || x.NetworkID == "" || x.NetworkID == "host" || x.NetworkID == "none" || strings.HasPrefix(x.NetworkID, "container:") || x.PidsLimit < 16 || x.PidsLimit > 4096 {
 			return Config{}, errors.New("incomplete execution configuration")
 		}
 		if _, e := time.Parse(time.RFC3339Nano, x.TrustProvisionedAt); e != nil {

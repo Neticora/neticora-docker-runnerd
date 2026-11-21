@@ -175,6 +175,12 @@ func (f *fakeRemote) Start(_ context.Context, m protocol.Outbound) (protocol.Sta
 }
 
 func setup(t *testing.T) (*Controller, *fakeRuntime, *fakeRemote, agent.Execution) {
+	return setupTemplate(t, standardlinux.TemplateVersion)
+}
+func setupTemplate(t *testing.T, template string) (*Controller, *fakeRuntime, *fakeRemote, agent.Execution) {
+	return setupTemplateAt(t, template, "")
+}
+func setupTemplateAt(t *testing.T, template, journalDir string) (*Controller, *fakeRuntime, *fakeRemote, agent.Execution) {
 	t.Helper()
 	ctx := context.Background()
 	dir := func() string {
@@ -184,14 +190,17 @@ func setup(t *testing.T) (*Controller, *fakeRuntime, *fakeRemote, agent.Executio
 		}
 		return d
 	}
-	s, err := journal.OpenRecovery(ctx, dir(), journal.Options{ReservationLimits: agent.ReservationLimits{CPUMillis: 1000, MemoryBytes: 1073741824, StorageBytes: 10737418240, Slots: 1}})
+	if journalDir == "" {
+		journalDir = dir()
+	}
+	s, err := journal.OpenRecovery(ctx, journalDir, journal.Options{ReservationLimits: agent.ReservationLimits{CPUMillis: 1000, MemoryBytes: 1073741824, StorageBytes: 10737418240, Slots: 1}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = s.Close() })
 	storetest.Reconcile(t, s, storetest.Scope, "1")
 	command := storetest.Object(t, storetest.Start(t, "a"))
-	command["spec"].(map[string]any)["templateVersion"] = standardlinux.TemplateVersion
+	command["spec"].(map[string]any)["templateVersion"] = template
 	raw := storetest.Encode(t, "HostCommand", command)
 	var start protocol.StartCommand
 	_ = json.Unmarshal(raw, &start)

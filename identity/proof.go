@@ -46,16 +46,30 @@ func sign(private ed25519.PrivateKey, payload any) (string, error) {
 // Enrollment signs request identity, hashed enrollment token and SPKI fingerprint.
 // Persist requestID and the key before sending; retry the identical request on loss.
 func Enrollment(private ed25519.PrivateKey, requestID, token string) (protocol.Outbound, error) {
+	return EnrollmentReplacing(private, requestID, token, nil)
+}
+
+// EnrollmentReplacing binds token retirement to the original request/key and
+// expected tenant/pool. It grants no ability to replace a registered host.
+func EnrollmentReplacing(private ed25519.PrivateKey, requestID, token string, replacement *protocol.EnrollmentTokenReplacement) (protocol.Outbound, error) {
 	pub, fingerprint, err := public(private)
 	if err != nil {
 		return protocol.Outbound{}, err
 	}
 	digest := sha256.Sum256([]byte(token))
-	proof, err := sign(private, map[string]any{"purpose": "neticora-host-enroll-v1", "requestId": requestID, "tokenHash": hex.EncodeToString(digest[:]), "publicKeyFingerprint": fingerprint})
+	payload := map[string]any{"purpose": "neticora-host-enroll-v1", "requestId": requestID, "tokenHash": hex.EncodeToString(digest[:]), "publicKeyFingerprint": fingerprint}
+	if replacement != nil {
+		payload["replacement"] = replacement
+	}
+	proof, err := sign(private, payload)
 	if err != nil {
 		return protocol.Outbound{}, err
 	}
-	return protocol.EncodeValidated("EnrollmentRequest", map[string]any{"requestId": requestID, "enrollmentToken": token, "publicKey": pub, "proof": proof})
+	request := map[string]any{"requestId": requestID, "enrollmentToken": token, "publicKey": pub, "proof": proof}
+	if replacement != nil {
+		request["replacement"] = replacement
+	}
+	return protocol.EncodeValidated("EnrollmentRequest", request)
 }
 
 // Assertion uses fixed audience and a maximum 60-second lifetime. jti must be

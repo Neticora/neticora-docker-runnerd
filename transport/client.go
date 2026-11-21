@@ -86,7 +86,7 @@ func (c *Client) Post(ctx context.Context, path, token string, message protocol.
 	if len(data) == 0 {
 		return nil, errors.New("empty outbound message")
 	}
-	if strings.ContainsAny(token, "\r\n") || (token == "" && path != "/enroll" && path != "/token") {
+	if strings.ContainsAny(token, "\r\n") || (token == "" && path != "/enroll" && path != "/token" && path != "/connection-resync" && path != "/connection-status") {
 		return nil, errors.New("invalid host credential")
 	}
 	endpoint := *c.base

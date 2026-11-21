@@ -15,6 +15,7 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
 	"github.com/Neticora/neticora-docker-runnerd/identity"
 	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
+	"github.com/Neticora/neticora-docker-runnerd/internal/telemetry"
 	"github.com/Neticora/neticora-docker-runnerd/transport"
 )
 
@@ -71,16 +72,21 @@ func ReadCredentials(path string) (Credentials, ed25519.PrivateKey, error) {
 }
 
 type HostRemote struct {
-	Client           *transport.Client
-	Credentials      Credentials
-	Key              ed25519.PrivateKey
-	Capabilities     protocol.HostCapabilities // Exact independently qualified report.
-	PolicyGeneration func() string
-	Version          string
-	CheckTransport   func() error
-	mu               sync.Mutex
-	token            string
-	expires          time.Time
+	Telemetry                   func(context.Context) *telemetry.Sample
+	Client                      *transport.Client
+	Credentials                 Credentials
+	Key                         ed25519.PrivateKey
+	Capabilities                protocol.HostCapabilities // Exact independently qualified report.
+	PolicyGeneration            func() string
+	Version                     string
+	CheckTransport              func() error
+	CheckQualification          func() error
+	CheckExecutionQualification func(protocol.ExecutionSpec) error
+	mu                          sync.Mutex
+	token                       string
+	expires                     time.Time
+	admissionObserved           time.Time
+	admissionEnabled            bool
 }
 
 func (r *HostRemote) credential(ctx context.Context) (string, error) {
@@ -174,6 +180,16 @@ func (r *HostRemote) Start(ctx context.Context, m protocol.Outbound) (protocol.S
 // Admission refetches the authenticated narrowing proposal for every launch.
 // Remote configuration may remove local authority, never add to it.
 func (r *HostRemote) Admission(ctx context.Context, s protocol.ExecutionSpec) error {
+	if r.CheckQualification != nil {
+		if err := r.CheckQualification(); err != nil {
+			return err
+		}
+	}
+	if r.CheckExecutionQualification != nil {
+		if err := r.CheckExecutionQualification(s); err != nil {
+			return err
+		}
+	}
 	t, e := r.credential(ctx)
 	if e != nil {
 		return e
@@ -183,6 +199,7 @@ func (r *HostRemote) Admission(ctx context.Context, s protocol.ExecutionSpec) er
 		return e
 	}
 	c, e := protocol.DecodeConfigResponse(raw)
+	r.observeAdmission(c, e)
 	if e != nil || !c.AdmissionEnabled || c.Policy.Generation != s.PolicyGeneration {
 		return ErrReconcile
 	}
@@ -208,12 +225,39 @@ func (r *HostRemote) Heartbeat(ctx context.Context, generation string) error {
 	capabilities := r.Capabilities
 	capabilities.ObservedAt = time.Now().UTC().Format(wireTime)
 	capabilities.ProbeGeneration = generation
-	m, e := protocol.EncodeValidated("HostHeartbeat", map[string]any{"identity": r.Credentials.Identity, "agentVersion": r.Version, "protocolVersion": "1.0.0", "inventoryGeneration": generation, "effectivePolicyGeneration": r.PolicyGeneration(), "capabilities": capabilities})
+	payload := map[string]any{"identity": r.Credentials.Identity, "agentVersion": r.Version, "protocolVersion": "1.0.0", "inventoryGeneration": generation, "effectivePolicyGeneration": r.PolicyGeneration(), "capabilities": capabilities}
+	if r.Telemetry != nil {
+		if sample := r.Telemetry(ctx); sample != nil {
+			payload["telemetry"] = sample
+		}
+	}
+	m, e := protocol.EncodeValidated("HostHeartbeat", payload)
 	if e != nil {
 		return e
 	}
-	_, e = r.Client.Post(ctx, "/me/heartbeat", t, m, "ConfigResponse")
+	raw, e := r.Client.Post(ctx, "/me/heartbeat", t, m, "ConfigResponse")
+	if e != nil {
+		r.observeAdmission(protocol.ConfigResponse{}, e)
+		return e
+	}
+	response, e := protocol.DecodeConfigResponse(raw)
+	r.observeAdmission(response, e)
 	return e
+}
+
+func (r *HostRemote) observeAdmission(c protocol.ConfigResponse, err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.admissionObserved = time.Now()
+	r.admissionEnabled = err == nil && c.AdmissionEnabled && c.Policy.Generation == r.PolicyGeneration()
+}
+
+// AdmissionObservation is diagnostic; launches independently refetch authority.
+func (r *HostRemote) AdmissionObservation(now time.Time) (bool, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	age := now.Sub(r.admissionObserved)
+	return r.admissionEnabled, !r.admissionObserved.IsZero() && age >= 0 && age <= 30*time.Second
 }
 
 // PeerRecovery uses the same signed short-lived assertions/current host session

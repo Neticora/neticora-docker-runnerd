@@ -11,6 +11,7 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/internal/config"
 	"github.com/Neticora/neticora-docker-runnerd/internal/execution"
 	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
+	"github.com/Neticora/neticora-docker-runnerd/internal/onboarding"
 	"github.com/Neticora/neticora-docker-runnerd/internal/service"
 )
 
@@ -21,6 +22,9 @@ func main() {
 	}
 }
 func run() error {
+	if handled, err := onboarding.Command(os.Args[1:]); handled {
+		return err
+	}
 	version := flag.Bool("version", false, "print actual executable version")
 	file := flag.String("config", "/etc/neticora-runnerd/config.json", "protected configuration file")
 	recovery := flag.String("recovery", "", "operator recovery: diagnose, inspect or apply; daemon must be stopped")

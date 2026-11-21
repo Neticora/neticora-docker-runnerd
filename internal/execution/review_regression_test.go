@@ -15,6 +15,7 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/agent"
 	"github.com/Neticora/neticora-docker-runnerd/agent/storetest"
 	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
+	"github.com/Neticora/neticora-docker-runnerd/internal/standardlinux"
 )
 
 func cleanHistory(t *testing.T, c *Controller, start json.RawMessage, inventory string, acknowledged bool) {
@@ -50,7 +51,7 @@ func TestRecoveryHasNoLifetimeHistoryLimit(t *testing.T) {
 	cleanHistory(t, c, first.Command, "1", true)
 	generation := 1
 	for i := 0; i < 1001; i++ {
-		start := storetest.Start(t, fmt.Sprintf("retired-%04d", i))
+		start := standardStart(t, fmt.Sprintf("retired-%04d", i))
 		if _, err := c.Store.AcceptCommand(ctx, c.Scope, start); err != nil {
 			t.Fatal(err)
 		}
@@ -64,7 +65,7 @@ func TestRecoveryHasNoLifetimeHistoryLimit(t *testing.T) {
 	if receipt, err := c.Store.Receipt(ctx, c.Scope, first.Command); err != nil || !receipt.Duplicate {
 		t.Fatal(receipt, err)
 	}
-	start := storetest.Start(t, "after-history")
+	start := standardStart(t, "after-history")
 	if _, err := c.Store.AcceptCommand(ctx, c.Scope, start); err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +88,7 @@ func TestRetiredSecretHousekeepingPreservesActiveAndUnexpectedFiles(t *testing.T
 			c, _, _, retired := setup(t)
 			ctx := context.Background()
 			cleanHistory(t, c, retired.Command, "1", true)
-			start := storetest.Start(t, "still-active")
+			start := standardStart(t, "still-active")
 			if _, err := c.Store.AcceptCommand(ctx, c.Scope, start); err != nil {
 				t.Fatal(err)
 			}
@@ -240,4 +241,10 @@ func TestCancellationBetweenFinalCheckAndDockerStartIsSerialized(t *testing.T) {
 	if r.stops != 1 || r.removes != 0 || !current(t, c).CleanupPending {
 		t.Fatal("accepted cancellation was not contained durably")
 	}
+}
+
+func standardStart(t *testing.T, id string) json.RawMessage {
+	v := storetest.Object(t, storetest.Start(t, id))
+	v["spec"].(map[string]any)["templateVersion"] = standardlinux.TemplateVersion
+	return storetest.Encode(t, "HostCommand", v)
 }

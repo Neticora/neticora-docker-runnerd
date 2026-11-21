@@ -1942,5 +1942,1565 @@
       "action": "start"
     },
     "valid": false
+  },
+  {
+    "id": "enrollment-replacement",
+    "schema": "EnrollmentRequest",
+    "value": {
+      "requestId": "request-a",
+      "enrollmentToken": "example-token",
+      "publicKey": "example-public-key",
+      "proof": "example-proof",
+      "replacement": {
+        "tenantId": "tenant-a",
+        "runnerDeploymentId": "pool-a",
+        "priorTokenHashes": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ]
+      }
+    },
+    "valid": true
+  },
+  {
+    "id": "enrollment-replacement-empty",
+    "schema": "EnrollmentRequest",
+    "value": {
+      "requestId": "request-a",
+      "enrollmentToken": "example-token",
+      "publicKey": "example-public-key",
+      "proof": "example-proof",
+      "replacement": {
+        "tenantId": "tenant-a",
+        "runnerDeploymentId": "pool-a",
+        "priorTokenHashes": []
+      }
+    },
+    "valid": false
+  },
+  {
+    "id": "enrollment-replacement-duplicate",
+    "schema": "EnrollmentRequest",
+    "value": {
+      "requestId": "request-a",
+      "enrollmentToken": "example-token",
+      "publicKey": "example-public-key",
+      "proof": "example-proof",
+      "replacement": {
+        "tenantId": "tenant-a",
+        "runnerDeploymentId": "pool-a",
+        "priorTokenHashes": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "id": "enrollment-replacement-oversized",
+    "schema": "EnrollmentRequest",
+    "value": {
+      "requestId": "request-a",
+      "enrollmentToken": "example-token",
+      "publicKey": "example-public-key",
+      "proof": "example-proof",
+      "replacement": {
+        "tenantId": "tenant-a",
+        "runnerDeploymentId": "pool-a",
+        "priorTokenHashes": [
+          "0000000000000000000000000000000000000000000000000000000000000000",
+          "0000000000000000000000000000000000000000000000000000000000000001",
+          "0000000000000000000000000000000000000000000000000000000000000002",
+          "0000000000000000000000000000000000000000000000000000000000000003",
+          "0000000000000000000000000000000000000000000000000000000000000004",
+          "0000000000000000000000000000000000000000000000000000000000000005",
+          "0000000000000000000000000000000000000000000000000000000000000006",
+          "0000000000000000000000000000000000000000000000000000000000000007",
+          "0000000000000000000000000000000000000000000000000000000000000008",
+          "0000000000000000000000000000000000000000000000000000000000000009",
+          "000000000000000000000000000000000000000000000000000000000000000a",
+          "000000000000000000000000000000000000000000000000000000000000000b",
+          "000000000000000000000000000000000000000000000000000000000000000c",
+          "000000000000000000000000000000000000000000000000000000000000000d",
+          "000000000000000000000000000000000000000000000000000000000000000e",
+          "000000000000000000000000000000000000000000000000000000000000000f",
+          "0000000000000000000000000000000000000000000000000000000000000010"
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "id": "enrollment-replacement-invalid-hash",
+    "schema": "EnrollmentRequest",
+    "value": {
+      "requestId": "request-a",
+      "enrollmentToken": "example-token",
+      "publicKey": "example-public-key",
+      "proof": "example-proof",
+      "replacement": {
+        "tenantId": "tenant-a",
+        "runnerDeploymentId": "pool-a",
+        "priorTokenHashes": [
+          "not-a-token-hash"
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "id": "enrollment-replacement-unknown",
+    "schema": "EnrollmentRequest",
+    "value": {
+      "requestId": "request-a",
+      "enrollmentToken": "example-token",
+      "publicKey": "example-public-key",
+      "proof": "example-proof",
+      "replacement": {
+        "tenantId": "tenant-a",
+        "runnerDeploymentId": "pool-a",
+        "priorTokenHashes": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "unexpected": true
+      }
+    },
+    "valid": false
+  },
+  {
+    "id": "heartbeat-no-inventory-yet",
+    "schema": "HostHeartbeat",
+    "value": {
+      "identity": {
+        "hostId": "host-a",
+        "keyId": "key-a",
+        "keyVersion": "1",
+        "sessionEpoch": "1"
+      },
+      "agentVersion": "0.1.0",
+      "protocolVersion": "1.0.0",
+      "inventoryGeneration": "0",
+      "effectivePolicyGeneration": "1",
+      "capabilities": {
+        "host": {
+          "os": "linux",
+          "architecture": "amd64",
+          "build": "candidate"
+        },
+        "engine": {
+          "os": "linux",
+          "architecture": "amd64",
+          "build": "candidate"
+        },
+        "endpointIdentity": "engine-a",
+        "runtimeVersion": "candidate",
+        "configurationGeneration": "1",
+        "probeGeneration": "1",
+        "observedAt": "2026-10-25T00:00:00.000Z",
+        "profiles": [
+          "standard-linux-v1"
+        ],
+        "dockerBuild": false,
+        "hardStorageLimit": false,
+        "capacity": {
+          "cpuMillis": "1000",
+          "memoryBytes": "1073741824",
+          "storageBytes": "10737418240",
+          "slots": "1"
+        },
+        "supportedImageFamilies": [
+          "linux"
+        ],
+        "runtimeMechanism": "process"
+      }
+    },
+    "valid": true
+  },
+  {
+    "id": "inventory-hostname-hostname",
+    "schema": "InventorySnapshot",
+    "value": {
+      "inventoryGeneration": "1",
+      "endpointIdentity": "engine-a",
+      "complete": false,
+      "nextCursor": null,
+      "observedAt": "2026-10-25T00:00:00.000Z",
+      "resources": [
+        {
+          "runtimeRef": {
+            "engine": "docker",
+            "scope": "engine-a",
+            "resourceKind": "container",
+            "resourceId": "immutable-a",
+            "executionId": "exec-a",
+            "generation": "1",
+            "specHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "state": "running",
+          "observedAt": "2026-10-25T00:00:00.000Z"
+        }
+      ],
+      "hostname": "runnerd-clean"
+    },
+    "valid": true
+  },
+  {
+    "id": "inventory-hostname-fqdn",
+    "schema": "InventorySnapshot",
+    "value": {
+      "inventoryGeneration": "1",
+      "endpointIdentity": "engine-a",
+      "complete": false,
+      "nextCursor": null,
+      "observedAt": "2026-10-25T00:00:00.000Z",
+      "resources": [
+        {
+          "runtimeRef": {
+            "engine": "docker",
+            "scope": "engine-a",
+            "resourceKind": "container",
+            "resourceId": "immutable-a",
+            "executionId": "exec-a",
+            "generation": "1",
+            "specHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "state": "running",
+          "observedAt": "2026-10-25T00:00:00.000Z"
+        }
+      ],
+      "hostname": "runner.example.test"
+    },
+    "valid": true
+  },
+  {
+    "id": "inventory-hostname-unavailable",
+    "schema": "InventorySnapshot",
+    "value": {
+      "inventoryGeneration": "1",
+      "endpointIdentity": "engine-a",
+      "complete": false,
+      "nextCursor": null,
+      "observedAt": "2026-10-25T00:00:00.000Z",
+      "resources": [
+        {
+          "runtimeRef": {
+            "engine": "docker",
+            "scope": "engine-a",
+            "resourceKind": "container",
+            "resourceId": "immutable-a",
+            "executionId": "exec-a",
+            "generation": "1",
+            "specHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "state": "running",
+          "observedAt": "2026-10-25T00:00:00.000Z"
+        }
+      ],
+      "hostname": null
+    },
+    "valid": true
+  },
+  {
+    "id": "inventory-hostname-empty",
+    "schema": "InventorySnapshot",
+    "value": {
+      "inventoryGeneration": "1",
+      "endpointIdentity": "engine-a",
+      "complete": false,
+      "nextCursor": null,
+      "observedAt": "2026-10-25T00:00:00.000Z",
+      "resources": [
+        {
+          "runtimeRef": {
+            "engine": "docker",
+            "scope": "engine-a",
+            "resourceKind": "container",
+            "resourceId": "immutable-a",
+            "executionId": "exec-a",
+            "generation": "1",
+            "specHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "state": "running",
+          "observedAt": "2026-10-25T00:00:00.000Z"
+        }
+      ],
+      "hostname": ""
+    },
+    "valid": false
+  },
+  {
+    "id": "inventory-hostname-injection",
+    "schema": "InventorySnapshot",
+    "value": {
+      "inventoryGeneration": "1",
+      "endpointIdentity": "engine-a",
+      "complete": false,
+      "nextCursor": null,
+      "observedAt": "2026-10-25T00:00:00.000Z",
+      "resources": [
+        {
+          "runtimeRef": {
+            "engine": "docker",
+            "scope": "engine-a",
+            "resourceKind": "container",
+            "resourceId": "immutable-a",
+            "executionId": "exec-a",
+            "generation": "1",
+            "specHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "state": "running",
+          "observedAt": "2026-10-25T00:00:00.000Z"
+        }
+      ],
+      "hostname": "host\nname"
+    },
+    "valid": false
+  },
+  {
+    "id": "inventory-hostname-invalid-label",
+    "schema": "InventorySnapshot",
+    "value": {
+      "inventoryGeneration": "1",
+      "endpointIdentity": "engine-a",
+      "complete": false,
+      "nextCursor": null,
+      "observedAt": "2026-10-25T00:00:00.000Z",
+      "resources": [
+        {
+          "runtimeRef": {
+            "engine": "docker",
+            "scope": "engine-a",
+            "resourceKind": "container",
+            "resourceId": "immutable-a",
+            "executionId": "exec-a",
+            "generation": "1",
+            "specHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "state": "running",
+          "observedAt": "2026-10-25T00:00:00.000Z"
+        }
+      ],
+      "hostname": "-host"
+    },
+    "valid": false
+  },
+  {
+    "id": "inventory-hostname-long-label",
+    "schema": "InventorySnapshot",
+    "value": {
+      "inventoryGeneration": "1",
+      "endpointIdentity": "engine-a",
+      "complete": false,
+      "nextCursor": null,
+      "observedAt": "2026-10-25T00:00:00.000Z",
+      "resources": [
+        {
+          "runtimeRef": {
+            "engine": "docker",
+            "scope": "engine-a",
+            "resourceKind": "container",
+            "resourceId": "immutable-a",
+            "executionId": "exec-a",
+            "generation": "1",
+            "specHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "state": "running",
+          "observedAt": "2026-10-25T00:00:00.000Z"
+        }
+      ],
+      "hostname": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "valid": false
+  },
+  {
+    "id": "inventory-hostname-too-long",
+    "schema": "InventorySnapshot",
+    "value": {
+      "inventoryGeneration": "1",
+      "endpointIdentity": "engine-a",
+      "complete": false,
+      "nextCursor": null,
+      "observedAt": "2026-10-25T00:00:00.000Z",
+      "resources": [
+        {
+          "runtimeRef": {
+            "engine": "docker",
+            "scope": "engine-a",
+            "resourceKind": "container",
+            "resourceId": "immutable-a",
+            "executionId": "exec-a",
+            "generation": "1",
+            "specHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "state": "running",
+          "observedAt": "2026-10-25T00:00:00.000Z"
+        }
+      ],
+      "hostname": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "valid": false
+  },
+  {
+    "id": "resource-telemetry-observation",
+    "schema": "ResourceTelemetry",
+    "value": {
+      "version": "runnerd08-resource-observations-v1",
+      "endpointIdentity": "engine-a",
+      "observedAt": "2026-11-15T00:00:00.000Z",
+      "cpu": {
+        "scope": "host",
+        "source": "proc-stat-delta",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "available",
+        "logicalCores": 4,
+        "utilizationBasisPoints": 2400,
+        "sampleMilliseconds": "1000"
+      },
+      "memory": {
+        "scope": "host",
+        "source": "proc-meminfo",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "available",
+        "totalBytes": "4294967296",
+        "availableBytes": "2147483648",
+        "usedBytes": "2147483648"
+      },
+      "filesystems": [
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        }
+      ],
+      "docker": {
+        "scope": "docker-daemon",
+        "source": "docker-system-df",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "unsupported",
+        "imagesBytes": null,
+        "writableLayersBytes": null,
+        "volumesBytes": null,
+        "buildCacheBytes": null,
+        "containers": null,
+        "activeContainers": null
+      },
+      "executionsComplete": false,
+      "executions": []
+    },
+    "valid": true
+  },
+  {
+    "id": "heartbeat-with-resource-telemetry",
+    "schema": "HostHeartbeat",
+    "value": {
+      "identity": {
+        "hostId": "host-a",
+        "keyId": "key-a",
+        "keyVersion": "1",
+        "sessionEpoch": "1"
+      },
+      "agentVersion": "0.1.0",
+      "protocolVersion": "1.0.0",
+      "inventoryGeneration": "1",
+      "effectivePolicyGeneration": "1",
+      "capabilities": {
+        "host": {
+          "os": "linux",
+          "architecture": "amd64",
+          "build": "candidate"
+        },
+        "engine": {
+          "os": "linux",
+          "architecture": "amd64",
+          "build": "candidate"
+        },
+        "endpointIdentity": "engine-a",
+        "runtimeVersion": "candidate",
+        "configurationGeneration": "1",
+        "probeGeneration": "1",
+        "observedAt": "2026-10-25T00:00:00.000Z",
+        "profiles": [
+          "standard-linux-v1"
+        ],
+        "dockerBuild": false,
+        "hardStorageLimit": false,
+        "capacity": {
+          "cpuMillis": "1000",
+          "memoryBytes": "1073741824",
+          "storageBytes": "10737418240",
+          "slots": "1"
+        },
+        "supportedImageFamilies": [
+          "linux"
+        ],
+        "runtimeMechanism": "process"
+      },
+      "telemetry": {
+        "version": "runnerd08-resource-observations-v1",
+        "endpointIdentity": "engine-a",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "cpu": {
+          "scope": "host",
+          "source": "proc-stat-delta",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "logicalCores": 4,
+          "utilizationBasisPoints": 2400,
+          "sampleMilliseconds": "1000"
+        },
+        "memory": {
+          "scope": "host",
+          "source": "proc-meminfo",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "totalBytes": "4294967296",
+          "availableBytes": "2147483648",
+          "usedBytes": "2147483648"
+        },
+        "filesystems": [
+          {
+            "scope": "filesystem",
+            "source": "statfs",
+            "observedAt": "2026-11-15T00:00:00.000Z",
+            "status": "available",
+            "path": "/",
+            "filesystemId": "fixture-shared",
+            "totalBytes": "107374182400",
+            "freeBytes": "64424509440",
+            "availableBytes": "63350767616",
+            "usedBytes": "42949672960",
+            "totalInodes": "1000000",
+            "freeInodes": "900000"
+          }
+        ],
+        "docker": {
+          "scope": "docker-daemon",
+          "source": "docker-system-df",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "unsupported",
+          "imagesBytes": null,
+          "writableLayersBytes": null,
+          "volumesBytes": null,
+          "buildCacheBytes": null,
+          "containers": null,
+          "activeContainers": null
+        },
+        "executionsComplete": false,
+        "executions": []
+      }
+    },
+    "valid": true
+  },
+  {
+    "id": "resource-telemetry-reject-cpu-range",
+    "schema": "ResourceTelemetry",
+    "value": {
+      "version": "runnerd08-resource-observations-v1",
+      "endpointIdentity": "engine-a",
+      "observedAt": "2026-11-15T00:00:00.000Z",
+      "cpu": {
+        "scope": "host",
+        "source": "proc-stat-delta",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "available",
+        "logicalCores": 4,
+        "utilizationBasisPoints": 10001,
+        "sampleMilliseconds": "1000"
+      },
+      "memory": {
+        "scope": "host",
+        "source": "proc-meminfo",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "available",
+        "totalBytes": "4294967296",
+        "availableBytes": "2147483648",
+        "usedBytes": "2147483648"
+      },
+      "filesystems": [
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        }
+      ],
+      "docker": {
+        "scope": "docker-daemon",
+        "source": "docker-system-df",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "unsupported",
+        "imagesBytes": null,
+        "writableLayersBytes": null,
+        "volumesBytes": null,
+        "buildCacheBytes": null,
+        "containers": null,
+        "activeContainers": null
+      },
+      "executionsComplete": false,
+      "executions": []
+    },
+    "valid": false
+  },
+  {
+    "id": "resource-telemetry-reject-numeric-bytes",
+    "schema": "ResourceTelemetry",
+    "value": {
+      "version": "runnerd08-resource-observations-v1",
+      "endpointIdentity": "engine-a",
+      "observedAt": "2026-11-15T00:00:00.000Z",
+      "cpu": {
+        "scope": "host",
+        "source": "proc-stat-delta",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "available",
+        "logicalCores": 4,
+        "utilizationBasisPoints": 2400,
+        "sampleMilliseconds": "1000"
+      },
+      "memory": {
+        "scope": "host",
+        "source": "proc-meminfo",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "available",
+        "totalBytes": "4294967296",
+        "availableBytes": "2147483648",
+        "usedBytes": 9007199254740993
+      },
+      "filesystems": [
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        }
+      ],
+      "docker": {
+        "scope": "docker-daemon",
+        "source": "docker-system-df",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "unsupported",
+        "imagesBytes": null,
+        "writableLayersBytes": null,
+        "volumesBytes": null,
+        "buildCacheBytes": null,
+        "containers": null,
+        "activeContainers": null
+      },
+      "executionsComplete": false,
+      "executions": []
+    },
+    "valid": false
+  },
+  {
+    "id": "resource-telemetry-reject-negative-counter",
+    "schema": "ResourceTelemetry",
+    "value": {
+      "version": "runnerd08-resource-observations-v1",
+      "endpointIdentity": "engine-a",
+      "observedAt": "2026-11-15T00:00:00.000Z",
+      "cpu": {
+        "scope": "host",
+        "source": "proc-stat-delta",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "available",
+        "logicalCores": 4,
+        "utilizationBasisPoints": 2400,
+        "sampleMilliseconds": "1000"
+      },
+      "memory": {
+        "scope": "host",
+        "source": "proc-meminfo",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "available",
+        "totalBytes": "4294967296",
+        "availableBytes": "2147483648",
+        "usedBytes": "-1"
+      },
+      "filesystems": [
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        }
+      ],
+      "docker": {
+        "scope": "docker-daemon",
+        "source": "docker-system-df",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "unsupported",
+        "imagesBytes": null,
+        "writableLayersBytes": null,
+        "volumesBytes": null,
+        "buildCacheBytes": null,
+        "containers": null,
+        "activeContainers": null
+      },
+      "executionsComplete": false,
+      "executions": []
+    },
+    "valid": false
+  },
+  {
+    "id": "resource-telemetry-reject-authority-field",
+    "schema": "ResourceTelemetry",
+    "value": {
+      "version": "runnerd08-resource-observations-v1",
+      "endpointIdentity": "engine-a",
+      "observedAt": "2026-11-15T00:00:00.000Z",
+      "cpu": {
+        "scope": "host",
+        "source": "proc-stat-delta",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "available",
+        "logicalCores": 4,
+        "utilizationBasisPoints": 2400,
+        "sampleMilliseconds": "1000"
+      },
+      "memory": {
+        "scope": "host",
+        "source": "proc-meminfo",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "available",
+        "totalBytes": "4294967296",
+        "availableBytes": "2147483648",
+        "usedBytes": "2147483648"
+      },
+      "filesystems": [
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        }
+      ],
+      "docker": {
+        "scope": "docker-daemon",
+        "source": "docker-system-df",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "unsupported",
+        "imagesBytes": null,
+        "writableLayersBytes": null,
+        "volumesBytes": null,
+        "buildCacheBytes": null,
+        "containers": null,
+        "activeContainers": null
+      },
+      "executionsComplete": false,
+      "executions": [],
+      "admissionEnabled": true
+    },
+    "valid": false
+  },
+  {
+    "id": "resource-telemetry-reject-filesystem-bound",
+    "schema": "ResourceTelemetry",
+    "value": {
+      "version": "runnerd08-resource-observations-v1",
+      "endpointIdentity": "engine-a",
+      "observedAt": "2026-11-15T00:00:00.000Z",
+      "cpu": {
+        "scope": "host",
+        "source": "proc-stat-delta",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "available",
+        "logicalCores": 4,
+        "utilizationBasisPoints": 2400,
+        "sampleMilliseconds": "1000"
+      },
+      "memory": {
+        "scope": "host",
+        "source": "proc-meminfo",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "available",
+        "totalBytes": "4294967296",
+        "availableBytes": "2147483648",
+        "usedBytes": "2147483648"
+      },
+      "filesystems": [
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        },
+        {
+          "scope": "filesystem",
+          "source": "statfs",
+          "observedAt": "2026-11-15T00:00:00.000Z",
+          "status": "available",
+          "path": "/",
+          "filesystemId": "fixture-shared",
+          "totalBytes": "107374182400",
+          "freeBytes": "64424509440",
+          "availableBytes": "63350767616",
+          "usedBytes": "42949672960",
+          "totalInodes": "1000000",
+          "freeInodes": "900000"
+        }
+      ],
+      "docker": {
+        "scope": "docker-daemon",
+        "source": "docker-system-df",
+        "observedAt": "2026-11-15T00:00:00.000Z",
+        "status": "unsupported",
+        "imagesBytes": null,
+        "writableLayersBytes": null,
+        "volumesBytes": null,
+        "buildCacheBytes": null,
+        "containers": null,
+        "activeContainers": null
+      },
+      "executionsComplete": false,
+      "executions": []
+    },
+    "valid": false
+  },
+  {
+    "id": "connection-resync-intent",
+    "schema": "ConnectionResyncIntent",
+    "valid": true,
+    "value": {
+      "domain": "neticora-runnerd-connection-resync-v1",
+      "operationId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "identity": {
+        "hostId": "host-a",
+        "keyId": "key-a",
+        "keyVersion": "1",
+        "sessionEpoch": "1"
+      },
+      "tenantId": "tenant-a",
+      "installationId": "install-a",
+      "runnerDeploymentId": "pool-a",
+      "enrollmentRequestId": "enroll-a",
+      "publicKeyFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceBootId": "boot_original_012345",
+      "sourceEndpointIdentity": "engine-a",
+      "targetBootId": "boot_current_0123456",
+      "targetEndpointIdentity": "engine-b",
+      "journalId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "journalRevision": "0"
+    }
+  },
+  {
+    "id": "connection-resync-proof",
+    "schema": "ConnectionResyncProof",
+    "valid": true,
+    "value": {
+      "domain": "neticora-runnerd-connection-resync-proof-v1",
+      "request": {
+        "domain": "neticora-runnerd-connection-resync-v1",
+        "operationId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "identity": {
+          "hostId": "host-a",
+          "keyId": "key-a",
+          "keyVersion": "1",
+          "sessionEpoch": "1"
+        },
+        "tenantId": "tenant-a",
+        "installationId": "install-a",
+        "runnerDeploymentId": "pool-a",
+        "enrollmentRequestId": "enroll-a",
+        "publicKeyFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sourceBootId": "boot_original_012345",
+        "sourceEndpointIdentity": "engine-a",
+        "targetBootId": "boot_current_0123456",
+        "targetEndpointIdentity": "engine-b",
+        "journalId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "journalRevision": "0"
+      },
+      "issuedAt": "2026-11-16T00:00:00.000Z",
+      "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "inventoryComplete": true,
+      "ownedResourceIds": [],
+      "journalSettled": true
+    }
+  },
+  {
+    "id": "connection-resync-unknown-resource",
+    "schema": "ConnectionResyncProof",
+    "valid": false,
+    "value": {
+      "domain": "neticora-runnerd-connection-resync-proof-v1",
+      "request": {
+        "domain": "neticora-runnerd-connection-resync-v1",
+        "operationId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "identity": {
+          "hostId": "host-a",
+          "keyId": "key-a",
+          "keyVersion": "1",
+          "sessionEpoch": "1"
+        },
+        "tenantId": "tenant-a",
+        "installationId": "install-a",
+        "runnerDeploymentId": "pool-a",
+        "enrollmentRequestId": "enroll-a",
+        "publicKeyFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sourceBootId": "boot_original_012345",
+        "sourceEndpointIdentity": "engine-a",
+        "targetBootId": "boot_current_0123456",
+        "targetEndpointIdentity": "engine-b",
+        "journalId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "journalRevision": "0"
+      },
+      "issuedAt": "2026-11-16T00:00:00.000Z",
+      "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "inventoryComplete": true,
+      "ownedResourceIds": [
+        "unknown"
+      ],
+      "journalSettled": true
+    }
+  },
+  {
+    "id": "connection-resync-no-execution-authority",
+    "schema": "ConnectionResyncIntent",
+    "valid": false,
+    "value": {
+      "domain": "neticora-runnerd-connection-resync-v1",
+      "operationId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "identity": {
+        "hostId": "host-a",
+        "keyId": "key-a",
+        "keyVersion": "1",
+        "sessionEpoch": "1"
+      },
+      "tenantId": "tenant-a",
+      "installationId": "install-a",
+      "runnerDeploymentId": "pool-a",
+      "enrollmentRequestId": "enroll-a",
+      "publicKeyFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceBootId": "boot_original_012345",
+      "sourceEndpointIdentity": "engine-a",
+      "targetBootId": "boot_current_0123456",
+      "targetEndpointIdentity": "engine-b",
+      "journalId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "journalRevision": "0",
+      "admissionEnabled": true
+    }
+  },
+  {
+    "id": "connection-resync-signed-request",
+    "schema": "SignedConnectionResyncRequest",
+    "valid": true,
+    "value": {
+      "proof": {
+        "domain": "neticora-runnerd-connection-resync-proof-v1",
+        "request": {
+          "domain": "neticora-runnerd-connection-resync-v1",
+          "operationId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "identity": {
+            "hostId": "host-a",
+            "keyId": "key-a",
+            "keyVersion": "1",
+            "sessionEpoch": "1"
+          },
+          "tenantId": "tenant-a",
+          "installationId": "install-a",
+          "runnerDeploymentId": "pool-a",
+          "enrollmentRequestId": "enroll-a",
+          "publicKeyFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sourceBootId": "boot_original_012345",
+          "sourceEndpointIdentity": "engine-a",
+          "targetBootId": "boot_current_0123456",
+          "targetEndpointIdentity": "engine-b",
+          "journalId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "journalRevision": "0"
+        },
+        "issuedAt": "2026-11-16T00:00:00.000Z",
+        "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "inventoryComplete": true,
+        "ownedResourceIds": [],
+        "journalSettled": true
+      },
+      "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  {
+    "id": "connection-resync-response",
+    "schema": "ConnectionResyncResponse",
+    "valid": true,
+    "value": {
+      "operationId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "requestHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "state": "committed",
+      "reason": "observation-only-binding-committed",
+      "identity": {
+        "hostId": "host-a",
+        "keyId": "key-a",
+        "keyVersion": "1",
+        "sessionEpoch": "2"
+      },
+      "tenantId": "tenant-a",
+      "installationId": "install-a",
+      "runnerDeploymentId": "pool-a",
+      "bootId": "boot_current_0123456",
+      "endpointIdentity": "engine-b"
+    }
+  },
+  {
+    "id": "restricted-connection-status",
+    "schema": "ConnectionStatusProof",
+    "valid": true,
+    "value": {
+      "domain": "neticora-runnerd-restricted-status-v1",
+      "hostId": "host-a",
+      "keyId": "key-a",
+      "keyVersion": "1",
+      "tenantId": "tenant-a",
+      "installationId": "install-a",
+      "runnerDeploymentId": "pool-a",
+      "enrollmentRequestId": "enroll-a",
+      "publicKeyFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "reportedSessionEpoch": "1",
+      "observedBootId": "boot_current_012345",
+      "observedEndpointIdentity": null,
+      "operationId": null,
+      "reason": "unknown-runtime-resources",
+      "observedAt": "2026-11-16T00:00:00.000Z",
+      "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  },
+  {
+    "id": "restricted-connection-status-signed",
+    "schema": "SignedConnectionStatus",
+    "valid": true,
+    "value": {
+      "proof": {
+        "domain": "neticora-runnerd-restricted-status-v1",
+        "hostId": "host-a",
+        "keyId": "key-a",
+        "keyVersion": "1",
+        "tenantId": "tenant-a",
+        "installationId": "install-a",
+        "runnerDeploymentId": "pool-a",
+        "enrollmentRequestId": "enroll-a",
+        "publicKeyFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "reportedSessionEpoch": "1",
+        "observedBootId": "boot_current_012345",
+        "observedEndpointIdentity": null,
+        "operationId": null,
+        "reason": "unknown-runtime-resources",
+        "observedAt": "2026-11-16T00:00:00.000Z",
+        "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  {
+    "id": "restricted-connection-status-receipt",
+    "schema": "ConnectionStatusReceipt",
+    "valid": true,
+    "value": {
+      "accepted": true,
+      "channel": "restricted-installation-observation"
+    }
+  },
+  {
+    "id": "restricted-status-no-authority",
+    "schema": "ConnectionStatusProof",
+    "valid": false,
+    "value": {
+      "domain": "neticora-runnerd-restricted-status-v1",
+      "hostId": "host-a",
+      "keyId": "key-a",
+      "keyVersion": "1",
+      "tenantId": "tenant-a",
+      "installationId": "install-a",
+      "runnerDeploymentId": "pool-a",
+      "enrollmentRequestId": "enroll-a",
+      "publicKeyFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "reportedSessionEpoch": "1",
+      "observedBootId": "boot_current_012345",
+      "observedEndpointIdentity": null,
+      "operationId": null,
+      "reason": "unknown-runtime-resources",
+      "observedAt": "2026-11-16T00:00:00.000Z",
+      "nonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "admissionEnabled": true
+    }
   }
 ]

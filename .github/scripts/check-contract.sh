@@ -23,7 +23,8 @@ case "${1:-}" in
     # Keep manual host-only qualification helpers compilable in ordinary CI.
     # No destructive case runs without its explicit sentinel/opt-in environment.
     go test -mod=readonly -vet=off -tags runnerd_qualification -run '^$' ./journal ./internal/execution
-    go test -mod=readonly -vet=off -tags runnerd_docker -run '^$' ./internal/dockerengine ./internal/standardlinux
+    go test -mod=readonly -vet=off -tags runnerd_docker -run '^$' ./internal/dockerengine ./internal/standardlinux ./internal/onboarding
+    go test -mod=readonly -vet=off -tags runnerd_enrollment_integration -run '^$' ./internal/onboarding
     ;;
   unit-tests)
     PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s .github/scripts -p 'test_*.py'

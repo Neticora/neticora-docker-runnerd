@@ -2,6 +2,8 @@
 Description=Neticora Runnerd
 After=network-online.target
 Wants=network-online.target
+ConditionPathExists=/etc/neticora-runnerd/config.json
+ConditionPathExists=/etc/neticora-runnerd/identity.json
 
 [Service]
 Type=simple
@@ -20,6 +22,8 @@ RuntimeDirectoryMode=0750
 NoNewPrivileges=yes
 ProtectSystem=strict
 ReadWritePaths=-/run/neticora-runnerd-bootstrap
+# Operator provisions this disk-backed root; onboarding never formats/mounts it.
+ReadWritePaths=-/mnt/neticora-runners/executions
 ProtectHome=yes
 PrivateTmp=yes
 PrivateDevices=yes
@@ -29,6 +33,7 @@ ProtectControlGroups=yes
 RestrictSUIDSGID=yes
 LockPersonality=yes
 CapabilityBoundingSet=
+AmbientCapabilities=
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 
 [Install]
