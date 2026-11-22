@@ -96,24 +96,31 @@ generated on install; the unconfigured service remains stopped and disabled.
 
 ## Enroll
 
+[Alpha PR #336](https://github.com/Neticora/neticora-alpha/pull/336) integrates
+pool-bound setup with the platform. Before installing or upgrading the agent,
+confirm that the deployed gateway supports the package's enrollment, inventory
+and recovery protocol. Platform operators apply the matching migrations and
+verify the gateway before issuing tokens.
+
 ```sh
 sudo apt install ./neticora-runnerd_<version>_amd64.deb
 sudo neticora-runnerd setup
 ```
 
-In Neticora Runner Hosts select the intended tenant and an existing customer-host
-pool, then generate a single-use token valid for 15 minutes. Pool creation remains
-in the existing pool workflow (#326); setup cannot create a pool. Copy the canonical
-tenant ID and pool ID displayed by the dialog, and the HTTPS host API URL supplied
-by your platform administrator. Enter or paste the token at the terminal prompt;
-each character appears as `*`. Press Enter to submit, Backspace to correct the
-entry, or Ctrl+U to clear it. Never put tokens in arguments, environment variables,
-shell history or logs.
+In **Runner Hosts → Enroll Agent**, an authorized tenant superuser or scoped
+platform administrator selects an existing active customer-host pool and issues
+a single-use token valid for 15 minutes. Create the pool first using the
+existing platform workflow (#326). Use the dialog's canonical tenant ID, pool ID
+and HTTPS host API URL ending in `/api/v1/runner-hosts`. Enter or paste the
+token at the terminal prompt. Each character appears as `*`. Press Enter to
+submit, Backspace to correct the entry, or Ctrl+U to clear it. Never put tokens
+in arguments, environment variables, shell history or logs.
 
-Setup runs file, key, enrollment and Docker observations as the service account,
-without supplementary groups. Root is used only to select that account and, after
-explicit confirmation, start the installed systemd unit. It persists the original
-Ed25519 key and request before sending the existing enrollment proof. Only the
+Setup runs file, key, enrollment and Docker checks as the service account with
+its configured groups. The root parent launches that identity, handles an
+explicitly approved Docker group change if needed, and sets up service startup
+if requested. The service account persists the original Ed25519 key and request
+before sending the existing enrollment proof. Only the
 token hash persists. If the response is lost, retry with that exact token within
 the server's existing ten-minute response-recovery window. A recovered response
 is authenticated through the existing proof-of-possession token exchange and the
@@ -219,13 +226,19 @@ integrity; the package digest cannot be authenticated from inside the package.
 Exit failure indicates a failed check; an offline status reports service unavailable
 without opening/migrating SQLite. Setup and doctor do not clear journal locks.
 
-For enrolled connection-only installations, see [connection-only reboot recovery](CONNECTION-RECOVERY.md) for explicit startup enablement and exact administrative approval without execution.
+Compare the installation, tenant and pool in local status with the original
+**Runner Hosts** row. Read registration, connection, inventory freshness,
+qualification and admission separately. A connected host can show a fresh
+hostname and resource telemetry while execution capacity remains zero.
+[Resource telemetry](RESOURCE-TELEMETRY.md)
 
-Docker restart or host reboot changes the original endpoint identity. Preserve
-the journal/credentials and use the existing Runnerd08 signed continuity-recovery
-procedure. Connection/setup cannot treat a new boot, missing object or changed
-socket as authority to discard history. Ordinary daemon stop preserves workloads
-through `KillMode=process`; the original controller/journal perform recovery.
+With service startup enabled, a verified clean connection-only reboot can
+restore observation on the original installation through signed resync.
+A same-boot Engine change or a blocked transition follows the exception path.
+Preserve the original journal and credentials and inspect the exact blocker.
+If there is uncertain work or cleanup due, use the applicable signed execution
+recovery procedure. Ordinary daemon stop preserves workloads through
+`KillMode=process`. [Connection-only recovery](CONNECTION-RECOVERY.md)
 
 Socket-path replacement and daemon restart are distinct observations. A different
 socket inode invalidates the current observation even when the same authenticated

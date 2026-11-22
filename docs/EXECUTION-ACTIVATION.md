@@ -5,6 +5,13 @@ operator-signed acceptance. It never creates acceptance or changes platform
 admission. Target: the installed Ubuntu amd64 disk-backed Standard controller;
 Docker builds and hard aggregate storage guarantees remain disabled.
 
+For the Alpha integration from PR #336, provider binding, independently
+signed qualification staging, signed initial execution handoff, local
+activation with current inventory, and explicit platform admission each
+require their own evidence. Confirm the matching platform path is deployed
+before starting this procedure. Preserve the original enrollment identity
+and journal across the handoff. [Alpha integration sequence](https://github.com/Neticora/neticora-alpha/blob/a1376d7a0f894117b8907ee57ec5df70f5faf166/docs/runnerd/ALPHA-INTEGRATION.md#advance-a-reviewed-host-to-execution)
+
 ## Required inputs
 
 Retain the original setup credentials, connection binding, journal and anchor.
