@@ -27,7 +27,7 @@ var migrations embed.FS
 
 const databaseName = "journal.db"
 const anchorName = "recovery.anchor.json"
-const schemaVersion = 3
+const schemaVersion = 5
 
 type Options struct {
 	// Zero values select conservative defaults, never unlimited growth.
@@ -45,9 +45,8 @@ func (o Options) defaults() (Options, error) {
 	if limits != (agent.ReservationLimits{}) && (limits.CPUMillis == 0 || limits.MemoryBytes == 0 || limits.StorageBytes == 0 || limits.Slots == 0) {
 		return o, errors.New("incomplete reservation ceilings")
 	}
-	if o.MinFreeBytes == 0 {
-		o.MinFreeBytes = 64 << 20
-	}
+	// No mandatory free-space admission threshold. Explicit nonzero values are
+	// operator-selected journal headroom, not a Runnerd storage policy.
 	if o.MaxJournalBytes == 0 {
 		o.MaxJournalBytes = 1 << 30
 	}
@@ -260,7 +259,7 @@ func (s *SQLiteStore) migrate(ctx context.Context, fresh bool) error {
 	}
 	defer tx.Rollback()
 	for next := version + 1; next <= schemaVersion; next++ {
-		name := map[int]string{1: "migrations/001_initial.sql", 2: "migrations/002_peer_recovery.sql", 3: "migrations/003_peer_recovery_completion.sql"}[next]
+		name := map[int]string{1: "migrations/001_initial.sql", 2: "migrations/002_peer_recovery.sql", 3: "migrations/003_peer_recovery_completion.sql", 4: "migrations/004_execution_storage.sql", 5: "migrations/005_connection_resync.sql"}[next]
 		raw, e := migrations.ReadFile(name)
 		if e != nil {
 			return e
@@ -379,12 +378,14 @@ func (s *SQLiteStore) acquireWithin(ctx context.Context, timeout time.Duration) 
 }
 
 func (s *SQLiteStore) capacity() error {
-	free, err := availableBytes(s.dir)
-	if err != nil {
-		return agent.ErrStoreUnavailable
-	}
-	if free < s.options.MinFreeBytes {
-		return agent.ErrCapacity
+	if s.options.MinFreeBytes > 0 {
+		free, err := availableBytes(s.dir)
+		if err != nil {
+			return agent.ErrStoreUnavailable
+		}
+		if free < s.options.MinFreeBytes {
+			return agent.ErrCapacity
+		}
 	}
 	var total int64
 	for _, name := range []string{databaseName, databaseName + "-wal", databaseName + "-shm"} {
@@ -555,6 +556,13 @@ func (s *SQLiteStore) launchStatus(ctx context.Context, reader stateReader) (str
 	}
 	if count >= s.options.MaxOutboxEvents || size >= s.options.MaxOutboxBytes {
 		return "outbox-pressure", agent.ErrCapacity
+	}
+	var connectionRecovery int
+	if err := reader.QueryRowContext(ctx, "SELECT count(*) FROM connection_resync WHERE completed=0").Scan(&connectionRecovery); err != nil {
+		return "unavailable", agent.ErrStoreUnavailable
+	}
+	if connectionRecovery != 0 {
+		return "connection-resynchronization-required", agent.ErrRecoveryRequired
 	}
 	var recovery int
 	if err := reader.QueryRowContext(ctx, "SELECT count(*) FROM peer_recovery_approvals WHERE completed=0 AND superseded=0").Scan(&recovery); err != nil {

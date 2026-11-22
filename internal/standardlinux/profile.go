@@ -18,6 +18,7 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/agent"
 	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
 	"github.com/Neticora/neticora-docker-runnerd/internal/dockerengine"
+	"github.com/Neticora/neticora-docker-runnerd/internal/executionstorage"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 )
@@ -25,6 +26,7 @@ import (
 var ErrAdmission = errors.New("Standard Linux admission rejected")
 
 const TemplateVersion = "linux-github-process-v1"
+const DiskTemplateVersion = "linux-github-disk-v1"
 
 type Policy struct {
 	value protocol.CustomerManagedPolicy
@@ -90,7 +92,7 @@ func (p *Policy) Admit(scope agent.StoreScope, s protocol.ExecutionSpec, now tim
 			trusted = true
 		}
 	}
-	if !trusted || s.TrustClass != "trusted" || s.Provider != "github" || s.ExecutionBackend != "customer-host" || s.RuntimeEngine != "docker" || s.IsolationProfile != "standard" || s.TemplateVersion != TemplateVersion || s.DockerBuild || s.RunnerPlatform.Os != "linux" || s.HostPlatform.Os != "linux" || s.RunnerPlatform.Architecture != s.HostPlatform.Architecture || s.RunnerPlatform.Architecture != "amd64" {
+	if !trusted || s.TrustClass != "trusted" || s.Provider != "github" || s.ExecutionBackend != "customer-host" || s.RuntimeEngine != "docker" || s.IsolationProfile != "standard" || (s.TemplateVersion != TemplateVersion && s.TemplateVersion != DiskTemplateVersion) || s.DockerBuild || s.RunnerPlatform.Os != "linux" || s.HostPlatform.Os != "linux" || s.RunnerPlatform.Architecture != s.HostPlatform.Architecture || s.RunnerPlatform.Architecture != "amd64" {
 		return ErrAdmission
 	}
 	for _, pair := range [][2]string{{s.Resources.CpuMillis, w.Limits.CpuMillis}, {s.Resources.MemoryBytes, w.Limits.MemoryBytes}, {s.Resources.StorageBytes, w.Limits.StorageBytes}, {s.Resources.Slots, w.Limits.Slots}} {
@@ -107,6 +109,7 @@ func (p *Policy) Admit(scope agent.StoreScope, s protocol.ExecutionSpec, now tim
 type Settings struct {
 	ImageRepository string
 	NetworkID       string // Existing customer-provisioned Docker bridge ID, never host.
+	StorageRoot     string // Explicit private disk-backed execution root; no quotas.
 	BootstrapRoot   string // Provisioned private tmpfs directory, outside journal.
 	RunnerUID       int
 	PidsLimit       int64
@@ -116,21 +119,35 @@ func (s Settings) Plan(scope agent.StoreScope, spec protocol.ExecutionSpec) (doc
 	if s.ImageRepository == "" || strings.ContainsAny(s.ImageRepository, "@ \t\r\n") || s.NetworkID == "" || s.NetworkID == "host" || s.NetworkID == "none" || strings.HasPrefix(s.NetworkID, "container:") || s.RunnerUID < 1 || s.PidsLimit < 16 || s.PidsLimit > 4096 || !filepath.IsAbs(s.BootstrapRoot) || filepath.Clean(s.BootstrapRoot) != s.BootstrapRoot {
 		return dockerengine.Plan{}, ErrAdmission
 	}
+	if spec.TemplateVersion != TemplateVersion && spec.TemplateVersion != DiskTemplateVersion {
+		return dockerengine.Plan{}, ErrAdmission
+	}
+	if spec.TemplateVersion == DiskTemplateVersion && (!filepath.IsAbs(s.StorageRoot) || filepath.Clean(s.StorageRoot) != s.StorageRoot || s.StorageRoot == "/") {
+		return dockerengine.Plan{}, ErrAdmission
+	}
 	identity := agent.Identity{InstallationID: scope.InstallationID, TenantID: scope.TenantID, HostID: scope.HostID, ExecutionID: spec.ExecutionId, Generation: spec.Generation, SpecHash: spec.SpecHash, AttemptID: spec.AttemptId}
 	labels := map[string]string{}
 	labels[dockerengine.LabelPrefix+"docker-build"] = "false"
 	labels[dockerengine.LabelPrefix+"hard-storage-limit"] = "false"
-	for k, v := range map[string]string{"installation": identity.InstallationID, "tenant": identity.TenantID, "host": identity.HostID, "execution": identity.ExecutionID, "generation": identity.Generation, "spec": identity.SpecHash, "attempt": identity.AttemptID, "endpoint": scope.EndpointIdentity, "template": TemplateVersion} {
+	for k, v := range map[string]string{"installation": identity.InstallationID, "tenant": identity.TenantID, "host": identity.HostID, "execution": identity.ExecutionID, "generation": identity.Generation, "spec": identity.SpecHash, "attempt": identity.AttemptID, "endpoint": scope.EndpointIdentity, "template": spec.TemplateVersion} {
 		labels[dockerengine.LabelPrefix+k] = v
 	}
 	hash := sha256.Sum256([]byte(scope.InstallationID + "\x00" + spec.ExecutionId + "\x00" + spec.Generation + "\x00" + spec.SpecHash))
 	name := "nrd-" + hex.EncodeToString(hash[:])
 	pids := s.PidsLimit
-	return dockerengine.Plan{Name: name, Config: &container.Config{Image: s.ImageRepository + "@" + spec.ImageDigest, User: strconv.Itoa(s.RunnerUID) + ":" + strconv.Itoa(s.RunnerUID), WorkingDir: "/runner", Entrypoint: []string{"/usr/local/bin/runnerd-github"}, Labels: labels}, HostConfig: &container.HostConfig{
+	plan := dockerengine.Plan{Name: name, Config: &container.Config{Image: s.ImageRepository + "@" + spec.ImageDigest, User: strconv.Itoa(s.RunnerUID) + ":" + strconv.Itoa(s.RunnerUID), WorkingDir: "/runner", Entrypoint: []string{"/usr/local/bin/runnerd-github"}, Labels: labels}, HostConfig: &container.HostConfig{
 		RestartPolicy: container.RestartPolicy{Name: "no"}, Runtime: "runc", CgroupnsMode: "private", NetworkMode: container.NetworkMode(s.NetworkID), IpcMode: "private", CapDrop: []string{"ALL"}, SecurityOpt: []string{"no-new-privileges=true"},
 		Resources: container.Resources{NanoCPUs: int64(number(spec.Resources.CpuMillis)) * 1_000_000, Memory: int64(number(spec.Resources.MemoryBytes)), MemorySwap: int64(number(spec.Resources.MemoryBytes)), PidsLimit: &pids},
 		Mounts:    []mount.Mount{{Type: mount.TypeBind, Source: filepath.Join(s.BootstrapRoot, name), Target: "/run/neticora-bootstrap", BindOptions: &mount.BindOptions{Propagation: mount.PropagationRPrivate}}},
 		Tmpfs:     map[string]string{"/tmp": "rw,noexec,nosuid,nodev,size=67108864", "/runner/_work": fmt.Sprintf("rw,nosuid,nodev,size=%d,uid=%d,gid=%d,mode=0700", number(spec.Resources.StorageBytes), s.RunnerUID, s.RunnerUID)},
 		LogConfig: container.LogConfig{Type: "local", Config: map[string]string{"max-size": "10m", "max-file": "2", "mode": "non-blocking", "max-buffer-size": "1m"}},
-	}}, nil
+	}}
+	if spec.TemplateVersion == DiskTemplateVersion {
+		plan.StorageDirectory = filepath.Join(s.StorageRoot, executionstorage.Name(identity))
+		plan.HostConfig.Tmpfs = nil
+		for _, bind := range [][2]string{{"workspace", "/runner/_work"}, {"home", "/home/runner"}, {"tmp", "/tmp"}, {"diagnostics", "/runner/_diag"}} {
+			plan.HostConfig.Mounts = append(plan.HostConfig.Mounts, mount.Mount{Type: mount.TypeBind, Source: filepath.Join(plan.StorageDirectory, bind[0]), Target: bind[1], BindOptions: &mount.BindOptions{Propagation: mount.PropagationRPrivate}})
+		}
+	}
+	return plan, nil
 }

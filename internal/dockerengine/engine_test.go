@@ -17,7 +17,7 @@ func fakeEngine(t *testing.T) (*Engine, Plan, *bool, *bool, *int, *string) {
 	return fakeEngineWithHook(t, nil)
 }
 
-func fakeEngineWithHook(t *testing.T, hook func(string)) (*Engine, Plan, *bool, *bool, *int, *string) {
+func fakeEngineWithHook(t *testing.T, hook func(string), overrides ...func(http.ResponseWriter, *http.Request, string) bool) (*Engine, Plan, *bool, *bool, *int, *string) {
 	t.Helper()
 	exists, running := false, false
 	creates := 0
@@ -36,11 +36,16 @@ func fakeEngineWithHook(t *testing.T, hook func(string)) (*Engine, Plan, *bool, 
 		if hook != nil {
 			hook(path)
 		}
+		for _, override := range overrides {
+			if override(w, r, path) {
+				return
+			}
+		}
 		switch {
 		case path == "/_ping":
 			w.WriteHeader(200)
 		case path == "/info":
-			_ = json.NewEncoder(w).Encode(map[string]any{"ID": daemon, "OSType": "linux", "DockerRootDir": root})
+			_ = json.NewEncoder(w).Encode(map[string]any{"ID": daemon, "OSType": "linux", "DockerRootDir": root, "CgroupDriver": "systemd", "CgroupVersion": "2"})
 		case path == "/containers/json":
 			_ = json.NewEncoder(w).Encode([]any{})
 		case strings.HasPrefix(path, "/images/"):

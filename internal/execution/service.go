@@ -18,6 +18,7 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/internal/dockerengine"
 	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
 	"github.com/Neticora/neticora-docker-runnerd/internal/standardlinux"
+	"github.com/Neticora/neticora-docker-runnerd/internal/telemetry"
 	"github.com/Neticora/neticora-docker-runnerd/journal"
 	"github.com/Neticora/neticora-docker-runnerd/transport"
 )
@@ -65,6 +66,8 @@ func Open(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drain
 		clear(key)
 		return nil, nil, agent.ErrRecoveryRequired
 	}
+	// Expired/missing new-work qualification must not prevent recovery or cleanup.
+	// HostRemote checks current acceptance at every start authorization below.
 	if err = hostfs.CheckAncestors(filepath.Dir(x.BootstrapRoot)); err != nil {
 		return nil, nil, err
 	}
@@ -119,6 +122,14 @@ func Open(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drain
 	provisioned, _ := time.Parse(time.RFC3339Nano, x.TrustProvisionedAt)
 	verifier := standardlinux.ImageVerifier{RootDirectory: x.TrustRoots, BundleDirectory: x.ImageBundles, ProvisionedAt: provisioned}
 	remote := &HostRemote{Client: client, Credentials: credentials, Key: key, Capabilities: capabilities, PolicyGeneration: func() string { return policy.Get().Generation() }, Version: Version()}
+	remote.CheckQualification = func() error { _, e := Qualification(c, credentials, time.Now()); return e }
+	remote.CheckExecutionQualification = func(spec protocol.ExecutionSpec) error {
+		accepted, err := Qualification(c, credentials, time.Now())
+		if err != nil || !sameQualifiedTemplate(accepted, spec) {
+			return ErrQualification
+		}
+		return nil
+	}
 	remote.CheckTransport = func() error {
 		req, e := http.NewRequest("GET", c.ControlPlaneURL, nil)
 		if e != nil {
@@ -138,7 +149,7 @@ func Open(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drain
 		skew, measured := client.ClockSkew()
 		return policy.Get().Transport(actualProxy, caDigest, skew, measured)
 	}
-	controller := &Controller{Store: store, Runtime: runtime, Remote: remote, SigningKey: key, Scope: agent.StoreScope{InstallationID: credentials.InstallationID, TenantID: credentials.TenantID, HostID: credentials.Identity.HostId, SessionEpoch: credentials.Identity.SessionEpoch, EndpointIdentity: credentials.EndpointIdentity}, Authority: journal.Authority{TenantID: credentials.TenantID, HostID: credentials.Identity.HostId, SessionEpoch: credentials.Identity.SessionEpoch, EndpointIdentity: credentials.EndpointIdentity, KeyID: credentials.Identity.KeyId}, Profile: standardlinux.Settings{ImageRepository: x.ImageRepository, NetworkID: x.NetworkID, BootstrapRoot: x.BootstrapRoot, RunnerUID: os.Geteuid(), PidsLimit: x.PidsLimit}, Policy: policy.Get, VerifyImage: verifier.Verify, KeysDirectory: x.KeysDirectory, Organization: x.Organization, Pool: x.Pool, Drained: drained}
+	controller := &Controller{Store: store, Runtime: runtime, Remote: remote, SigningKey: key, Scope: agent.StoreScope{InstallationID: credentials.InstallationID, TenantID: credentials.TenantID, HostID: credentials.Identity.HostId, SessionEpoch: credentials.Identity.SessionEpoch, EndpointIdentity: credentials.EndpointIdentity}, Authority: journal.Authority{TenantID: credentials.TenantID, HostID: credentials.Identity.HostId, SessionEpoch: credentials.Identity.SessionEpoch, EndpointIdentity: credentials.EndpointIdentity, KeyID: credentials.Identity.KeyId}, Profile: standardlinux.Settings{ImageRepository: x.ImageRepository, NetworkID: x.NetworkID, BootstrapRoot: x.BootstrapRoot, StorageRoot: x.StorageRoot, RunnerUID: os.Geteuid(), PidsLimit: x.PidsLimit}, Policy: policy.Get, VerifyImage: verifier.Verify, KeysDirectory: x.KeysDirectory, Organization: x.Organization, Pool: x.Pool, Drained: drained}
 	controller.HostLimits = policy.Get().Limits()
 	capacity := capabilities.Capacity
 	ceilings := []*uint64{&controller.HostLimits.CPUMillis, &controller.HostLimits.MemoryBytes, &controller.HostLimits.StorageBytes, &controller.HostLimits.Slots}
@@ -150,6 +161,35 @@ func Open(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drain
 		}
 		*ceilings[i] = min(*ceilings[i], limit)
 	}
+	controller.RuntimeStoragePaths = x.RuntimeStoragePaths
+	sampler := &telemetry.Sampler{Paths: append(append([]string{c.StateDir, x.StorageRoot}, c.ObservationPaths...), x.RuntimeStoragePaths...)}
+	// Observation timeouts must not invalidate the mutating runtime's journal
+	// checkpoint. This separate adapter has no invalidation/write callback.
+	metricsEngine, _ := dockerengine.OpenReadOnly(c.RuntimeEndpoint, credentials.InstallationID, func() {})
+	closeRuntime := cleanup
+	cleanup = func() {
+		if metricsEngine != nil {
+			metricsEngine.Close()
+		}
+		closeRuntime()
+	}
+	remote.Telemetry = func(ctx context.Context) *telemetry.Sample {
+		budget, cancel := context.WithTimeout(ctx, 6*time.Second)
+		defer cancel()
+		if metricsEngine == nil {
+			sample := sampler.Collect(budget, credentials.EndpointIdentity, nil, nil, false)
+			return &sample
+		}
+		endpoint, err := metricsEngine.Probe(budget)
+		if err != nil || endpoint != credentials.EndpointIdentity {
+			sample := sampler.Collect(budget, credentials.EndpointIdentity, nil, nil, false)
+			return &sample
+		}
+		targets, complete := controller.telemetryTargets(budget, metricsEngine)
+		sample := sampler.Collect(budget, credentials.EndpointIdentity, metricsEngine, targets, complete)
+		return &sample
+	}
+
 	controller.Repository = x.Repository
 	controller.MinRuntimeFreeBytes = x.MinRuntimeFreeBytes
 	return controller, cleanup, nil

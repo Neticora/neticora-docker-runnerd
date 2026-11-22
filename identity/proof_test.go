@@ -111,3 +111,37 @@ func TestServerPolicyCannotWidenLocalCeilings(t *testing.T) {
 		t.Fatal("overflow accepted")
 	}
 }
+
+func TestEnrollmentReplacementProofBindsHistoryAndScope(t *testing.T) {
+	private := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{7}, 32))
+	replacement := &protocol.EnrollmentTokenReplacement{TenantId: "tenant-a", RunnerDeploymentId: "pool-a", PriorTokenHashes: []string{strings.Repeat("a", 64)}}
+	message, err := EnrollmentReplacing(private, "request-1", "fresh-token", replacement)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var request protocol.EnrollmentRequest
+	if err := json.Unmarshal(message.Bytes(), &request); err != nil {
+		t.Fatal(err)
+	}
+	_, fingerprint, _ := public(private)
+	payload := map[string]any{"purpose": "neticora-host-enroll-v1", "requestId": "request-1", "tokenHash": tokenDigest("fresh-token"), "publicKeyFingerprint": fingerprint, "replacement": replacement}
+	signature, _ := base64.RawURLEncoding.DecodeString(request.Proof)
+	raw, _ := json.Marshal(payload)
+	canonical, _ := protocol.CanonicalizeJSON(raw)
+	if !ed25519.Verify(private.Public().(ed25519.PublicKey), canonical, signature) {
+		t.Fatal("replacement proof is invalid")
+	}
+	replacement.RunnerDeploymentId = "different-pool"
+	raw, _ = json.Marshal(payload)
+	canonical, _ = protocol.CanonicalizeJSON(raw)
+	if ed25519.Verify(private.Public().(ed25519.PublicKey), canonical, signature) {
+		t.Fatal("replacement pool substitution accepted")
+	}
+	replacement.RunnerDeploymentId = "pool-a"
+	replacement.PriorTokenHashes[0] = strings.Repeat("b", 64)
+	raw, _ = json.Marshal(payload)
+	canonical, _ = protocol.CanonicalizeJSON(raw)
+	if ed25519.Verify(private.Public().(ed25519.PublicKey), canonical, signature) {
+		t.Fatal("replacement history substitution accepted")
+	}
+}

@@ -35,9 +35,10 @@ const LabelPrefix = "com.neticora.runnerd."
 // Plan is detached configuration produced by a qualified profile, never raw wire input.
 // It deliberately has no bootstrap or environment credential field.
 type Plan struct {
-	Name       string
-	Config     *container.Config
-	HostConfig *container.HostConfig
+	StorageDirectory string // Versioned, journal-owned disk storage, never wire input.
+	Name             string
+	Config           *container.Config
+	HostConfig       *container.HostConfig
 }
 
 type Object struct {
@@ -76,11 +77,22 @@ func OpenReadOnly(endpoint, installation string, invalidated func()) (*Engine, e
 	return open(endpoint, installation, invalidated, true)
 }
 
-func open(endpoint, installation string, invalidated func(), readOnly bool) (*Engine, error) {
+func ValidateEndpoint(endpoint string) error {
 	u, err := url.Parse(endpoint)
-	if err != nil || u.Scheme != "unix" || u.Host != "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || !filepath.IsAbs(u.Path) || filepath.Clean(u.Path) != u.Path || installation == "" {
-		return nil, ErrUnavailable
+	if err != nil || u.Scheme != "unix" || u.Host != "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || !filepath.IsAbs(u.Path) || filepath.Clean(u.Path) != u.Path {
+		return diagnostic(ErrUnsupported)
 	}
+	return nil
+}
+
+func open(endpoint, installation string, invalidated func(), readOnly bool) (*Engine, error) {
+	if err := ValidateEndpoint(endpoint); err != nil {
+		return nil, err
+	}
+	if installation == "" {
+		return nil, diagnostic(ErrUnsupported)
+	}
+	u, _ := url.Parse(endpoint) // ValidateEndpoint checked the complete URL above.
 	e := &Engine{socket: u.Path, installation: installation, invalidated: invalidated, readOnly: readOnly}
 	api, err := client.New(client.WithHost(endpoint), client.WithDialContext(e.dialContext), client.WithTimeout(15*time.Second), client.WithAPIVersionNegotiation())
 	if err != nil {
@@ -102,16 +114,18 @@ func (e *Engine) dialContext(ctx context.Context, _, _ string) (net.Conn, error)
 	dialer := net.Dialer{Timeout: 5 * time.Second}
 	conn, err := dialer.DialContext(ctx, "unix", e.socket)
 	if err != nil {
-		return nil, e.lost()
+		return nil, e.unavailable(err)
 	}
-	reader := e.connectionPeer
-	if reader == nil {
-		reader = peerIdentityConnection
+	originalConn := conn
+	var peer string
+	if e.connectionPeer != nil {
+		peer, err = e.connectionPeer(conn)
+	} else {
+		conn, peer, err = authenticatedConnection(ctx, conn)
 	}
-	peer, err := reader(conn)
 	if err != nil || peer == "" {
-		_ = conn.Close()
-		return nil, e.lost()
+		_ = originalConn.Close()
+		return nil, e.unavailable(err)
 	}
 	e.mu.Lock()
 	if e.connectedPeer == "" {
@@ -129,22 +143,25 @@ func (e *Engine) dialContext(ctx context.Context, _, _ string) (net.Conn, error)
 func (e *Engine) Close() error { return errors.Join(e.api.Close(), e.stream.Close()) }
 
 func (e *Engine) lost() error {
-	if e.invalidated != nil {
-		e.invalidated()
-	}
-	return ErrUnavailable
+	return e.unavailable(ErrContinuity)
 }
 
 // Probe records continuity signals, not a universally stable daemon boot ID.
 // A disconnect/event-stream loss must independently invalidate reconciliation.
 func (e *Engine) Probe(ctx context.Context) (string, error) {
 	stat, err := os.Lstat(e.socket)
-	if err != nil || stat.Mode()&os.ModeSocket == 0 {
-		return "", e.lost()
+	if err != nil {
+		return "", e.unavailable(err)
+	}
+	if stat.Mode()&os.ModeSocket == 0 {
+		return "", e.unavailable(ErrUnsupported)
 	}
 	info, err := e.api.Info(ctx, client.InfoOptions{})
-	if err != nil || info.Info.OSType != "linux" || info.Info.ID == "" {
-		return "", e.lost()
+	if err != nil {
+		return "", e.unavailable(err)
+	}
+	if info.Info.OSType != "linux" || info.Info.ID == "" {
+		return "", e.unavailable(ErrUnsupported)
 	}
 	reader := e.observePeer
 	if reader == nil {
@@ -152,7 +169,7 @@ func (e *Engine) Probe(ctx context.Context) (string, error) {
 	}
 	peer, err := reader(ctx, e.socket)
 	if err != nil {
-		return "", e.lost()
+		return "", e.unavailable(err)
 	}
 	e.mu.Lock()
 	connected := e.connectedPeer
@@ -188,8 +205,8 @@ func (e *Engine) check(ctx context.Context) error {
 	return nil
 }
 
-// CheckHeadroom fences new work only. Cleanup/reporting remain available under
-// pressure. This does not establish aggregate hard storage isolation.
+// CheckHeadroom is an explicit diagnostic helper, never called by Runnerd
+// admission or cleanup. Customers own their storage-capacity policy.
 func (e *Engine) CheckHeadroom(ctx context.Context, minimum uint64) error {
 	if err := e.check(ctx); err != nil {
 		return err
@@ -212,6 +229,18 @@ func (e *Engine) CheckHeadroom(ctx context.Context, minimum uint64) error {
 // PrepareImage pulls only the immutable verified reference. It never obtains
 // authority/JIT or starts a container. Registry credentials are not inherited.
 func (e *Engine) PrepareImage(ctx context.Context, p Plan) error {
+	if p.StorageDirectory != "" {
+		if err := e.check(ctx); err != nil {
+			return err
+		}
+		info, err := e.api.Info(ctx, client.InfoOptions{})
+		if err != nil {
+			return e.lost()
+		}
+		if info.Info.CgroupDriver != "systemd" || info.Info.CgroupVersion != "2" {
+			return ErrConflict
+		}
+	}
 	if e.readOnly {
 		return ErrRecoveryApprovalRequired
 	}

@@ -380,6 +380,15 @@ func (s *SQLiteStore) record(ctx context.Context, scope agent.StoreScope, raw js
 			return agent.ErrConflict
 		}
 		if operation == "never" {
+			var storageCount int
+			if err = tx.QueryRowContext(ctx, "SELECT count(*) FROM execution_storage WHERE execution_id=? AND generation=?", doc.ExecutionID, doc.Generation).Scan(&storageCount); err != nil {
+				return err
+			}
+			if storageCount > 0 {
+				if err = storageDisposed(ctx, tx, doc.ExecutionID, doc.Generation); err != nil {
+					return err
+				}
+			}
 			if len(refRaw) != 0 || state != "accepted" || cleanup {
 				return agent.ErrConflict
 			}
@@ -447,6 +456,9 @@ func (s *SQLiteStore) record(ctx context.Context, scope agent.StoreScope, raw js
 				return agent.ErrConflict
 			}
 			if operation == "complete" {
+				if err = storageDisposed(ctx, tx, doc.ExecutionID, doc.Generation); err != nil {
+					return err
+				}
 				var known bool
 				var inventory string
 				if err = tx.QueryRowContext(ctx, "SELECT runtime_known,inventory_generation FROM metadata WHERE singleton=1").Scan(&known, &inventory); err != nil {
@@ -558,6 +570,13 @@ func (s *SQLiteStore) Reconcile(ctx context.Context, c agent.RecoveryCheckpoint)
 		return agent.ErrRecoveryRequired
 	}
 	err := s.transaction(ctx, false, false, true, func(ctx context.Context, tx *sql.Tx) error {
+		var pendingConnection int
+		if err := tx.QueryRowContext(ctx, "SELECT count(*) FROM connection_resync WHERE completed=0").Scan(&pendingConnection); err != nil {
+			return err
+		}
+		if pendingConnection != 0 {
+			return agent.ErrRecoveryRequired
+		}
 		if c.JournalID != s.anchor.JournalID || c.Revision != strconv.FormatInt(s.anchor.Revision, 10) {
 			return agent.ErrRecoveryRequired
 		}

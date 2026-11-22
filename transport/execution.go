@@ -12,6 +12,15 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
 )
 
+// ErrInventoryConflict permits an observational publisher to re-read the
+// authoritative generation after a rejected/stale observation. It confers no
+// retry authority for any execution operation.
+var ErrInventoryConflict = errors.New("inventory observation conflicted")
+
+type responseStatusError struct{ status int }
+
+func (e responseStatusError) Error() string { return "protocol response rejected" }
+
 // executionCall has fixed callers/paths, bounded bodies and strict response
 // contracts. It does not retry side effects or include server errors in logs.
 func (c *Client) executionCall(ctx context.Context, method, path, token string, body []byte, status int) ([]byte, error) {
@@ -36,7 +45,10 @@ func (c *Client) executionCall(ctx context.Context, method, path, token string, 
 		return nil, errors.New("protocol request failed")
 	}
 	defer res.Body.Close()
-	if res.StatusCode != status || (res.Header.Get("Content-Encoding") != "" && res.Header.Get("Content-Encoding") != "identity") {
+	if res.StatusCode != status {
+		return nil, responseStatusError{status: res.StatusCode}
+	}
+	if res.Header.Get("Content-Encoding") != "" && res.Header.Get("Content-Encoding") != "identity" {
 		return nil, errors.New("protocol response rejected")
 	}
 	raw, err := io.ReadAll(io.LimitReader(res.Body, protocol.MaxWireBytes+1))
@@ -73,6 +85,10 @@ func (c *Client) AckCommand(ctx context.Context, token string, message protocol.
 }
 func (c *Client) Inventory(ctx context.Context, token string, message protocol.Outbound) error {
 	_, err := c.executionCall(ctx, "POST", "/me/inventory", token, message.Bytes(), 204)
+	var status responseStatusError
+	if errors.As(err, &status) && status.status == http.StatusConflict {
+		return ErrInventoryConflict
+	}
 	return err
 }
 func (c *Client) Events(ctx context.Context, token string, message protocol.Outbound) ([]protocol.EventAck, error) {

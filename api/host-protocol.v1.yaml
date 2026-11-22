@@ -434,6 +434,64 @@
           }
         }
       }
+    },
+    "/connection-resync": {
+      "post": {
+        "operationId": "connectionResynchronize",
+        "security": [],
+        "description": "Original Ed25519 key proves one durable observation-only transition. Verified empty normal reboot transitions commit automatically; exceptional empty endpoint transitions require existing tenant administrative approval. Grants no token, execution, cleanup or release authority.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignedConnectionResyncRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Pending, blocked, or committed observation-only binding",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionResyncResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/connection-status": {
+      "post": {
+        "operationId": "connectionStatus",
+        "security": [],
+        "description": "Original active installation key authenticates a restricted diagnostic report, never an execution session. No token, inventory, authority or binding is returned or modified.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignedConnectionStatus"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Diagnostic receipt only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionStatusReceipt"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -729,13 +787,17 @@
             "maxLength": 256
           },
           "inventoryGeneration": {
-            "$ref": "#/components/schemas/Generation"
+            "$ref": "#/components/schemas/UInt64String"
           },
           "effectivePolicyGeneration": {
             "$ref": "#/components/schemas/Generation"
           },
           "capabilities": {
             "$ref": "#/components/schemas/HostCapabilities"
+          },
+          "telemetry": {
+            "$ref": "#/components/schemas/ResourceTelemetry",
+            "description": "Authenticated, timestamped observations only. Never execution qualification, capacity, cleanup evidence or scheduling policy. Optional for older agents."
           }
         },
         "required": [
@@ -1275,6 +1337,16 @@
               "$ref": "#/components/schemas/ProviderObservation"
             },
             "maxItems": 1000
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 253,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$",
+            "description": "Latest OS hostname observation, or null when unavailable. Display metadata only; never an authorization identity. Omission supports older agents."
           }
         },
         "required": [
@@ -1308,6 +1380,9 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 8192
+          },
+          "replacement": {
+            "$ref": "#/components/schemas/EnrollmentTokenReplacement"
           }
         },
         "required": [
@@ -2782,6 +2857,949 @@
           "verifiedAt"
         ],
         "additionalProperties": false
+      },
+      "EnrollmentTokenReplacement": {
+        "type": "object",
+        "description": "Explicit unfinished-enrollment recovery. Proof binds the expected tenant/pool and all previous token hashes. The platform must lock and retire only unused matching tokens in the registration transaction. Consumed or ambiguous originals reject replacement.",
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "runnerDeploymentId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "priorTokenHashes": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "required": [
+          "tenantId",
+          "runnerDeploymentId",
+          "priorTokenHashes"
+        ],
+        "additionalProperties": false
+      },
+      "CpuUsageObservation": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "host"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "proc-stat-delta"
+            ]
+          },
+          "observedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "unavailable",
+              "unsupported",
+              "warming-up"
+            ]
+          },
+          "logicalCores": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 1048576
+          },
+          "utilizationBasisPoints": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "sampleMilliseconds": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "scope",
+          "source",
+          "observedAt",
+          "status",
+          "logicalCores",
+          "utilizationBasisPoints",
+          "sampleMilliseconds"
+        ],
+        "additionalProperties": false
+      },
+      "MemoryUsageObservation": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "host"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "proc-meminfo"
+            ]
+          },
+          "observedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "unavailable",
+              "unsupported",
+              "warming-up"
+            ]
+          },
+          "totalBytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "availableBytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "usedBytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "scope",
+          "source",
+          "observedAt",
+          "status",
+          "totalBytes",
+          "availableBytes",
+          "usedBytes"
+        ],
+        "additionalProperties": false
+      },
+      "FilesystemUsageObservation": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "filesystem"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "statfs"
+            ]
+          },
+          "observedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "unavailable",
+              "unsupported",
+              "warming-up"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "filesystemId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 128
+          },
+          "totalBytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "freeBytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "availableBytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "usedBytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "totalInodes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "freeInodes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "scope",
+          "source",
+          "observedAt",
+          "status",
+          "path",
+          "filesystemId",
+          "totalBytes",
+          "freeBytes",
+          "availableBytes",
+          "usedBytes",
+          "totalInodes",
+          "freeInodes"
+        ],
+        "additionalProperties": false
+      },
+      "DockerUsageObservation": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "docker-daemon"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "docker-system-df"
+            ]
+          },
+          "observedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "unavailable",
+              "unsupported",
+              "warming-up"
+            ]
+          },
+          "imagesBytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "writableLayersBytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "volumesBytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "buildCacheBytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "containers": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "activeContainers": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "scope",
+          "source",
+          "observedAt",
+          "status",
+          "imagesBytes",
+          "writableLayersBytes",
+          "volumesBytes",
+          "buildCacheBytes",
+          "containers",
+          "activeContainers"
+        ],
+        "additionalProperties": false
+      },
+      "ExecutionUsageObservation": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "execution"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "docker-container-stats"
+            ]
+          },
+          "observedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "unavailable",
+              "unsupported",
+              "warming-up"
+            ]
+          },
+          "executionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "generation": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "cpuUsageNanoseconds": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "memoryUsageBytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "memoryLimitBytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "writableLayerBytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pids": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UInt64String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "scope",
+          "source",
+          "observedAt",
+          "status",
+          "executionId",
+          "generation",
+          "resourceId",
+          "cpuUsageNanoseconds",
+          "memoryUsageBytes",
+          "memoryLimitBytes",
+          "writableLayerBytes",
+          "pids"
+        ],
+        "additionalProperties": false
+      },
+      "ResourceTelemetry": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "enum": [
+              "runnerd08-resource-observations-v1"
+            ]
+          },
+          "endpointIdentity": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "observedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "cpu": {
+            "$ref": "#/components/schemas/CpuUsageObservation"
+          },
+          "memory": {
+            "$ref": "#/components/schemas/MemoryUsageObservation"
+          },
+          "filesystems": {
+            "type": "array",
+            "maxItems": 32,
+            "items": {
+              "$ref": "#/components/schemas/FilesystemUsageObservation"
+            }
+          },
+          "docker": {
+            "$ref": "#/components/schemas/DockerUsageObservation"
+          },
+          "executionsComplete": {
+            "type": "boolean"
+          },
+          "executions": {
+            "type": "array",
+            "maxItems": 32,
+            "items": {
+              "$ref": "#/components/schemas/ExecutionUsageObservation"
+            }
+          }
+        },
+        "required": [
+          "version",
+          "endpointIdentity",
+          "observedAt",
+          "cpu",
+          "memory",
+          "filesystems",
+          "docker",
+          "executionsComplete",
+          "executions"
+        ],
+        "additionalProperties": false
+      },
+      "ConnectionResyncIntent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "domain",
+          "operationId",
+          "identity",
+          "tenantId",
+          "installationId",
+          "runnerDeploymentId",
+          "enrollmentRequestId",
+          "publicKeyFingerprint",
+          "sourceBootId",
+          "sourceEndpointIdentity",
+          "targetBootId",
+          "targetEndpointIdentity",
+          "journalId",
+          "journalRevision"
+        ],
+        "properties": {
+          "domain": {
+            "type": "string",
+            "enum": [
+              "neticora-runnerd-connection-resync-v1"
+            ]
+          },
+          "operationId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{48}$",
+            "minLength": 48,
+            "maxLength": 48
+          },
+          "identity": {
+            "$ref": "#/components/schemas/HostIdentity"
+          },
+          "tenantId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "installationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "runnerDeploymentId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "enrollmentRequestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "publicKeyFingerprint": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "sourceBootId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{16,128}$",
+            "minLength": 16,
+            "maxLength": 128
+          },
+          "sourceEndpointIdentity": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "targetBootId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{16,128}$",
+            "minLength": 16,
+            "maxLength": 128
+          },
+          "targetEndpointIdentity": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "journalId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "journalRevision": {
+            "$ref": "#/components/schemas/UInt64String"
+          }
+        }
+      },
+      "ConnectionResyncProof": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "domain",
+          "request",
+          "issuedAt",
+          "nonce",
+          "journalSettled",
+          "inventoryComplete",
+          "ownedResourceIds"
+        ],
+        "properties": {
+          "domain": {
+            "type": "string",
+            "enum": [
+              "neticora-runnerd-connection-resync-proof-v1"
+            ]
+          },
+          "request": {
+            "$ref": "#/components/schemas/ConnectionResyncIntent"
+          },
+          "issuedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "nonce": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{48}$",
+            "minLength": 48,
+            "maxLength": 48
+          },
+          "inventoryComplete": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "ownedResourceIds": {
+            "type": "array",
+            "maxItems": 0,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          "journalSettled": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          }
+        }
+      },
+      "SignedConnectionResyncRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "proof",
+          "signature"
+        ],
+        "properties": {
+          "proof": {
+            "$ref": "#/components/schemas/ConnectionResyncProof"
+          },
+          "signature": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{86}$",
+            "minLength": 86,
+            "maxLength": 86
+          }
+        }
+      },
+      "ConnectionResyncResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "operationId",
+          "requestHash",
+          "state",
+          "reason",
+          "identity",
+          "tenantId",
+          "installationId",
+          "runnerDeploymentId",
+          "bootId",
+          "endpointIdentity"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{48}$",
+            "minLength": 48,
+            "maxLength": 48
+          },
+          "requestHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending-approval",
+              "committed",
+              "blocked"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "identity": {
+            "$ref": "#/components/schemas/HostIdentity"
+          },
+          "tenantId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "installationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "runnerDeploymentId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "bootId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{16,128}$",
+            "minLength": 16,
+            "maxLength": 128
+          },
+          "endpointIdentity": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        }
+      },
+      "ConnectionStatusProof": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "domain",
+          "hostId",
+          "keyId",
+          "keyVersion",
+          "tenantId",
+          "installationId",
+          "runnerDeploymentId",
+          "enrollmentRequestId",
+          "publicKeyFingerprint",
+          "reportedSessionEpoch",
+          "observedBootId",
+          "observedEndpointIdentity",
+          "operationId",
+          "reason",
+          "observedAt",
+          "nonce"
+        ],
+        "properties": {
+          "domain": {
+            "type": "string",
+            "enum": [
+              "neticora-runnerd-restricted-status-v1"
+            ]
+          },
+          "hostId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "keyId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "keyVersion": {
+            "$ref": "#/components/schemas/UInt64String"
+          },
+          "tenantId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "installationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "runnerDeploymentId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "enrollmentRequestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "publicKeyFingerprint": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "reportedSessionEpoch": {
+            "$ref": "#/components/schemas/UInt64String"
+          },
+          "observedBootId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{16,128}$",
+            "minLength": 16,
+            "maxLength": 128
+          },
+          "observedEndpointIdentity": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "operationId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{48}$",
+                "minLength": 48,
+                "maxLength": 48
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,127}$",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "observedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "nonce": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{48}$",
+            "minLength": 48,
+            "maxLength": 48
+          }
+        }
+      },
+      "SignedConnectionStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "proof",
+          "signature"
+        ],
+        "properties": {
+          "proof": {
+            "$ref": "#/components/schemas/ConnectionStatusProof"
+          },
+          "signature": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{86}$",
+            "minLength": 86,
+            "maxLength": 86
+          }
+        }
+      },
+      "ConnectionStatusReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "accepted",
+          "channel"
+        ],
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "restricted-installation-observation"
+            ]
+          }
+        }
       }
     }
   }

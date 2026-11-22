@@ -27,6 +27,117 @@ func (e CommandAckAcceptance) Valid() bool {
 	}
 }
 
+// Defines values for ConnectionResyncIntentDomain.
+const (
+	ConnectionResyncIntentDomainNeticoraRunnerdConnectionResyncV1 ConnectionResyncIntentDomain = "neticora-runnerd-connection-resync-v1"
+)
+
+// Valid indicates whether the value is a known member of the ConnectionResyncIntentDomain enum.
+func (e ConnectionResyncIntentDomain) Valid() bool {
+	switch e {
+	case ConnectionResyncIntentDomainNeticoraRunnerdConnectionResyncV1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConnectionResyncProofDomain.
+const (
+	ConnectionResyncProofDomainNeticoraRunnerdConnectionResyncProofV1 ConnectionResyncProofDomain = "neticora-runnerd-connection-resync-proof-v1"
+)
+
+// Valid indicates whether the value is a known member of the ConnectionResyncProofDomain enum.
+func (e ConnectionResyncProofDomain) Valid() bool {
+	switch e {
+	case ConnectionResyncProofDomainNeticoraRunnerdConnectionResyncProofV1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConnectionResyncProofInventoryComplete.
+const (
+	ConnectionResyncProofInventoryCompleteTrue ConnectionResyncProofInventoryComplete = true
+)
+
+// Valid indicates whether the value is a known member of the ConnectionResyncProofInventoryComplete enum.
+func (e ConnectionResyncProofInventoryComplete) Valid() bool {
+	switch e {
+	case ConnectionResyncProofInventoryCompleteTrue:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConnectionResyncProofJournalSettled.
+const (
+	ConnectionResyncProofJournalSettledTrue ConnectionResyncProofJournalSettled = true
+)
+
+// Valid indicates whether the value is a known member of the ConnectionResyncProofJournalSettled enum.
+func (e ConnectionResyncProofJournalSettled) Valid() bool {
+	switch e {
+	case ConnectionResyncProofJournalSettledTrue:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConnectionResyncResponseState.
+const (
+	ConnectionResyncResponseStateBlocked         ConnectionResyncResponseState = "blocked"
+	ConnectionResyncResponseStateCommitted       ConnectionResyncResponseState = "committed"
+	ConnectionResyncResponseStatePendingApproval ConnectionResyncResponseState = "pending-approval"
+)
+
+// Valid indicates whether the value is a known member of the ConnectionResyncResponseState enum.
+func (e ConnectionResyncResponseState) Valid() bool {
+	switch e {
+	case ConnectionResyncResponseStateBlocked:
+		return true
+	case ConnectionResyncResponseStateCommitted:
+		return true
+	case ConnectionResyncResponseStatePendingApproval:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConnectionStatusProofDomain.
+const (
+	ConnectionStatusProofDomainNeticoraRunnerdRestrictedStatusV1 ConnectionStatusProofDomain = "neticora-runnerd-restricted-status-v1"
+)
+
+// Valid indicates whether the value is a known member of the ConnectionStatusProofDomain enum.
+func (e ConnectionStatusProofDomain) Valid() bool {
+	switch e {
+	case ConnectionStatusProofDomainNeticoraRunnerdRestrictedStatusV1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConnectionStatusReceiptChannel.
+const (
+	ConnectionStatusReceiptChannelRestrictedInstallationObservation ConnectionStatusReceiptChannel = "restricted-installation-observation"
+)
+
+// Valid indicates whether the value is a known member of the ConnectionStatusReceiptChannel enum.
+func (e ConnectionStatusReceiptChannel) Valid() bool {
+	switch e {
+	case ConnectionStatusReceiptChannelRestrictedInstallationObservation:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ControlCommandKind.
 const (
 	ControlCommandKindCancel  ControlCommandKind = "cancel"
@@ -39,6 +150,60 @@ func (e ControlCommandKind) Valid() bool {
 	case ControlCommandKindCancel:
 		return true
 	case ControlCommandKindCleanup:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CpuUsageObservationScope.
+const (
+	CpuUsageObservationScopeHost CpuUsageObservationScope = "host"
+)
+
+// Valid indicates whether the value is a known member of the CpuUsageObservationScope enum.
+func (e CpuUsageObservationScope) Valid() bool {
+	switch e {
+	case CpuUsageObservationScopeHost:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CpuUsageObservationSource.
+const (
+	CpuUsageObservationSourceProcStatDelta CpuUsageObservationSource = "proc-stat-delta"
+)
+
+// Valid indicates whether the value is a known member of the CpuUsageObservationSource enum.
+func (e CpuUsageObservationSource) Valid() bool {
+	switch e {
+	case CpuUsageObservationSourceProcStatDelta:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CpuUsageObservationStatus.
+const (
+	CpuUsageObservationStatusAvailable   CpuUsageObservationStatus = "available"
+	CpuUsageObservationStatusUnavailable CpuUsageObservationStatus = "unavailable"
+	CpuUsageObservationStatusUnsupported CpuUsageObservationStatus = "unsupported"
+	CpuUsageObservationStatusWarmingUp   CpuUsageObservationStatus = "warming-up"
+)
+
+// Valid indicates whether the value is a known member of the CpuUsageObservationStatus enum.
+func (e CpuUsageObservationStatus) Valid() bool {
+	switch e {
+	case CpuUsageObservationStatusAvailable:
+		return true
+	case CpuUsageObservationStatusUnavailable:
+		return true
+	case CpuUsageObservationStatusUnsupported:
+		return true
+	case CpuUsageObservationStatusWarmingUp:
 		return true
 	default:
 		return false
@@ -258,6 +423,60 @@ func (e CustomerPolicySchemaVersion) Valid() bool {
 	}
 }
 
+// Defines values for DockerUsageObservationScope.
+const (
+	DockerUsageObservationScopeDockerDaemon DockerUsageObservationScope = "docker-daemon"
+)
+
+// Valid indicates whether the value is a known member of the DockerUsageObservationScope enum.
+func (e DockerUsageObservationScope) Valid() bool {
+	switch e {
+	case DockerUsageObservationScopeDockerDaemon:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DockerUsageObservationSource.
+const (
+	DockerUsageObservationSourceDockerSystemDf DockerUsageObservationSource = "docker-system-df"
+)
+
+// Valid indicates whether the value is a known member of the DockerUsageObservationSource enum.
+func (e DockerUsageObservationSource) Valid() bool {
+	switch e {
+	case DockerUsageObservationSourceDockerSystemDf:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DockerUsageObservationStatus.
+const (
+	DockerUsageObservationStatusAvailable   DockerUsageObservationStatus = "available"
+	DockerUsageObservationStatusUnavailable DockerUsageObservationStatus = "unavailable"
+	DockerUsageObservationStatusUnsupported DockerUsageObservationStatus = "unsupported"
+	DockerUsageObservationStatusWarmingUp   DockerUsageObservationStatus = "warming-up"
+)
+
+// Valid indicates whether the value is a known member of the DockerUsageObservationStatus enum.
+func (e DockerUsageObservationStatus) Valid() bool {
+	switch e {
+	case DockerUsageObservationStatusAvailable:
+		return true
+	case DockerUsageObservationStatusUnavailable:
+		return true
+	case DockerUsageObservationStatusUnsupported:
+		return true
+	case DockerUsageObservationStatusWarmingUp:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ExecutionSpecExecutionBackend.
 const (
 	ExecutionSpecExecutionBackendCustomerHost ExecutionSpecExecutionBackend = "customer-host"
@@ -348,6 +567,114 @@ func (e ExecutionSpecTrustClass) Valid() bool {
 	}
 }
 
+// Defines values for ExecutionUsageObservationScope.
+const (
+	ExecutionUsageObservationScopeExecution ExecutionUsageObservationScope = "execution"
+)
+
+// Valid indicates whether the value is a known member of the ExecutionUsageObservationScope enum.
+func (e ExecutionUsageObservationScope) Valid() bool {
+	switch e {
+	case ExecutionUsageObservationScopeExecution:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ExecutionUsageObservationSource.
+const (
+	ExecutionUsageObservationSourceDockerContainerStats ExecutionUsageObservationSource = "docker-container-stats"
+)
+
+// Valid indicates whether the value is a known member of the ExecutionUsageObservationSource enum.
+func (e ExecutionUsageObservationSource) Valid() bool {
+	switch e {
+	case ExecutionUsageObservationSourceDockerContainerStats:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ExecutionUsageObservationStatus.
+const (
+	ExecutionUsageObservationStatusAvailable   ExecutionUsageObservationStatus = "available"
+	ExecutionUsageObservationStatusUnavailable ExecutionUsageObservationStatus = "unavailable"
+	ExecutionUsageObservationStatusUnsupported ExecutionUsageObservationStatus = "unsupported"
+	ExecutionUsageObservationStatusWarmingUp   ExecutionUsageObservationStatus = "warming-up"
+)
+
+// Valid indicates whether the value is a known member of the ExecutionUsageObservationStatus enum.
+func (e ExecutionUsageObservationStatus) Valid() bool {
+	switch e {
+	case ExecutionUsageObservationStatusAvailable:
+		return true
+	case ExecutionUsageObservationStatusUnavailable:
+		return true
+	case ExecutionUsageObservationStatusUnsupported:
+		return true
+	case ExecutionUsageObservationStatusWarmingUp:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FilesystemUsageObservationScope.
+const (
+	FilesystemUsageObservationScopeFilesystem FilesystemUsageObservationScope = "filesystem"
+)
+
+// Valid indicates whether the value is a known member of the FilesystemUsageObservationScope enum.
+func (e FilesystemUsageObservationScope) Valid() bool {
+	switch e {
+	case FilesystemUsageObservationScopeFilesystem:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FilesystemUsageObservationSource.
+const (
+	FilesystemUsageObservationSourceStatfs FilesystemUsageObservationSource = "statfs"
+)
+
+// Valid indicates whether the value is a known member of the FilesystemUsageObservationSource enum.
+func (e FilesystemUsageObservationSource) Valid() bool {
+	switch e {
+	case FilesystemUsageObservationSourceStatfs:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FilesystemUsageObservationStatus.
+const (
+	FilesystemUsageObservationStatusAvailable   FilesystemUsageObservationStatus = "available"
+	FilesystemUsageObservationStatusUnavailable FilesystemUsageObservationStatus = "unavailable"
+	FilesystemUsageObservationStatusUnsupported FilesystemUsageObservationStatus = "unsupported"
+	FilesystemUsageObservationStatusWarmingUp   FilesystemUsageObservationStatus = "warming-up"
+)
+
+// Valid indicates whether the value is a known member of the FilesystemUsageObservationStatus enum.
+func (e FilesystemUsageObservationStatus) Valid() bool {
+	switch e {
+	case FilesystemUsageObservationStatusAvailable:
+		return true
+	case FilesystemUsageObservationStatusUnavailable:
+		return true
+	case FilesystemUsageObservationStatusUnsupported:
+		return true
+	case FilesystemUsageObservationStatusWarmingUp:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for LocalPolicyAllowedTrustClasses.
 const (
 	LocalPolicyAllowedTrustClassesTrusted   LocalPolicyAllowedTrustClasses = "trusted"
@@ -360,6 +687,60 @@ func (e LocalPolicyAllowedTrustClasses) Valid() bool {
 	case LocalPolicyAllowedTrustClassesTrusted:
 		return true
 	case LocalPolicyAllowedTrustClassesUntrusted:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MemoryUsageObservationScope.
+const (
+	MemoryUsageObservationScopeHost MemoryUsageObservationScope = "host"
+)
+
+// Valid indicates whether the value is a known member of the MemoryUsageObservationScope enum.
+func (e MemoryUsageObservationScope) Valid() bool {
+	switch e {
+	case MemoryUsageObservationScopeHost:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MemoryUsageObservationSource.
+const (
+	MemoryUsageObservationSourceProcMeminfo MemoryUsageObservationSource = "proc-meminfo"
+)
+
+// Valid indicates whether the value is a known member of the MemoryUsageObservationSource enum.
+func (e MemoryUsageObservationSource) Valid() bool {
+	switch e {
+	case MemoryUsageObservationSourceProcMeminfo:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MemoryUsageObservationStatus.
+const (
+	MemoryUsageObservationStatusAvailable   MemoryUsageObservationStatus = "available"
+	MemoryUsageObservationStatusUnavailable MemoryUsageObservationStatus = "unavailable"
+	MemoryUsageObservationStatusUnsupported MemoryUsageObservationStatus = "unsupported"
+	MemoryUsageObservationStatusWarmingUp   MemoryUsageObservationStatus = "warming-up"
+)
+
+// Valid indicates whether the value is a known member of the MemoryUsageObservationStatus enum.
+func (e MemoryUsageObservationStatus) Valid() bool {
+	switch e {
+	case MemoryUsageObservationStatusAvailable:
+		return true
+	case MemoryUsageObservationStatusUnavailable:
+		return true
+	case MemoryUsageObservationStatusUnsupported:
+		return true
+	case MemoryUsageObservationStatusWarmingUp:
 		return true
 	default:
 		return false
@@ -618,6 +999,21 @@ func (e ProviderObservationProvider) Valid() bool {
 	}
 }
 
+// Defines values for ResourceTelemetryVersion.
+const (
+	ResourceTelemetryVersionRunnerd08ResourceObservationsV1 ResourceTelemetryVersion = "runnerd08-resource-observations-v1"
+)
+
+// Valid indicates whether the value is a known member of the ResourceTelemetryVersion enum.
+func (e ResourceTelemetryVersion) Valid() bool {
+	switch e {
+	case ResourceTelemetryVersionRunnerd08ResourceObservationsV1:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RuntimeObservationState.
 const (
 	RuntimeObservationStateCleaned        RuntimeObservationState = "cleaned"
@@ -745,6 +1141,96 @@ type ConfigResponse struct {
 	Protocol         ProtocolCompatibility `json:"protocol"`
 }
 
+// ConnectionResyncIntent defines model for ConnectionResyncIntent.
+type ConnectionResyncIntent struct {
+	Domain                 ConnectionResyncIntentDomain `json:"domain"`
+	EnrollmentRequestId    string                       `json:"enrollmentRequestId"`
+	Identity               HostIdentity                 `json:"identity"`
+	InstallationId         string                       `json:"installationId"`
+	JournalId              string                       `json:"journalId"`
+	JournalRevision        UInt64String                 `json:"journalRevision"`
+	OperationId            string                       `json:"operationId"`
+	PublicKeyFingerprint   string                       `json:"publicKeyFingerprint"`
+	RunnerDeploymentId     string                       `json:"runnerDeploymentId"`
+	SourceBootId           string                       `json:"sourceBootId"`
+	SourceEndpointIdentity string                       `json:"sourceEndpointIdentity"`
+	TargetBootId           string                       `json:"targetBootId"`
+	TargetEndpointIdentity string                       `json:"targetEndpointIdentity"`
+	TenantId               string                       `json:"tenantId"`
+}
+
+// ConnectionResyncIntentDomain defines model for ConnectionResyncIntent.Domain.
+type ConnectionResyncIntentDomain string
+
+// ConnectionResyncProof defines model for ConnectionResyncProof.
+type ConnectionResyncProof struct {
+	Domain            ConnectionResyncProofDomain            `json:"domain"`
+	InventoryComplete ConnectionResyncProofInventoryComplete `json:"inventoryComplete"`
+	IssuedAt          Timestamp                              `json:"issuedAt"`
+	JournalSettled    ConnectionResyncProofJournalSettled    `json:"journalSettled"`
+	Nonce             string                                 `json:"nonce"`
+	OwnedResourceIds  []string                               `json:"ownedResourceIds"`
+	Request           ConnectionResyncIntent                 `json:"request"`
+}
+
+// ConnectionResyncProofDomain defines model for ConnectionResyncProof.Domain.
+type ConnectionResyncProofDomain string
+
+// ConnectionResyncProofInventoryComplete defines model for ConnectionResyncProof.InventoryComplete.
+type ConnectionResyncProofInventoryComplete bool
+
+// ConnectionResyncProofJournalSettled defines model for ConnectionResyncProof.JournalSettled.
+type ConnectionResyncProofJournalSettled bool
+
+// ConnectionResyncResponse defines model for ConnectionResyncResponse.
+type ConnectionResyncResponse struct {
+	BootId             string                        `json:"bootId"`
+	EndpointIdentity   string                        `json:"endpointIdentity"`
+	Identity           HostIdentity                  `json:"identity"`
+	InstallationId     string                        `json:"installationId"`
+	OperationId        string                        `json:"operationId"`
+	Reason             string                        `json:"reason"`
+	RequestHash        string                        `json:"requestHash"`
+	RunnerDeploymentId string                        `json:"runnerDeploymentId"`
+	State              ConnectionResyncResponseState `json:"state"`
+	TenantId           string                        `json:"tenantId"`
+}
+
+// ConnectionResyncResponseState defines model for ConnectionResyncResponse.State.
+type ConnectionResyncResponseState string
+
+// ConnectionStatusProof defines model for ConnectionStatusProof.
+type ConnectionStatusProof struct {
+	Domain                   ConnectionStatusProofDomain `json:"domain"`
+	EnrollmentRequestId      string                      `json:"enrollmentRequestId"`
+	HostId                   string                      `json:"hostId"`
+	InstallationId           string                      `json:"installationId"`
+	KeyId                    string                      `json:"keyId"`
+	KeyVersion               UInt64String                `json:"keyVersion"`
+	Nonce                    string                      `json:"nonce"`
+	ObservedAt               Timestamp                   `json:"observedAt"`
+	ObservedBootId           string                      `json:"observedBootId"`
+	ObservedEndpointIdentity nullable.Nullable[string]   `json:"observedEndpointIdentity"`
+	OperationId              nullable.Nullable[string]   `json:"operationId"`
+	PublicKeyFingerprint     string                      `json:"publicKeyFingerprint"`
+	Reason                   string                      `json:"reason"`
+	ReportedSessionEpoch     UInt64String                `json:"reportedSessionEpoch"`
+	RunnerDeploymentId       string                      `json:"runnerDeploymentId"`
+	TenantId                 string                      `json:"tenantId"`
+}
+
+// ConnectionStatusProofDomain defines model for ConnectionStatusProof.Domain.
+type ConnectionStatusProofDomain string
+
+// ConnectionStatusReceipt defines model for ConnectionStatusReceipt.
+type ConnectionStatusReceipt struct {
+	Accepted bool                           `json:"accepted"`
+	Channel  ConnectionStatusReceiptChannel `json:"channel"`
+}
+
+// ConnectionStatusReceiptChannel defines model for ConnectionStatusReceipt.Channel.
+type ConnectionStatusReceiptChannel string
+
 // ControlCommand defines model for ControlCommand.
 type ControlCommand struct {
 	CommandId   string             `json:"commandId"`
@@ -756,6 +1242,26 @@ type ControlCommand struct {
 
 // ControlCommandKind defines model for ControlCommand.Kind.
 type ControlCommandKind string
+
+// CpuUsageObservation defines model for CpuUsageObservation.
+type CpuUsageObservation struct {
+	LogicalCores           nullable.Nullable[int]          `json:"logicalCores"`
+	ObservedAt             Timestamp                       `json:"observedAt"`
+	SampleMilliseconds     nullable.Nullable[UInt64String] `json:"sampleMilliseconds"`
+	Scope                  CpuUsageObservationScope        `json:"scope"`
+	Source                 CpuUsageObservationSource       `json:"source"`
+	Status                 CpuUsageObservationStatus       `json:"status"`
+	UtilizationBasisPoints nullable.Nullable[int]          `json:"utilizationBasisPoints"`
+}
+
+// CpuUsageObservationScope defines model for CpuUsageObservation.Scope.
+type CpuUsageObservationScope string
+
+// CpuUsageObservationSource defines model for CpuUsageObservation.Source.
+type CpuUsageObservationSource string
+
+// CpuUsageObservationStatus defines model for CpuUsageObservation.Status.
+type CpuUsageObservationStatus string
 
 // CustomerManagedPolicy defines model for CustomerManagedPolicy.
 type CustomerManagedPolicy struct {
@@ -889,18 +1395,51 @@ type DecimalString = string
 // Digest defines model for Digest.
 type Digest = string
 
+// DockerUsageObservation defines model for DockerUsageObservation.
+type DockerUsageObservation struct {
+	ActiveContainers    nullable.Nullable[UInt64String] `json:"activeContainers"`
+	BuildCacheBytes     nullable.Nullable[UInt64String] `json:"buildCacheBytes"`
+	Containers          nullable.Nullable[UInt64String] `json:"containers"`
+	ImagesBytes         nullable.Nullable[UInt64String] `json:"imagesBytes"`
+	ObservedAt          Timestamp                       `json:"observedAt"`
+	Scope               DockerUsageObservationScope     `json:"scope"`
+	Source              DockerUsageObservationSource    `json:"source"`
+	Status              DockerUsageObservationStatus    `json:"status"`
+	VolumesBytes        nullable.Nullable[UInt64String] `json:"volumesBytes"`
+	WritableLayersBytes nullable.Nullable[UInt64String] `json:"writableLayersBytes"`
+}
+
+// DockerUsageObservationScope defines model for DockerUsageObservation.Scope.
+type DockerUsageObservationScope string
+
+// DockerUsageObservationSource defines model for DockerUsageObservation.Source.
+type DockerUsageObservationSource string
+
+// DockerUsageObservationStatus defines model for DockerUsageObservation.Status.
+type DockerUsageObservationStatus string
+
 // EnrollmentRequest defines model for EnrollmentRequest.
 type EnrollmentRequest struct {
 	EnrollmentToken string `json:"enrollmentToken"`
 	Proof           string `json:"proof"`
 	PublicKey       string `json:"publicKey"`
-	RequestId       string `json:"requestId"`
+
+	// Replacement Explicit unfinished-enrollment recovery. Proof binds the expected tenant/pool and all previous token hashes. The platform must lock and retire only unused matching tokens in the registration transaction. Consumed or ambiguous originals reject replacement.
+	Replacement *EnrollmentTokenReplacement `json:"replacement,omitempty"`
+	RequestId   string                      `json:"requestId"`
 }
 
 // EnrollmentResponse defines model for EnrollmentResponse.
 type EnrollmentResponse struct {
 	Identity HostIdentity          `json:"identity"`
 	Protocol ProtocolCompatibility `json:"protocol"`
+}
+
+// EnrollmentTokenReplacement Explicit unfinished-enrollment recovery. Proof binds the expected tenant/pool and all previous token hashes. The platform must lock and retire only unused matching tokens in the registration transaction. Consumed or ambiguous originals reject replacement.
+type EnrollmentTokenReplacement struct {
+	PriorTokenHashes   []string `json:"priorTokenHashes"`
+	RunnerDeploymentId string   `json:"runnerDeploymentId"`
+	TenantId           string   `json:"tenantId"`
 }
 
 // EventAck defines model for EventAck.
@@ -954,6 +1493,56 @@ type ExecutionSpecRuntimeEngine string
 // ExecutionSpecTrustClass defines model for ExecutionSpec.TrustClass.
 type ExecutionSpecTrustClass string
 
+// ExecutionUsageObservation defines model for ExecutionUsageObservation.
+type ExecutionUsageObservation struct {
+	CpuUsageNanoseconds nullable.Nullable[UInt64String] `json:"cpuUsageNanoseconds"`
+	ExecutionId         string                          `json:"executionId"`
+	Generation          Generation                      `json:"generation"`
+	MemoryLimitBytes    nullable.Nullable[UInt64String] `json:"memoryLimitBytes"`
+	MemoryUsageBytes    nullable.Nullable[UInt64String] `json:"memoryUsageBytes"`
+	ObservedAt          Timestamp                       `json:"observedAt"`
+	Pids                nullable.Nullable[UInt64String] `json:"pids"`
+	ResourceId          string                          `json:"resourceId"`
+	Scope               ExecutionUsageObservationScope  `json:"scope"`
+	Source              ExecutionUsageObservationSource `json:"source"`
+	Status              ExecutionUsageObservationStatus `json:"status"`
+	WritableLayerBytes  nullable.Nullable[UInt64String] `json:"writableLayerBytes"`
+}
+
+// ExecutionUsageObservationScope defines model for ExecutionUsageObservation.Scope.
+type ExecutionUsageObservationScope string
+
+// ExecutionUsageObservationSource defines model for ExecutionUsageObservation.Source.
+type ExecutionUsageObservationSource string
+
+// ExecutionUsageObservationStatus defines model for ExecutionUsageObservation.Status.
+type ExecutionUsageObservationStatus string
+
+// FilesystemUsageObservation defines model for FilesystemUsageObservation.
+type FilesystemUsageObservation struct {
+	AvailableBytes nullable.Nullable[UInt64String]  `json:"availableBytes"`
+	FilesystemId   nullable.Nullable[string]        `json:"filesystemId"`
+	FreeBytes      nullable.Nullable[UInt64String]  `json:"freeBytes"`
+	FreeInodes     nullable.Nullable[UInt64String]  `json:"freeInodes"`
+	ObservedAt     Timestamp                        `json:"observedAt"`
+	Path           string                           `json:"path"`
+	Scope          FilesystemUsageObservationScope  `json:"scope"`
+	Source         FilesystemUsageObservationSource `json:"source"`
+	Status         FilesystemUsageObservationStatus `json:"status"`
+	TotalBytes     nullable.Nullable[UInt64String]  `json:"totalBytes"`
+	TotalInodes    nullable.Nullable[UInt64String]  `json:"totalInodes"`
+	UsedBytes      nullable.Nullable[UInt64String]  `json:"usedBytes"`
+}
+
+// FilesystemUsageObservationScope defines model for FilesystemUsageObservation.Scope.
+type FilesystemUsageObservationScope string
+
+// FilesystemUsageObservationSource defines model for FilesystemUsageObservation.Source.
+type FilesystemUsageObservationSource string
+
+// FilesystemUsageObservationStatus defines model for FilesystemUsageObservation.Status.
+type FilesystemUsageObservationStatus string
+
 // Generation defines model for Generation.
 type Generation = string
 
@@ -1004,12 +1593,13 @@ type HostEvent2 = interface{}
 
 // HostHeartbeat defines model for HostHeartbeat.
 type HostHeartbeat struct {
-	AgentVersion              string           `json:"agentVersion"`
-	Capabilities              HostCapabilities `json:"capabilities"`
-	EffectivePolicyGeneration Generation       `json:"effectivePolicyGeneration"`
-	Identity                  HostIdentity     `json:"identity"`
-	InventoryGeneration       Generation       `json:"inventoryGeneration"`
-	ProtocolVersion           string           `json:"protocolVersion"`
+	AgentVersion              string             `json:"agentVersion"`
+	Capabilities              HostCapabilities   `json:"capabilities"`
+	EffectivePolicyGeneration Generation         `json:"effectivePolicyGeneration"`
+	Identity                  HostIdentity       `json:"identity"`
+	InventoryGeneration       UInt64String       `json:"inventoryGeneration"`
+	ProtocolVersion           string             `json:"protocolVersion"`
+	Telemetry                 *ResourceTelemetry `json:"telemetry,omitempty"`
 }
 
 // HostIdentity defines model for HostIdentity.
@@ -1022,8 +1612,11 @@ type HostIdentity struct {
 
 // InventorySnapshot defines model for InventorySnapshot.
 type InventorySnapshot struct {
-	Complete             bool                      `json:"complete"`
-	EndpointIdentity     string                    `json:"endpointIdentity"`
+	Complete         bool   `json:"complete"`
+	EndpointIdentity string `json:"endpointIdentity"`
+
+	// Hostname Latest OS hostname observation, or null when unavailable. Display metadata only; never an authorization identity. Omission supports older agents.
+	Hostname             nullable.Nullable[string] `json:"hostname,omitempty"`
 	InventoryGeneration  Generation                `json:"inventoryGeneration"`
 	NextCursor           nullable.Nullable[string] `json:"nextCursor,omitempty"`
 	ObservedAt           Timestamp                 `json:"observedAt"`
@@ -1049,6 +1642,26 @@ type LocalPolicy struct {
 
 // LocalPolicyAllowedTrustClasses defines model for LocalPolicy.AllowedTrustClasses.
 type LocalPolicyAllowedTrustClasses string
+
+// MemoryUsageObservation defines model for MemoryUsageObservation.
+type MemoryUsageObservation struct {
+	AvailableBytes nullable.Nullable[UInt64String] `json:"availableBytes"`
+	ObservedAt     Timestamp                       `json:"observedAt"`
+	Scope          MemoryUsageObservationScope     `json:"scope"`
+	Source         MemoryUsageObservationSource    `json:"source"`
+	Status         MemoryUsageObservationStatus    `json:"status"`
+	TotalBytes     nullable.Nullable[UInt64String] `json:"totalBytes"`
+	UsedBytes      nullable.Nullable[UInt64String] `json:"usedBytes"`
+}
+
+// MemoryUsageObservationScope defines model for MemoryUsageObservation.Scope.
+type MemoryUsageObservationScope string
+
+// MemoryUsageObservationSource defines model for MemoryUsageObservation.Source.
+type MemoryUsageObservationSource string
+
+// MemoryUsageObservationStatus defines model for MemoryUsageObservation.Status.
+type MemoryUsageObservationStatus string
 
 // NeverStartedCommand defines model for NeverStartedCommand.
 type NeverStartedCommand struct {
@@ -1303,6 +1916,22 @@ type ResourceBudget struct {
 	StorageBytes UInt64String `json:"storageBytes"`
 }
 
+// ResourceTelemetry defines model for ResourceTelemetry.
+type ResourceTelemetry struct {
+	Cpu                CpuUsageObservation          `json:"cpu"`
+	Docker             DockerUsageObservation       `json:"docker"`
+	EndpointIdentity   string                       `json:"endpointIdentity"`
+	Executions         []ExecutionUsageObservation  `json:"executions"`
+	ExecutionsComplete bool                         `json:"executionsComplete"`
+	Filesystems        []FilesystemUsageObservation `json:"filesystems"`
+	Memory             MemoryUsageObservation       `json:"memory"`
+	ObservedAt         Timestamp                    `json:"observedAt"`
+	Version            ResourceTelemetryVersion     `json:"version"`
+}
+
+// ResourceTelemetryVersion defines model for ResourceTelemetry.Version.
+type ResourceTelemetryVersion string
+
 // RuntimeObservation defines model for RuntimeObservation.
 type RuntimeObservation struct {
 	ExitCode   nullable.Nullable[int]  `json:"exitCode,omitempty"`
@@ -1328,6 +1957,18 @@ type RuntimeRef struct {
 
 // RuntimeRefEngine defines model for RuntimeRef.Engine.
 type RuntimeRefEngine string
+
+// SignedConnectionResyncRequest defines model for SignedConnectionResyncRequest.
+type SignedConnectionResyncRequest struct {
+	Proof     ConnectionResyncProof `json:"proof"`
+	Signature string                `json:"signature"`
+}
+
+// SignedConnectionStatus defines model for SignedConnectionStatus.
+type SignedConnectionStatus struct {
+	Proof     ConnectionStatusProof `json:"proof"`
+	Signature string                `json:"signature"`
+}
 
 // SignedPeerRecoveryApproval defines model for SignedPeerRecoveryApproval.
 type SignedPeerRecoveryApproval struct {
@@ -1405,6 +2046,12 @@ type LookupRecoveryStateJSONBody struct {
 type LookupRecoveryState200JSONResponseBody struct {
 	union json.RawMessage
 }
+
+// ConnectionResynchronizeJSONRequestBody defines body for ConnectionResynchronize for application/json ContentType.
+type ConnectionResynchronizeJSONRequestBody = SignedConnectionResyncRequest
+
+// ConnectionStatusJSONRequestBody defines body for ConnectionStatus for application/json ContentType.
+type ConnectionStatusJSONRequestBody = SignedConnectionStatus
 
 // EnrollmentResponseEnrollJSONRequestBody defines body for EnrollmentResponseEnroll for application/json ContentType.
 type EnrollmentResponseEnrollJSONRequestBody = EnrollmentRequest
