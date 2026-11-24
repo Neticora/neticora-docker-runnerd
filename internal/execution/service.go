@@ -54,6 +54,12 @@ func (p *PolicyFile) Get() *standardlinux.Policy {
 }
 
 func Open(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drained func() bool) (*Controller, func(), error) {
+	if c.Execution != nil && c.Execution.Kata != nil {
+		q := c.Execution.Kata
+		if q.StickyCache != nil && (q.QualificationBindingFile == "" || q.QualificationAuthorityPin == "" || !q.StickyCache.Valid()) {
+			return nil, nil, ErrReconcile
+		}
+	}
 	if c.Execution != nil && c.Execution.Kata != nil && (c.Execution.Kata.QualificationBindingFile != "" || c.Execution.Kata.QualificationAuthorityPin != "") {
 		return openConfiguredQualification(c, store, policy, drained)
 	}
@@ -66,7 +72,12 @@ type kataLoader func(string, string, string, string, standardlinux.Settings) (*k
 // separately tagged lab constructor supplies its independently scoped authority.
 func openWithKataLoader(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drained func() bool, load kataLoader) (*Controller, func(), error) {
 	x := c.Execution
-	if x == nil || !x.Enabled || goruntime.GOOS != "linux" || goruntime.GOARCH != "amd64" || os.Geteuid() == 0 || policy.Get().UID() != os.Geteuid() {
+	if x == nil || !x.Enabled || goruntime.GOOS != "linux" || goruntime.GOARCH != "amd64" || policy == nil || policy.Get() == nil {
+		return nil, nil, ErrReconcile
+	}
+	standalone := x.Kata != nil && x.Kata.StickyCache != nil
+	guestUID := policy.Get().UID()
+	if guestUID < 1 || (standalone && (os.Geteuid() != 0 || x.BrokerSocket != "" || x.Kata.ObserverSocket != "")) || (!standalone && (os.Geteuid() == 0 || os.Geteuid() != guestUID)) {
 		return nil, nil, ErrReconcile
 	}
 	credentials, key, err := ReadCredentials(c.CredentialFile)
@@ -123,11 +134,16 @@ func openWithKataLoader(c config.Config, store *journal.SQLiteStore, policy *Pol
 	var runtime Runtime
 	var engine *dockerengine.Engine
 	if x.BrokerSocket == "" {
-		engine, err = dockerengine.Open(c.RuntimeEndpoint, credentials.InstallationID, func() {
+		invalidate := func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			_ = store.InvalidateRuntime(ctx)
-		})
+		}
+		if standalone {
+			engine, err = dockerengine.OpenStandalone(c.RuntimeEndpoint, credentials.InstallationID, invalidate, false)
+		} else {
+			engine, err = dockerengine.Open(c.RuntimeEndpoint, credentials.InstallationID, invalidate)
+		}
 		runtime = engine
 	} else {
 		err = checkBrokerContainment(c.RuntimeEndpoint)
@@ -165,7 +181,7 @@ func openWithKataLoader(c config.Config, store *journal.SQLiteStore, policy *Pol
 		skew, measured := client.ClockSkew()
 		return policy.Get().Transport(actualProxy, caDigest, skew, measured)
 	}
-	controller := &Controller{Store: store, Runtime: runtime, Remote: remote, SigningKey: key, Scope: agent.StoreScope{InstallationID: credentials.InstallationID, TenantID: credentials.TenantID, HostID: credentials.Identity.HostId, SessionEpoch: credentials.Identity.SessionEpoch, EndpointIdentity: credentials.EndpointIdentity}, Authority: journal.Authority{TenantID: credentials.TenantID, HostID: credentials.Identity.HostId, SessionEpoch: credentials.Identity.SessionEpoch, EndpointIdentity: credentials.EndpointIdentity, KeyID: credentials.Identity.KeyId}, Profile: standardlinux.Settings{ImageRepository: x.ImageRepository, NetworkID: x.NetworkID, BootstrapRoot: x.BootstrapRoot, RunnerUID: os.Geteuid(), PidsLimit: x.PidsLimit}, Policy: policy.Get, VerifyImage: verifier.Verify, KeysDirectory: x.KeysDirectory, Organization: x.Organization, Pool: x.Pool, Drained: drained}
+	controller := &Controller{Store: store, Runtime: runtime, Remote: remote, SigningKey: key, Scope: agent.StoreScope{InstallationID: credentials.InstallationID, TenantID: credentials.TenantID, HostID: credentials.Identity.HostId, SessionEpoch: credentials.Identity.SessionEpoch, EndpointIdentity: credentials.EndpointIdentity}, Authority: journal.Authority{TenantID: credentials.TenantID, HostID: credentials.Identity.HostId, SessionEpoch: credentials.Identity.SessionEpoch, EndpointIdentity: credentials.EndpointIdentity, KeyID: credentials.Identity.KeyId}, Profile: standardlinux.Settings{ImageRepository: x.ImageRepository, NetworkID: x.NetworkID, BootstrapRoot: x.BootstrapRoot, RunnerUID: guestUID, PidsLimit: x.PidsLimit}, Policy: policy.Get, VerifyImage: verifier.Verify, KeysDirectory: x.KeysDirectory, Organization: x.Organization, Pool: x.Pool, Drained: drained}
 	if x.BrokerSocket != "" {
 		if x.Kata != nil && x.Kata.ObserverSocket != "" {
 			// The controller must have no legacy privileged observer endpoint.
@@ -185,6 +201,13 @@ func openWithKataLoader(c config.Config, store *journal.SQLiteStore, policy *Pol
 		if err != nil {
 			cleanup()
 			return nil, nil, err
+		}
+		if standalone != controller.Kata.Manifest.Standalone {
+			cleanup()
+			return nil, nil, katalinux.ErrQualification
+		}
+		if standalone {
+			controller.cache = newKataCache(*x.Kata.StickyCache, credentials.InstallationID, credentials.TenantID, x.Repository, controller.Kata.Manifest.ImageDigest)
 		}
 		controller.Kata.ObserverSocket = x.Kata.ObserverSocket
 		if x.BrokerSocket == "" {

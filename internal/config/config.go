@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
+	"github.com/Neticora/neticora-docker-runnerd/internal/stickycache"
 )
 
 const MaxConfigBytes = 65536
@@ -50,12 +51,13 @@ type Execution struct {
 // Kata is a dedicated-host opt-in; no default runtime or unqualified tuple is
 // inferred. The descriptor is independently signed, private and immutable.
 type Kata struct {
-	QualificationBindingFile  string `json:"qualificationBindingFile,omitempty"`
-	QualificationAuthorityPin string `json:"qualificationAuthorityPin,omitempty"`
-	ObserverSocket            string `json:"observerSocket"`
-	ProfileFile               string `json:"profileFile"`
-	PublicKeyFile             string `json:"publicKeyFile"`
-	EvidenceDirectory         string `json:"evidenceDirectory"`
+	StickyCache               *stickycache.Policy `json:"stickyCache,omitempty"`
+	QualificationBindingFile  string              `json:"qualificationBindingFile,omitempty"`
+	QualificationAuthorityPin string              `json:"qualificationAuthorityPin,omitempty"`
+	ObserverSocket            string              `json:"observerSocket"`
+	ProfileFile               string              `json:"profileFile"`
+	PublicKeyFile             string              `json:"publicKeyFile"`
+	EvidenceDirectory         string              `json:"evidenceDirectory"`
 }
 
 func Parse(data []byte) (Config, error) {
@@ -98,8 +100,11 @@ func Parse(data []byte) (Config, error) {
 		}
 		if x.Kata != nil {
 			q := x.Kata
+			if q.StickyCache != nil && (!q.StickyCache.Valid() || x.BrokerSocket != "" || q.ObserverSocket != "" || q.QualificationBindingFile == "" || q.QualificationAuthorityPin == "") {
+				return Config{}, errors.New("standalone Kata requires direct Docker and a signed lab binding")
+			}
 			if q.QualificationBindingFile != "" || q.QualificationAuthorityPin != "" {
-				if x.BrokerSocket == "" || !filepath.IsAbs(q.QualificationBindingFile) || filepath.Clean(q.QualificationBindingFile) != q.QualificationBindingFile || len(q.QualificationAuthorityPin) != 64 || strings.ContainsAny(q.QualificationAuthorityPin, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
+				if (x.BrokerSocket == "" && q.StickyCache == nil) || !filepath.IsAbs(q.QualificationBindingFile) || filepath.Clean(q.QualificationBindingFile) != q.QualificationBindingFile || len(q.QualificationAuthorityPin) != 64 || strings.ContainsAny(q.QualificationAuthorityPin, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
 					return Config{}, errors.New("qualification requires broker mode, protected binding and authority pin")
 				}
 				for _, c := range q.QualificationAuthorityPin {
@@ -115,7 +120,7 @@ func Parse(data []byte) (Config, error) {
 			if x.Kata.QualificationBindingFile != "" {
 				paths = append(paths, x.Kata.QualificationBindingFile)
 			}
-			if x.BrokerSocket == "" {
+			if x.BrokerSocket == "" && q.StickyCache == nil {
 				paths = append(paths, x.Kata.ObserverSocket)
 			}
 			for _, path := range paths {

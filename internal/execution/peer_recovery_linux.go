@@ -55,7 +55,7 @@ func AdministrativePeerRecovery(ctx context.Context, c config.Config, operation,
 		return diagnosePeerRecovery(ctx, c)
 	}
 	x := c.Execution
-	if x == nil || !x.Enabled || os.Geteuid() == 0 || (operation != "inspect" && operation != "apply") {
+	if x == nil || !x.Enabled || (os.Geteuid() == 0 && (x.Kata == nil || x.Kata.StickyCache == nil)) || (operation != "inspect" && operation != "apply") {
 		return nil, ErrReconcile
 	}
 	credentials, key, err := ReadCredentials(c.CredentialFile)
@@ -90,6 +90,7 @@ func AdministrativePeerRecovery(ctx context.Context, c config.Config, operation,
 	// The supplied epoch is never written here or authenticated implicitly. The
 	// platform must already have accepted administrator resynchronization; its
 	// normal assertion verifier decides whether these current credentials work.
+	originalCredentials := credentials
 	credentials.Identity = challenge.Identity
 	credentials.BootID = actualBoot
 	if err = persistRecoveryDrain(c.StateDir); err != nil {
@@ -100,7 +101,12 @@ func AdministrativePeerRecovery(ctx context.Context, c config.Config, operation,
 		return nil, err
 	}
 	defer store.Close()
-	runtime, err := dockerengine.OpenReadOnly(c.RuntimeEndpoint, credentials.InstallationID, nil)
+	var runtime *dockerengine.Engine
+	if x.Kata != nil && x.Kata.StickyCache != nil {
+		runtime, err = dockerengine.OpenStandalone(c.RuntimeEndpoint, credentials.InstallationID, nil, true)
+	} else {
+		runtime, err = dockerengine.OpenReadOnly(c.RuntimeEndpoint, credentials.InstallationID, nil)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +126,14 @@ func AdministrativePeerRecovery(ctx context.Context, c config.Config, operation,
 	remote := &HostRemote{Client: client, Credentials: credentials, Key: key, Version: Version()}
 	coordinator := &PeerRecoveryCoordinator{Store: store, Runtime: runtime, Remote: remote, Profile: standardlinux.Settings{ImageRepository: x.ImageRepository, NetworkID: x.NetworkID, BootstrapRoot: x.BootstrapRoot, RunnerUID: os.Geteuid(), PidsLimit: x.PidsLimit}, Identity: credentials.Identity, TenantID: credentials.TenantID, InstallationID: credentials.InstallationID, BootID: actualBoot, AgentVersion: Version()}
 	if x.Kata != nil {
-		coordinator.Kata, err = katalinux.Load(x.Kata.ProfileFile, x.Kata.PublicKeyFile, x.Kata.EvidenceDirectory, c.StateDir, coordinator.Profile)
+		if x.Kata.StickyCache != nil {
+			coordinator.Kata, coordinator.cache, err = loadStandalonePeerRecovery(c, originalCredentials)
+			if err == nil {
+				coordinator.Profile = coordinator.Kata.Base
+			}
+		} else {
+			coordinator.Kata, err = katalinux.Load(x.Kata.ProfileFile, x.Kata.PublicKeyFile, x.Kata.EvidenceDirectory, c.StateDir, coordinator.Profile)
+		}
 		if err != nil {
 			return nil, err
 		}

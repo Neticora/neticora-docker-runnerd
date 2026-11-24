@@ -96,6 +96,9 @@ func (p *Profile) layout() error {
 	if syscall.Stat(p.JournalDirectory, &journal) != nil {
 		return ErrQualification
 	}
+	if p.Manifest.Standalone {
+		return p.launchStorageSession()
+	}
 	seen := map[uint64]bool{uint64(journal.Dev): true}
 	var docker syscall.Stat_t
 	if syscall.Stat(p.Manifest.Storage.DockerRoot, &docker) != nil || docker.Dev == journal.Dev {
@@ -254,6 +257,8 @@ func (p *Profile) Healthy(plan dockerengine.Plan, startedAt string, now time.Tim
 	var raw []byte
 	if p.brokerOwned {
 		raw, e = p.brokerHealthRead(plan)
+	} else if p.Manifest.Standalone {
+		raw, e = hostfs.ReadGuestFile(filepath.Join(p.HealthRoot(), plan.Name, "supervisor-health.json"), 1024, p.Base.RunnerUID)
 	} else {
 		raw, e = hostfs.ReadPrivate(filepath.Join(p.HealthRoot(), plan.Name, "supervisor-health.json"), 1024)
 	}
@@ -273,12 +278,30 @@ func (p *Profile) Healthy(plan dockerengine.Plan, startedAt string, now time.Tim
 		return false
 	}
 	observed, e := time.Parse(time.RFC3339Nano, health.ObservedAt)
-	return e == nil && !observed.Before(start) && observed.Sub(now) <= 5*time.Second && now.Sub(observed) <= time.Duration(p.Manifest.Deadlines.HeartbeatSeconds)*time.Second
+	return e == nil && p.freshHeartbeat(start, observed, now)
+}
+
+func (p *Profile) freshHeartbeat(start, observed, now time.Time) bool {
+	if observed.Before(start) || observed.Sub(now) > 5*time.Second {
+		return false
+	}
+	// The standalone supervisor writes a marker before starting nested Docker
+	// and BuildKit. Their readiness can take the full signed startup window.
+	deadlines := p.Manifest.Deadlines
+	return now.Sub(observed) <= time.Duration(deadlines.HeartbeatSeconds)*time.Second ||
+		(p.Manifest.Standalone && now.Sub(start) <= time.Duration(deadlines.StartupSeconds)*time.Second)
 }
 
 // Only the service owner provisions this volatile, per-attempt output directory.
 // Host reads reject mismatched ownership/mode if a guest UID mapping changes.
 func (p *Profile) PrepareHealth(plan dockerengine.Plan) error {
+	if p.Manifest.Standalone && ownedName(plan.Name) {
+		root, err := hostfs.OpenGuestDirectory(filepath.Join(p.HealthRoot(), plan.Name), p.Base.RunnerUID, true)
+		if err != nil {
+			return err
+		}
+		return root.Close()
+	}
 	if p.brokerOwned {
 		root, err := p.brokerHealthDirectory(plan, true)
 		if err != nil {
@@ -305,6 +328,17 @@ func (p *Profile) PrepareHealth(plan dockerengine.Plan) error {
 }
 
 func (p *Profile) CleanHealth(plan dockerengine.Plan) {
+	if p.Manifest.Standalone {
+		dir := filepath.Join(p.HealthRoot(), plan.Name)
+		root, err := hostfs.OpenGuestDirectory(dir, p.Base.RunnerUID, false)
+		if err == nil {
+			_ = root.Remove("supervisor-health.json")
+			_ = root.Close()
+			_ = os.Remove(dir)
+		}
+		return
+	}
+
 	if p.brokerOwned {
 		root, err := p.brokerHealthDirectory(plan, false)
 		if err != nil {

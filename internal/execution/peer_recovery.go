@@ -41,6 +41,7 @@ type RecoveryRuntime interface {
 
 type PeerRecoveryCoordinator struct {
 	Kata                                           *katalinux.Profile
+	cache                                          *kataCache
 	Store                                          *journal.SQLiteStore
 	Runtime                                        RecoveryRuntime // Production wiring uses OpenReadOnly.
 	Remote                                         PeerRecoveryRemote
@@ -70,7 +71,7 @@ func (c *PeerRecoveryCoordinator) executions(ctx context.Context) ([]agent.Execu
 	}
 }
 
-func (c *PeerRecoveryCoordinator) originPlan(e agent.Execution, source string) (dockerengine.Plan, error) {
+func (c *PeerRecoveryCoordinator) originPlan(ctx context.Context, e agent.Execution, source string) (dockerengine.Plan, error) {
 	start, err := protocol.DecodeStartCommand(e.Command)
 	if err != nil || protocol.ValidateInboundJSON("StartCommand", e.Command) != nil || start.CommandId != e.CommandID || start.Spec.ExecutionId != e.Identity.ExecutionID || start.Spec.SpecHash != e.Identity.SpecHash || start.Spec.Generation != e.Identity.Generation || start.Spec.AttemptId != e.Identity.AttemptID || e.Identity.InstallationID != c.InstallationID || e.Identity.TenantID != c.TenantID || e.Identity.HostID != c.Identity.HostId {
 		return dockerengine.Plan{}, ErrReconcile
@@ -80,7 +81,12 @@ func (c *PeerRecoveryCoordinator) originPlan(e agent.Execution, source string) (
 		if c.Kata == nil {
 			return dockerengine.Plan{}, ErrReconcile
 		}
-		return c.Kata.RecoveryPlan(scope, start.Spec)
+		plan, err := c.Kata.RecoveryPlan(scope, start.Spec)
+		if err != nil || c.cache == nil {
+			return plan, err
+		}
+		origin := &Controller{Store: c.Store, cache: c.cache}
+		return origin.cachePlan(ctx, e, plan, false)
 	}
 	return c.Profile.Plan(scope, start.Spec)
 }
@@ -133,7 +139,7 @@ func (c *PeerRecoveryCoordinator) Propose(ctx context.Context, challenge protoco
 	known := map[string]bool{}
 	h := c.Store.Health(ctx)
 	for _, e := range rows {
-		p, err := c.originPlan(e, scope.EndpointIdentity)
+		p, err := c.originPlan(ctx, e, scope.EndpointIdentity)
 		if err != nil {
 			return protocol.SignedPeerRecoveryPlan{}, err
 		}
@@ -364,7 +370,7 @@ func (c *PeerRecoveryCoordinator) inventory(ctx context.Context, plan protocol.P
 		if err != nil {
 			return "", time.Time{}, err
 		}
-		p, err := c.originPlan(e, plan.SourceEndpointIdentity)
+		p, err := c.originPlan(ctx, e, plan.SourceEndpointIdentity)
 		if err != nil {
 			return "", time.Time{}, err
 		}
@@ -487,7 +493,7 @@ func (c *PeerRecoveryCoordinator) Apply(ctx context.Context, approved protocol.S
 			if err != nil {
 				return err
 			}
-			p, err := c.originPlan(e, plan.SourceEndpointIdentity)
+			p, err := c.originPlan(ctx, e, plan.SourceEndpointIdentity)
 			if err != nil {
 				return err
 			}
@@ -521,7 +527,7 @@ func (c *PeerRecoveryCoordinator) Apply(ctx context.Context, approved protocol.S
 		return err
 	}
 	held := false
-	origin := &Controller{Scope: c.scope(plan), Profile: c.Profile}
+	origin := &Controller{Scope: c.scope(plan), Profile: c.Profile, Kata: c.Kata, cache: c.cache}
 	origin.Scope.EndpointIdentity = plan.SourceEndpointIdentity
 	for _, decision := range approved.Manifest.Decisions {
 		if decision.Action == "hold" {
@@ -535,7 +541,7 @@ func (c *PeerRecoveryCoordinator) Apply(ctx context.Context, approved protocol.S
 		if e.State == "cleaned" {
 			continue
 		}
-		p, err := c.originPlan(e, plan.SourceEndpointIdentity)
+		p, err := c.originPlan(ctx, e, plan.SourceEndpointIdentity)
 		if err != nil {
 			return err
 		}
@@ -606,7 +612,41 @@ func (c *PeerRecoveryCoordinator) Apply(ctx context.Context, approved protocol.S
 		if _, err = c.Runtime.Inspect(ctx, id, p); !errors.Is(err, dockerengine.ErrAbsent) {
 			return ErrReconcile
 		}
-		if err = verifyKataAbsence(ctx, c.Kata, c.Runtime, id, p); err != nil {
+		if c.cache != nil {
+			engine, ok := c.Runtime.(interface {
+				VerifyStandaloneRecoveryNetworkDetached(context.Context, string, string) error
+			})
+			if !ok {
+				return ErrReconcile
+			}
+			if err = engine.VerifyStandaloneRecoveryNetworkDetached(ctx, id, string(p.HostConfig.NetworkMode)); err != nil {
+				return fmt.Errorf("verify recovered Docker network detachment: %w", err)
+			}
+			a, err := authorize(ctx)
+			if err != nil {
+				return err
+			}
+			if err = c.Kata.ReleaseStandalone(ctx, p); err != nil {
+				return err
+			}
+			volume, exists, err := c.Store.KataCacheAttempt(ctx, executionKey(e))
+			if err != nil {
+				return err
+			}
+			if exists && volume.State != "retained" {
+				if !c.cache.ownsKey(volume.Key) {
+					return ErrReconcile
+				}
+				if volume.State != "cold" {
+					if err = c.cache.lvm.Delete(ctx, volume.Name, volume.UUID); err != nil {
+						return err
+					}
+				}
+				if err = c.Store.ForgetRecoveredKataCache(ctx, a, volume); err != nil {
+					return err
+				}
+			}
+		} else if err = verifyKataAbsence(ctx, c.Kata, c.Runtime, id, p); err != nil {
 			return err
 		}
 		if _, err = authorize(ctx); err != nil {

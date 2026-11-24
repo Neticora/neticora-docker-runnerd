@@ -127,6 +127,10 @@ func validLabBinding(b LabBinding) bool {
 }
 
 func requireLabMachine(b LabBinding) error {
+	return checkLabMachine(b, false)
+}
+
+func checkLabMachine(b LabBinding, recovery bool) error {
 	if os.Getenv("RUNNERD09_LIVE_QUALIFICATION") != "1" {
 		return ErrQualification
 	}
@@ -142,7 +146,7 @@ func requireLabMachine(b LabBinding) error {
 		return err
 	}
 	boot, err := os.ReadFile("/proc/sys/kernel/random/boot_id")
-	if err != nil || strings.TrimSpace(string(boot)) != b.BootID {
+	if err != nil || (!recovery && strings.TrimSpace(string(boot)) != b.BootID) {
 		return ErrQualification
 	}
 	// DMI is root-readable on the supported host. The authenticated root
@@ -203,7 +207,9 @@ func decodeLabProfile(raw, public []byte, pin string, expected LabBinding, evide
 	if err != nil || expiryErr != nil || profileExpiryErr != nil || issued.After(now) || !expires.After(issued) || expires.Sub(issued) > 6*time.Hour || profileExpiry.After(expires) {
 		return nil, ErrQualification
 	}
-	if base.RunnerUID != expected.ServiceUID || envelope.Manifest.ObserverConfig == "" || envelope.Manifest.Files[envelope.Manifest.ObserverConfig] != expected.ObserverConfigSHA256 {
+	if base.RunnerUID != expected.ServiceUID ||
+		(!envelope.Manifest.Standalone && (envelope.Manifest.ObserverConfig == "" || envelope.Manifest.Files[envelope.Manifest.ObserverConfig] != expected.ObserverConfigSHA256)) ||
+		(envelope.Manifest.Standalone && expected.ObserverConfigSHA256 != strings.Repeat("0", 64)) {
 		return nil, ErrQualification
 	}
 	id, err := ProfileID(envelope.Manifest)
@@ -225,7 +231,25 @@ func decodeLabProfile(raw, public []byte, pin string, expected LabBinding, evide
 }
 
 func LoadQualification(file, public, pin string, expected LabBinding, evidence, journal string, base standardlinux.Settings) (*Profile, error) {
-	if requireLabMachine(expected) != nil {
+	return loadQualification(file, public, pin, expected, evidence, journal, base, false)
+}
+
+// LoadStandaloneRecovery preserves the original signed launch contract across a
+// boot. The resulting profile cannot prepare or admit a new execution.
+func LoadStandaloneRecovery(file, public, pin string, expected LabBinding, evidence, journal string, base standardlinux.Settings) (*Profile, error) {
+	if os.Geteuid() != 0 {
+		return nil, ErrQualification
+	}
+	p, err := loadQualification(file, public, pin, expected, evidence, journal, base, true)
+	if err != nil || !p.Manifest.Standalone {
+		return nil, ErrQualification
+	}
+	p.cleanupOnly = true
+	return p, nil
+}
+
+func loadQualification(file, public, pin string, expected LabBinding, evidence, journal string, base standardlinux.Settings, recovery bool) (*Profile, error) {
+	if checkLabMachine(expected, recovery) != nil {
 		return nil, ErrQualification
 	}
 	raw, err := hostfs.ReadPrivate(file, 131072)
@@ -243,7 +267,7 @@ func LoadQualification(file, public, pin string, expected LabBinding, evidence, 
 	p.storageAuthority = public
 	approval := p.qualificationApproval
 	p.qualificationApproval = func() error {
-		if requireLabMachine(expected) != nil {
+		if checkLabMachine(expected, recovery) != nil {
 			return ErrQualification
 		}
 		return approval()

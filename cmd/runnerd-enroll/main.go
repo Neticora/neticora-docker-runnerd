@@ -50,6 +50,7 @@ func runArgs(args []string) error {
 	token := flags.String("token-file", "", "owner-only 0600 file containing the UI enrollment token; first attempt only")
 	installation := flags.String("installation-id", "", "independently verified platform installation ID; enables credential export")
 	runtime := flags.String("runtime-endpoint", "unix:///run/docker.sock", "local Docker socket for read-only identity probe")
+	standalone := flags.Bool("standalone", false, "trusted root operator: export against the native Docker service at /run/docker.sock")
 	observation := flags.String("runtime-observation", "", "fresh root-owned runtime peer observation; credential export never opens Docker")
 	observe := flags.Bool("observe-runtime", false, "root operator: write a fresh scoped read-only runtime observation; does not enroll")
 	hostID := flags.String("host-id", "", "independently verified enrolled host ID for root runtime observation")
@@ -66,6 +67,9 @@ func runArgs(args []string) error {
 			explicitRuntime = true
 		}
 	})
+	if *standalone && (os.Geteuid() != 0 || *installation == "" || !explicitRuntime || *runtime != "unix:///run/docker.sock" || *observation != "" || *retire || *refresh || *observe) {
+		return errors.New("standalone export requires root, an installation ID, and the explicit native Docker endpoint")
+	}
 	if *refresh {
 		if flags.NArg() != 0 || *observe || *retire || *token != "" || *hostID != "" || explicitRuntime {
 			return errors.New("initial binding cannot enroll, retire or open Docker")
@@ -229,7 +233,13 @@ func runArgs(args []string) error {
 		if *observation != "" {
 			peer, e = readRuntimeObservation(*observation, *installation, a.TenantID, enrolled.Identity.HostId, a.BootID)
 		} else {
-			engine, openErr := dockerengine.OpenReadOnly(*runtime, *installation, nil)
+			var engine *dockerengine.Engine
+			var openErr error
+			if *standalone {
+				engine, openErr = dockerengine.OpenStandalone(*runtime, *installation, nil, true)
+			} else {
+				engine, openErr = dockerengine.OpenReadOnly(*runtime, *installation, nil)
+			}
 			if openErr != nil {
 				return openErr
 			}

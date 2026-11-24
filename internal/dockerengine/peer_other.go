@@ -9,3 +9,5 @@ import (
 
 func peerIdentity(context.Context, string) (string, error) { return "", ErrUnavailable }
 func peerIdentityConnection(net.Conn) (string, error)      { return "", ErrUnavailable }
+
+func standalonePeer(conn net.Conn, _ string) (string, error) { return peerIdentityConnection(conn) }

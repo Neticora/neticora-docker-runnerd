@@ -40,6 +40,19 @@ func matchingKataStartupConfig(raw []byte, selector, shim, config string) bool {
 	decoder.DisallowUnknownFields()
 	return decoder.Decode(&selected) == nil && selected.Type == shim && len(selected.Options) == 1 && selected.Options["ConfigPath"] == config
 }
+
+// Docker may hide runtime options from /info. The standalone profile trusts
+// the customer-managed daemon and pins the configured runtime in its signed
+// file, including when dockerd uses its normal default configuration path.
+func matchingSignedKataConfig(selector, shim, config, file, expected string) bool {
+	raw, err := os.ReadFile(file)
+	if err != nil || len(raw) > 131072 {
+		return false
+	}
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:]) == expected && matchingKataStartupConfig(raw, selector, shim, config)
+}
+
 func exactDaemonConfigArgument(args []string, config string) bool {
 	return (len(args) == 3 && args[1] == "--config-file" && args[2] == config) ||
 		(len(args) == 2 && args[1] == "--config-file="+config)

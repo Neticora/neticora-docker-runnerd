@@ -14,3 +14,10 @@ func OpenState(string) (*os.Root, error) { return nil, errors.New("local service
 func Lock(*os.Root) (*os.File, error)    { return nil, errors.New("local service supports Linux only") }
 
 func CheckAncestors(string) error { return errors.New("local service supports Linux only") }
+
+func ReadGuestFile(string, int64, int) ([]byte, error) {
+	return nil, errors.New("local service supports Linux only")
+}
+func OpenGuestDirectory(string, int, bool) (*os.Root, error) {
+	return nil, errors.New("local service supports Linux only")
+}

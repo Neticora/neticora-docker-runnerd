@@ -683,6 +683,10 @@ func TestStateEventAndCleanupRollbackAtomically(t *testing.T) {
 			start := accepted(t, s)
 			ctx := context.Background()
 			if operation == "cleaned" {
+				cold := agent.ExecutionCursor{ExecutionID: "exec-a", Generation: "1"}
+				if err := s.BeginKataCache(ctx, storetest.Scope, cold, "repository-key", "lv-cold", true); err != nil {
+					t.Fatal(err)
+				}
 				if err := s.RequireCleanup(ctx, storetest.Scope, storetest.Event(t, start, 1, "cleanup-pending")); err != nil {
 					t.Fatal(err)
 				}
@@ -721,6 +725,9 @@ func TestStateEventAndCleanupRollbackAtomically(t *testing.T) {
 				var complete bool
 				if err = s.db.QueryRow("SELECT complete FROM cleanup_tasks").Scan(&complete); err != nil || complete {
 					t.Fatal("cleanup completion partially committed")
+				}
+				if count(t, s, "kata_cache_volumes") != 1 {
+					t.Fatal("cold cache record removed before atomic cleanup")
 				}
 			}
 			if s.Health(ctx).Ready {

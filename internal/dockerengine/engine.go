@@ -81,6 +81,28 @@ func OpenReadOnly(endpoint, installation string, invalidated func()) (*Engine, e
 	return open(endpoint, installation, invalidated, true)
 }
 
+// OpenStandalone uses the trusted host's directly accessible Docker service.
+// Stock systemd socket activation retains the native daemon continuity fence.
+func OpenStandalone(endpoint, installation string, invalidated func(), readOnly bool) (*Engine, error) {
+	e, err := open(endpoint, installation, invalidated, readOnly)
+	if err != nil {
+		return nil, err
+	}
+	e.connectionPeer = func(conn net.Conn) (string, error) {
+		return standalonePeer(conn, e.socket)
+	}
+	e.observePeer = func(ctx context.Context, path string) (string, error) {
+		dialer := net.Dialer{Timeout: 5 * time.Second}
+		conn, err := dialer.DialContext(ctx, "unix", path)
+		if err != nil {
+			return "", ErrUnavailable
+		}
+		defer conn.Close()
+		return standalonePeer(conn, path)
+	}
+	return e, nil
+}
+
 func open(endpoint, installation string, invalidated func(), readOnly bool) (*Engine, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil || u.Scheme != "unix" || u.Host != "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || !filepath.IsAbs(u.Path) || filepath.Clean(u.Path) != u.Path || installation == "" {

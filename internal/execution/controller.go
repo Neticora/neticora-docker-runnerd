@@ -64,6 +64,7 @@ type Controller struct {
 	recoveryOnly        bool // Explicit drained terminal reconciliation; never new admission.
 	kataBroker          kataBrokerRuntime
 	Kata                *katalinux.Profile
+	cache               *kataCache
 	Store               *journal.SQLiteStore
 	Runtime             Runtime
 	Remote              Remote
@@ -151,7 +152,9 @@ func (c *Controller) Run(ctx context.Context) error {
 		for {
 			endpoint, err := c.Runtime.Probe(ctx)
 			if err == nil && endpoint == c.Scope.EndpointIdentity {
-				_ = c.Remote.Heartbeat(ctx, c.heartbeatGeneration.Load().(string))
+				if c.Remote.Heartbeat(ctx, c.heartbeatGeneration.Load().(string)) == nil && c.cache != nil {
+					c.reportCachePresence(ctx)
+				}
 			} else if ctx.Err() == nil {
 				_ = c.Store.InvalidateRuntime(ctx)
 				c.trigger()
@@ -328,6 +331,10 @@ func (c *Controller) refresh(ctx context.Context) ([]agent.Execution, error) {
 		if err != nil {
 			return nil, err
 		}
+		plan, err = c.cachePlan(ctx, e, plan, false)
+		if err != nil {
+			return nil, err
+		}
 		o, err := c.Runtime.Inspect(ctx, plan.Name, plan)
 		if errors.Is(err, dockerengine.ErrAbsent) {
 			continue
@@ -410,6 +417,9 @@ func (c *Controller) reconcile(ctx context.Context) error {
 		return err
 	}
 	var firstError error
+	if c.cache != nil {
+		firstError = c.cacheGarbage(ctx, c.cache.lvm.Policy.Retain)
+	}
 	for _, e := range rows {
 		if e.State == "cleaned" {
 			if p, e2 := c.plan(e); e2 == nil {
@@ -443,7 +453,12 @@ func (c *Controller) expireHandoffs(ctx context.Context, now time.Time) {
 			continue
 		}
 		dir := filepath.Join(c.Profile.BootstrapRoot, p.Name)
-		raw, err := hostfs.ReadPrivate(filepath.Join(dir, "bootstrap.json"), 131072)
+		var raw []byte
+		if c.cache != nil {
+			raw, err = hostfs.ReadGuestFile(filepath.Join(dir, "bootstrap.json"), 131072, c.Profile.RunnerUID)
+		} else {
+			raw, err = hostfs.ReadPrivate(filepath.Join(dir, "bootstrap.json"), 131072)
+		}
 		if err != nil {
 			continue
 		}
@@ -456,7 +471,12 @@ func (c *Controller) expireHandoffs(ctx context.Context, now time.Time) {
 		if err != nil || parseErr != nil || expires.After(now) {
 			continue
 		}
-		root, err := hostfs.OpenState(dir)
+		var root *os.Root
+		if c.cache != nil {
+			root, err = hostfs.OpenGuestDirectory(dir, c.Profile.RunnerUID, false)
+		} else {
+			root, err = hostfs.OpenState(dir)
+		}
 		if err == nil {
 			_ = root.Remove("bootstrap.json")
 			_ = root.Close()
@@ -522,6 +542,10 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 	if err != nil {
 		return err
 	}
+	p, err = c.cachePlan(ctx, e, p, false)
+	if err != nil {
+		return err
+	}
 	controls, err := c.Store.ControlCommands(ctx, e.Identity.ExecutionID, e.Identity.Generation)
 	if err != nil {
 		return err
@@ -569,7 +593,7 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 			if c.Kata != nil && !c.kataHealthy(ctx, p, o) {
 				return c.cleanup(ctx, e, p, o)
 			}
-			if c.Kata != nil && !c.brokerKata() {
+			if c.Kata != nil && !c.brokerKata() && c.cache == nil {
 				if err = c.Kata.Capture(ctx, o.ID, p); err != nil {
 					return err
 				}
@@ -594,7 +618,14 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 		if e2 != nil {
 			return e2
 		}
-		if c.Kata != nil && !c.brokerKata() {
+		if c.cache != nil {
+			if e2 = c.Kata.ReleaseStandalone(ctx, p); e2 != nil {
+				return e2
+			}
+			if e2 = c.finishCache(ctx, e, false); e2 != nil {
+				return e2
+			}
+		} else if c.Kata != nil && !c.brokerKata() {
 			if e2 = c.Kata.DiscardPrepared(ctx, p); e2 != nil {
 				return e2
 			}
@@ -628,7 +659,7 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 				return recoveryErr
 			}
 			if disposed {
-				return c.cleanup(ctx, e, p, dockerengine.Object{ID: ref.ResourceId, State: "exited"})
+				return c.cleanup(ctx, e, p, dockerengine.Object{ID: ref.ResourceId, State: "exited", ExitCode: -1})
 			}
 		}
 	}
@@ -692,6 +723,10 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 	if err != nil || bootstrapErr != nil || authorityErr != nil || !delivery.After(time.Now()) || delivery.After(bootstrap) || delivery.After(authority) {
 		return ErrBootstrap
 	}
+	p, err = c.cachePlan(ctx, e, p, true)
+	if err != nil {
+		return err
+	}
 	plain, err := transport.OpenBootstrap(response.EncryptedBootstrap.MustGet(), key, transport.BootstrapBinding{TenantID: c.Scope.TenantID, HostID: c.Scope.HostID, ExecutionID: e.Identity.ExecutionID, Generation: e.Identity.Generation, StartRequestID: requestID(e), SpecHash: e.Identity.SpecHash, ExpiresAt: *response.RecoveryExpiresAt}, time.Now())
 	if err != nil {
 		return ErrBootstrap
@@ -705,6 +740,9 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 			if err := c.Kata.VerifyStorage(ctx, p); err != nil {
 				return err
 			}
+		}
+		if c.cache != nil && len(p.HostConfig.Devices) > 1 && !c.cacheAuthorized(ctx, e) {
+			return ErrReconcile
 		}
 		if c.Drained() || c.cancelled[executionKey(e)] || c.Policy().UID() != c.Profile.RunnerUID {
 			return ErrReconcile
@@ -761,7 +799,7 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 	// accepted/ACKed until the bounded Docker start/inspection returns. Unknown
 	// start replies remain the same attempt; accepted cancellation wakes cleanup.
 	c.launchMu.Lock()
-	if c.Kata != nil && !c.brokerKata() {
+	if c.Kata != nil && !c.brokerKata() && c.cache == nil {
 		if err = c.Kata.CapturePrepared(o.ID, p); err != nil {
 			c.launchMu.Unlock()
 			return err
@@ -777,7 +815,7 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 	if err != nil {
 		return err
 	}
-	if c.Kata != nil && !c.brokerKata() {
+	if c.Kata != nil && !c.brokerKata() && c.cache == nil {
 		if err = c.Kata.Capture(ctx, o.ID, p); err != nil {
 			return err
 		}
@@ -854,12 +892,18 @@ func (c *Controller) startIntent(ctx context.Context, e agent.Execution, start p
 
 func (c *Controller) handoff(p dockerengine.Plan, plain []byte, expires string) error {
 	dir := filepath.Join(c.Profile.BootstrapRoot, p.Name)
-	if err := os.Mkdir(dir, 0700); err != nil && !os.IsExist(err) {
-		return ErrReconcile
+	var root *os.Root
+	var err error
+	if c.cache != nil {
+		root, err = hostfs.OpenGuestDirectory(dir, c.Profile.RunnerUID, true)
+	} else {
+		if err = os.Mkdir(dir, 0700); err != nil && !os.IsExist(err) {
+			return ErrReconcile
+		}
+		root, err = hostfs.OpenState(dir)
 	}
-	root, err := hostfs.OpenState(dir)
 	if err != nil {
-		return err
+		return ErrReconcile
 	}
 	defer root.Close()
 	raw, err := json.Marshal(map[string]any{"jit": string(plain), "expiresAt": expires, "organization": c.Organization, "repository": c.Repository, "pool": c.Pool})
@@ -867,23 +911,44 @@ func (c *Controller) handoff(p dockerengine.Plan, plain []byte, expires string) 
 		return err
 	}
 	defer clear(raw)
-	if existing, e := hostfs.ReadPrivate(filepath.Join(dir, "bootstrap.json"), 131072); e == nil {
+	path := filepath.Join(dir, "bootstrap.json")
+	var existing []byte
+	if c.cache != nil {
+		existing, err = hostfs.ReadGuestFile(path, 131072, c.Profile.RunnerUID)
+	} else {
+		existing, err = hostfs.ReadPrivate(path, 131072)
+	}
+	if err == nil {
 		defer clear(existing)
 		if string(existing) == string(raw) {
 			return nil
 		}
 		return ErrReconcile
 	}
-	f, err := root.OpenFile("bootstrap.json", os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	name := "bootstrap.json"
+	if c.cache != nil {
+		name = "bootstrap.pending"
+		_ = root.Remove(name)
+		defer root.Remove(name)
+	}
+	f, err := root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		return ErrReconcile
 	}
 	_, err = f.Write(raw)
+	if err == nil && c.cache != nil {
+		err = f.Chown(c.Profile.RunnerUID, c.Profile.RunnerUID)
+	}
 	if err == nil {
 		err = f.Sync()
 	}
-	_ = f.Close()
-	return err
+	if err = errors.Join(err, f.Close()); err != nil {
+		return err
+	}
+	if c.cache != nil {
+		return root.Rename(name, "bootstrap.json")
+	}
+	return nil
 }
 
 func (c *Controller) registration(ctx context.Context, e agent.Execution, p dockerengine.Plan) error {
@@ -893,6 +958,8 @@ func (c *Controller) registration(ctx context.Context, e agent.Execution, p dock
 		Registration(context.Context, dockerengine.Plan) (json.RawMessage, error)
 	}); ok {
 		raw, err = runtime.Registration(ctx, p)
+	} else if c.cache != nil {
+		raw, err = hostfs.ReadGuestFile(filepath.Join(c.Profile.BootstrapRoot, p.Name, "registered.json"), 8192, c.Profile.RunnerUID)
 	} else {
 		raw, err = hostfs.ReadPrivate(filepath.Join(c.Profile.BootstrapRoot, p.Name, "registered.json"), 8192)
 	}
@@ -916,10 +983,13 @@ func (c *Controller) registration(ctx context.Context, e agent.Execution, p dock
 }
 
 func (c *Controller) cleanup(ctx context.Context, e agent.Execution, p dockerengine.Plan, o dockerengine.Object) error {
-	if c.Kata != nil && !c.brokerKata() && o.State == "prepared" {
+	if c.Kata != nil && !c.brokerKata() && c.cache == nil && o.State == "prepared" {
 		if err := c.Kata.CapturePrepared(o.ID, p); err != nil {
 			return err
 		}
+	}
+	if err := c.cacheCleanExit(ctx, e, o); err != nil {
+		return err
 	}
 	if !e.CleanupPending {
 		obs := c.observation(e, o)
@@ -974,7 +1044,21 @@ func (c *Controller) cleanup(ctx context.Context, e agent.Execution, p dockereng
 	if _, err := c.refresh(ctx); err != nil {
 		return err
 	}
-	if err := c.verifyKataAbsence(ctx, ref.ResourceId, p); err != nil {
+	if c.cache != nil {
+		engine := kataRuntimeEngine(c.Runtime)
+		if engine == nil {
+			return ErrReconcile
+		}
+		if err := engine.VerifyNetworkDetached(ctx, ref.ResourceId, string(p.HostConfig.NetworkMode)); err != nil {
+			return err
+		}
+		if err := c.Kata.ReleaseStandalone(ctx, p); err != nil {
+			return err
+		}
+		if err := c.finishCache(ctx, e, true); err != nil {
+			return err
+		}
+	} else if err := c.verifyKataAbsence(ctx, ref.ResourceId, p); err != nil {
 		return err
 	}
 	if runtime, ok := c.Runtime.(interface {
@@ -1046,9 +1130,18 @@ func (c *Controller) cleanSecrets(e agent.Execution, p dockerengine.Plan) {
 	// Host tmpfs holds only this execution's bootstrap/registration files. Never
 	// recursively remove a caller-provided path or any shared runtime resource.
 	dir := filepath.Join(c.Profile.BootstrapRoot, p.Name)
-	root, err := hostfs.OpenState(dir)
+	var root *os.Root
+	var err error
+	if c.cache != nil {
+		root, err = hostfs.OpenGuestDirectory(dir, c.Profile.RunnerUID, false)
+	} else {
+		root, err = hostfs.OpenState(dir)
+	}
 	if err == nil {
 		_ = root.Remove("bootstrap.json")
+		if c.cache != nil {
+			_ = root.Remove("bootstrap.pending")
+		}
 		_ = root.Remove("registered.json")
 		_ = root.Close()
 		// rmdir only: unexpected files are preserved, never recursively pruned.

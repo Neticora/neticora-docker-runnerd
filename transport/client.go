@@ -79,10 +79,18 @@ func (c *Client) Close() { c.http.CloseIdleConnections() }
 // Accepted responses are not authenticated command authority. No automatic retry,
 // redirect following or compression can duplicate or transform a request.
 func (c *Client) Post(ctx context.Context, path, token string, message protocol.Outbound, responseSchema string) ([]byte, error) {
-	if !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") || strings.ContainsAny(path, "?#\\\r\n") || strings.Contains(path, "..") || strings.Contains(path, "%") || responseSchema == "" {
+	if responseSchema == "" {
+		return nil, errors.New("response schema is required")
+	}
+	return c.post(ctx, path, token, message.Bytes(), func(raw []byte) bool {
+		return protocol.ValidateInboundJSON(responseSchema, raw) == nil
+	})
+}
+
+func (c *Client) post(ctx context.Context, path, token string, data []byte, validate func([]byte) bool) ([]byte, error) {
+	if !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") || strings.ContainsAny(path, "?#\\\r\n") || strings.Contains(path, "..") || strings.Contains(path, "%") {
 		return nil, errors.New("invalid protocol request path or response schema")
 	}
-	data := message.Bytes()
 	if len(data) == 0 {
 		return nil, errors.New("empty outbound message")
 	}
@@ -118,7 +126,7 @@ func (c *Client) Post(ctx context.Context, path, token string, message protocol.
 	if err != nil || len(raw) > protocol.MaxWireBytes {
 		return nil, errors.New("protocol response unreadable or oversized")
 	}
-	if err := protocol.ValidateInboundJSON(responseSchema, raw); err != nil {
+	if !validate(raw) {
 		return nil, errors.New("invalid protocol response")
 	}
 	return raw, nil

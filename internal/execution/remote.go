@@ -296,3 +296,27 @@ func (r *HostRemote) PeerRecovery(ctx context.Context, id string, complete bool)
 	}
 	return r.Client.Post(ctx, "/me/recovery", token, request, "PeerRecoveryAuthorization")
 }
+
+func (r *HostRemote) KataCacheDecision(ctx context.Context, cursor agent.ExecutionCursor) (string, error) {
+	token, err := r.credential(ctx)
+	if err != nil {
+		return "", err
+	}
+	return r.Client.KataCacheDecision(ctx, token, cursor.ExecutionID, cursor.Generation)
+}
+
+func (r *HostRemote) ReportKataCache(ctx context.Context, repository, profile string, warm bool) error {
+	token, err := r.credential(ctx)
+	if err != nil {
+		return err
+	}
+	return r.Client.ReportKataCache(ctx, token, repository, profile, warm)
+}
+
+func (r *HostRemote) KataCacheAccess(ctx context.Context, cursor agent.ExecutionCursor) (bool, error) {
+	token, err := r.credential(ctx)
+	if err != nil {
+		return false, err
+	}
+	return r.Client.KataCacheAccess(ctx, token, cursor.ExecutionID, cursor.Generation)
+}

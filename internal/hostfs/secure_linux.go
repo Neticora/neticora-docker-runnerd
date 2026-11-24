@@ -11,8 +11,12 @@ import (
 )
 
 func secureStat(info os.FileInfo, dir bool) error {
+	return secureStatOwner(info, dir, os.Geteuid())
+}
+
+func secureStatOwner(info os.FileInfo, dir bool, uid int) error {
 	st, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || int(st.Uid) != os.Geteuid() || info.Mode().Perm()&0077 != 0 || info.Mode()&os.ModeSymlink != 0 {
+	if !ok || int(st.Uid) != uid || info.Mode().Perm()&0077 != 0 || info.Mode()&os.ModeSymlink != 0 {
 		return errors.New("unsafe local file ownership or permissions")
 	}
 	if dir != info.IsDir() || (!dir && !info.Mode().IsRegular()) {
@@ -22,10 +26,30 @@ func secureStat(info os.FileInfo, dir bool) error {
 }
 
 func ReadPrivate(path string, limit int64) ([]byte, error) {
+	return readPrivate(path, limit, os.Geteuid())
+}
+
+func ReadGuestFile(path string, limit int64, uid int) ([]byte, error) {
+	if os.Geteuid() != 0 || uid <= 0 {
+		return nil, errors.New("invalid guest file owner")
+	}
+	return readPrivate(path, limit, uid)
+}
+
+func readPrivate(path string, limit int64, uid int) ([]byte, error) {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path || limit < 0 {
 		return nil, errors.New("invalid protected file path or limit")
 	}
-	if err := CheckAncestors(filepath.Dir(path)); err != nil {
+	dir := filepath.Dir(path)
+	if uid != os.Geteuid() {
+		root, err := OpenGuestDirectory(dir, uid, false)
+		if err != nil {
+			return nil, err
+		}
+		root.Close()
+		dir = filepath.Dir(dir)
+	}
+	if err := CheckAncestors(dir); err != nil {
 		return nil, err
 	}
 	fd, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC|syscall.O_NONBLOCK, 0)
@@ -38,7 +62,7 @@ func ReadPrivate(path string, limit int64) ([]byte, error) {
 	if err != nil {
 		return nil, errors.New("cannot inspect protected file")
 	}
-	if err = secureStat(info, false); err != nil {
+	if err = secureStatOwner(info, false, uid); err != nil {
 		return nil, err
 	}
 	data, err := io.ReadAll(io.LimitReader(f, limit+1))
@@ -65,6 +89,43 @@ func OpenState(path string) (*os.Root, error) {
 		return nil, err
 	}
 	return os.OpenRoot(path)
+}
+
+// OpenGuestDirectory grants the guest UID control of only one directory
+// under a host-owned parent. Root retains its separate host-private state.
+func OpenGuestDirectory(path string, uid int, create bool) (*os.Root, error) {
+	if os.Geteuid() != 0 || uid <= 0 || !filepath.IsAbs(path) || filepath.Clean(path) != path {
+		return nil, errors.New("invalid guest directory")
+	}
+	parent, err := OpenState(filepath.Dir(path))
+	if err != nil {
+		return nil, err
+	}
+	defer parent.Close()
+	name := filepath.Base(path)
+	if create {
+		if err = parent.Mkdir(name, 0700); err != nil && !errors.Is(err, os.ErrExist) {
+			return nil, err
+		}
+	}
+	info, err := parent.Lstat(name)
+	if err != nil {
+		return nil, err
+	}
+	if create && secureStat(info, true) == nil {
+		// Root can retry a mkdir whose chown was interrupted before publication.
+		if err = parent.Chown(name, uid, uid); err != nil {
+			return nil, err
+		}
+		info, err = parent.Lstat(name)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if err = secureStatOwner(info, true, uid); err != nil {
+		return nil, err
+	}
+	return parent.OpenRoot(name)
 }
 
 // CheckAncestors rejects symlink or untrusted writable directory components.

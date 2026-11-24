@@ -19,7 +19,7 @@ import (
 // only in qualification builds. Neither ordinary builds nor Load accept it.
 func openConfiguredQualification(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drained func() bool) (*Controller, func(), error) {
 	x := c.Execution
-	if x == nil || x.Kata == nil || x.BrokerSocket == "" || c.SourceFile == "" {
+	if x == nil || x.Kata == nil || (x.BrokerSocket == "" && x.Kata.StickyCache == nil) || c.SourceFile == "" {
 		return nil, nil, ErrReconcile
 	}
 	raw, err := hostfs.ReadPrivate(x.Kata.QualificationBindingFile, 16384)
@@ -81,4 +81,30 @@ func OpenQualification(c config.Config, configFile string, store *journal.SQLite
 		return nil
 	}
 	return candidate, close, nil
+}
+
+func loadStandalonePeerRecovery(c config.Config, original Credentials) (*katalinux.Profile, *kataCache, error) {
+	x := c.Execution
+	if x == nil || x.Kata == nil || x.Kata.StickyCache == nil || x.BrokerSocket != "" || x.Kata.ObserverSocket != "" {
+		return nil, nil, ErrReconcile
+	}
+	raw, err := hostfs.ReadPrivate(x.Kata.QualificationBindingFile, 16384)
+	if err != nil {
+		return nil, nil, err
+	}
+	var binding katalinux.LabBinding
+	if err = json.Unmarshal(raw, &binding); err != nil ||
+		binding.HostID != original.Identity.HostId || binding.TenantID != original.TenantID ||
+		binding.InstallationID != original.InstallationID || binding.BootID != original.BootID ||
+		binding.ControlPlaneURL != c.ControlPlaneURL || binding.Repository != x.Repository || binding.PoolID != x.Pool ||
+		katalinux.ValidateLabFiles(binding, c.SourceFile, x.PolicyFile, x.CapabilitiesFile) != nil {
+		return nil, nil, ErrReconcile
+	}
+	base := standardlinux.Settings{ImageRepository: x.ImageRepository, NetworkID: x.NetworkID, BootstrapRoot: x.BootstrapRoot, RunnerUID: binding.ServiceUID, PidsLimit: x.PidsLimit}
+	profile, err := katalinux.LoadStandaloneRecovery(x.Kata.ProfileFile, x.Kata.PublicKeyFile, x.Kata.QualificationAuthorityPin, binding, x.Kata.EvidenceDirectory, c.StateDir, base)
+	if err != nil {
+		return nil, nil, err
+	}
+	cache := newKataCache(*x.Kata.StickyCache, original.InstallationID, original.TenantID, x.Repository, profile.Manifest.ImageDigest)
+	return profile, cache, nil
 }

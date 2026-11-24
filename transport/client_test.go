@@ -239,3 +239,39 @@ func TestGatewayEnrollmentAndConfigTransport(t *testing.T) {
 		t.Fatal("config accepted no credential")
 	}
 }
+
+func TestKataCacheDecisionAndCanonicalPresence(t *testing.T) {
+	responses := []string{`{"decision":"success"}`, `{"decision":"pending"}`,
+		`{"decision":"success","extra":true}`, `{"decision":"success","decision":"discard"}`, `{"accepted":true}`}
+	var requests atomic.Int32
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		index := int(requests.Add(1)) - 1
+		if index >= len(responses) {
+			http.Error(w, "unexpected", http.StatusBadRequest)
+			return
+		}
+		wantPath := "/me/cache/decision"
+		wantBody := `{"entries":[{"executionId":"run-a","generation":"2"}]}`
+		if index == len(responses)-1 {
+			wantPath = "/me/cache/presence"
+			wantBody = `{"profile":"profile-a","repository":"org/repo","warm":true}`
+		}
+		raw, err := io.ReadAll(r.Body)
+		if err != nil || r.Method != http.MethodPost || r.URL.Path != wantPath ||
+			r.Header.Get("Authorization") != "Bearer test-token" || string(raw) != wantBody {
+			t.Errorf("unexpected cache request at %s: %s %v", r.URL.Path, raw, err)
+		}
+		_, _ = w.Write([]byte(responses[index]))
+	}))
+	defer server.Close()
+	client := trustedClient(t, server)
+	for _, want := range []string{"success", "pending", "", ""} {
+		got, err := client.KataCacheDecision(t.Context(), "test-token", "run-a", "2")
+		if got != want || (want == "") != (err != nil) {
+			t.Fatalf("decision %q, error %v, want %q", got, err, want)
+		}
+	}
+	if err := client.ReportKataCache(t.Context(), "test-token", "org/repo", "profile-a", true); err != nil {
+		t.Fatal(err)
+	}
+}

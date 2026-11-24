@@ -2,11 +2,21 @@ package dockerengine
 
 import (
 	"context"
+	"encoding/hex"
 
+	"github.com/containerd/errdefs"
 	"github.com/moby/moby/client"
 )
 
 func (e *Engine) CheckKataTuple(ctx context.Context, selector, version, root, shim, runtimeConfig string, startupConfig ...string) error {
+	return e.checkKataTuple(ctx, false, selector, version, root, shim, runtimeConfig, startupConfig...)
+}
+
+func (e *Engine) CheckStandaloneKataTuple(ctx context.Context, selector, version, root, shim, runtimeConfig string, startupConfig ...string) error {
+	return e.checkKataTuple(ctx, true, selector, version, root, shim, runtimeConfig, startupConfig...)
+}
+
+func (e *Engine) checkKataTuple(ctx context.Context, standalone bool, selector, version, root, shim, runtimeConfig string, startupConfig ...string) error {
 	if err := e.check(ctx); err != nil {
 		return err
 	}
@@ -14,7 +24,7 @@ func (e *Engine) CheckKataTuple(ctx context.Context, selector, version, root, sh
 	if err != nil {
 		return e.lost()
 	}
-	if info.Info.ServerVersion != version || info.Info.DockerRootDir != root || info.Info.Driver != "overlay2" || info.Info.LiveRestoreEnabled {
+	if info.Info.ServerVersion != version || info.Info.DockerRootDir != root || (info.Info.Driver != "overlay2" && !(standalone && info.Info.Driver == "overlayfs")) || info.Info.LiveRestoreEnabled {
 		return ErrConflict
 	}
 	configured, ok := info.Info.Runtimes[selector]
@@ -22,14 +32,23 @@ func (e *Engine) CheckKataTuple(ctx context.Context, selector, version, root, sh
 		return ErrConflict
 	}
 	if configured.Type == "" && configured.Path == "" && len(configured.Args) == 0 && len(configured.Options) == 0 {
-		if len(startupConfig) != 2 || e.verifyKataStartupConfig(ctx, selector, shim, runtimeConfig, startupConfig[0], startupConfig[1]) != nil {
+		if len(startupConfig) != 2 {
+			return ErrConflict
+		}
+		if standalone {
+			if !matchingSignedKataConfig(selector, shim, runtimeConfig, startupConfig[0], startupConfig[1]) {
+				return ErrConflict
+			}
+		} else if e.verifyKataStartupConfig(ctx, selector, shim, runtimeConfig, startupConfig[0], startupConfig[1]) != nil {
 			return ErrConflict
 		}
 	} else if configured.Type != shim || configured.Path != "" || len(configured.Args) != 0 || len(configured.Options) != 1 || configured.Options["ConfigPath"] != runtimeConfig {
 		return ErrConflict
 	}
-	if err = checkQuotaFilesystem(root); err != nil {
-		return err
+	if !standalone {
+		if err = checkQuotaFilesystem(root); err != nil {
+			return err
+		}
 	}
 	return e.check(ctx)
 }
@@ -51,11 +70,35 @@ func (e *Engine) CheckKataHostCgroupDriver(ctx context.Context) error {
 // The customer bridge is retained. Only this execution's network endpoint must
 // disappear; a name or missing outer container alone is insufficient.
 func (e *Engine) VerifyNetworkDetached(ctx context.Context, id, network string) error {
+	return e.verifyNetworkDetached(ctx, id, network, false)
+}
+
+// VerifyStandaloneRecoveryNetworkDetached runs on the approved replacement Docker peer.
+// A missing immutable bridge ID also proves that the endpoint is detached.
+func (e *Engine) VerifyStandaloneRecoveryNetworkDetached(ctx context.Context, id, network string) error {
+	if !e.readOnly {
+		return ErrRecoveryApprovalRequired
+	}
+	for _, value := range []string{id, network} {
+		if len(value) != 64 {
+			return ErrConflict
+		}
+		if _, err := hex.DecodeString(value); err != nil {
+			return ErrConflict
+		}
+	}
+	return e.verifyNetworkDetached(ctx, id, network, true)
+}
+
+func (e *Engine) verifyNetworkDetached(ctx context.Context, id, network string, allowMissing bool) error {
 	if err := e.check(ctx); err != nil {
 		return err
 	}
 	r, err := e.api.NetworkInspect(ctx, network, client.NetworkInspectOptions{})
 	if err != nil {
+		if allowMissing && errdefs.IsNotFound(err) {
+			return e.check(ctx)
+		}
 		return e.lost()
 	}
 	if r.Network.ID != network {

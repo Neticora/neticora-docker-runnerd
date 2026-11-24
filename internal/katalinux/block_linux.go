@@ -461,6 +461,9 @@ func (p *Profile) blockRecord(plan dockerengine.Plan) (BlockRecord, error) {
 		return BlockRecord{}, err
 	}
 	final, e := readBlockState(root, plan.Name+".block.json")
+	if p.Manifest.Standalone && errors.Is(e, os.ErrNotExist) {
+		return BlockRecord{}, e
+	}
 	if e != nil || !p.matchBlock(final, plan) || final.Phase != "released" {
 		return BlockRecord{}, ErrQualification
 	}
@@ -549,31 +552,28 @@ func (p *Profile) releaseBlock(ctx context.Context, plan dockerengine.Plan, guar
 			return err
 		}
 	}
-	users := physical
-	users.LoopDevice = 0
-	if len(loops) == 1 {
-		users.LoopDevice = loops[0]
-	}
-	if err = noBlockUsers(ctx, users); err != nil {
-		return err
+	if !p.Manifest.Standalone {
+		users := physical
+		users.LoopDevice = 0
+		if len(loops) == 1 {
+			users.LoopDevice = loops[0]
+		}
+		if err = noBlockUsers(ctx, users); err != nil {
+			return err
+		}
 	}
 	if len(loops) > 0 {
-		if err = loopMounted(ctx, loops[0]); err != nil {
-			return err
+		if !p.Manifest.Standalone {
+			if err = loopMounted(ctx, loops[0]); err != nil {
+				return err
+			}
 		}
 		if err = detachLoop(loops[0], physical); err != nil {
 			return err
 		}
 	}
-	loops, err = loopsFor(physical)
-	if err != nil || len(loops) != 0 {
-		return ErrQualification
-	}
-	if err = settledBlockAbsence(ctx, physical); err != nil {
+	if err = p.verifyReleasedLoop(ctx, physical); err != nil {
 		return err
-	}
-	if p.layout() != nil {
-		return ErrQualification
 	}
 	if err = verifyOwners(); err != nil {
 		return err
@@ -591,11 +591,8 @@ func (p *Profile) releaseBlock(ctx context.Context, plan dockerengine.Plan, guar
 	}
 	// Recheck after unlink as well: a successful lazy detach or unlink alone is
 	// never a capacity-release fact. Open deleted files still match their inode.
-	if err = settledBlockAbsence(ctx, physical); err != nil {
+	if err = p.verifyReleasedLoop(ctx, physical); err != nil {
 		return err
-	}
-	if p.layout() != nil {
-		return ErrQualification
 	}
 	if err = verifyOwners(); err != nil {
 		return err
@@ -622,7 +619,43 @@ func (p *Profile) blockReleased(plan dockerengine.Plan, r BlockRecord) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	if p.Manifest.Standalone {
+		return p.verifyReleasedLoop(ctx, physical)
+	}
 	return settledBlockAbsence(ctx, physical)
+}
+
+func (p *Profile) verifyReleasedLoop(ctx context.Context, r BlockRecord) error {
+	if !p.Manifest.Standalone {
+		loops, err := loopsFor(r)
+		if err != nil || len(loops) != 0 {
+			return ErrQualification
+		}
+		if err = settledBlockAbsence(ctx, r); err != nil {
+			return err
+		}
+		return p.layout()
+	}
+	// Docker and the owned cgroup have already converged. Native loop
+	// status still distinguishes a deferred detach from an absent mapping.
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		loops, err := loopsFor(r)
+		if err != nil {
+			return err
+		}
+		if len(loops) == 0 {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
 }
 
 // All loop discovery uses backing inode/device, never a cached /dev/loop number.

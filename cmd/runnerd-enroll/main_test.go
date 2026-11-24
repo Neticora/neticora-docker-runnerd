@@ -15,6 +15,20 @@ import (
 	"testing"
 )
 
+func TestStandaloneExportRequiresExplicitNativeDockerScope(t *testing.T) {
+	for _, args := range [][]string{
+		{"--standalone"},
+		{"--standalone", "--installation-id", "installation"},
+		{"--standalone", "--installation-id", "installation", "--runtime-endpoint", "unix:///run/other.sock"},
+		{"--standalone", "--installation-id", "installation", "--runtime-endpoint", "unix:///run/docker.sock", "--observe-runtime"},
+		{"--standalone", "--installation-id", "installation", "--runtime-endpoint", "unix:///run/docker.sock", "--retire-attempt"},
+	} {
+		if err := runArgs(args); err == nil || !strings.Contains(err.Error(), "standalone export requires root") {
+			t.Fatalf("args %v: got %v, want standalone export scope error", args, err)
+		}
+	}
+}
+
 func TestLostEnrollmentResponseRetainsIdenticalRequest(t *testing.T) {
 	dir := t.TempDir()
 	os.Chmod(dir, 0700)

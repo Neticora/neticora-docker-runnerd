@@ -478,6 +478,15 @@ func (s *SQLiteStore) record(ctx context.Context, scope agent.StoreScope, raw js
 			terminal = terminal || state == "exited" || state == "cleaned"
 			refRaw = doc.Observation.RuntimeRef
 		}
+		if operation == "complete" || operation == "never" {
+			// A cold choice pins the device-free plan until terminal cleanup.
+			// Retire it in the same transaction as the final event and release.
+			if _, err = tx.ExecContext(ctx, `DELETE FROM kata_cache_volumes
+			    WHERE execution_id=? AND generation=? AND state='cold' AND uuid='' AND filesystem_uuid=''`,
+				doc.ExecutionID, doc.Generation); err != nil {
+				return err
+			}
+		}
 		var count int
 		var size int64
 		if err = tx.QueryRowContext(ctx, "SELECT count(*),coalesce(sum(length(payload)),0) FROM outbox_events WHERE payload IS NOT NULL").Scan(&count, &size); err != nil {

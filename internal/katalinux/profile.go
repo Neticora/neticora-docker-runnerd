@@ -65,6 +65,7 @@ type Storage struct {
 	ManagementFreeBytes uint64        `json:"managementFreeBytes"`
 }
 type Manifest struct {
+	Standalone              bool      `json:"standalone,omitempty"`
 	GuestStorageDriver      string    `json:"guestStorageDriver"`
 	Deadlines               Deadlines `json:"deadlines"`
 	Version                 string    `json:"version"`
@@ -216,6 +217,9 @@ func Load(file, public, evidence, journal string, base standardlinux.Settings) (
 }
 func (p *Profile) validate() error {
 	m := p.Manifest
+	if m.Standalone && (m.Version != MultiBlockVersion || p.qualificationApproval == nil || m.RetirementPolicy != "" || m.ObserverConfig != "") {
+		return ErrQualification
+	}
 	if m.RetirementPolicy != "" && (m.RetirementPolicy != RetirementPolicy || m.Version != MultiBlockVersion) {
 		return ErrQualification
 	}
@@ -251,10 +255,13 @@ func (p *Profile) validate() error {
 	if m.RuntimeImplementation != "runtime-rs" || m.Hypervisor != "qemu" {
 		return ErrQualification
 	}
-	for _, path := range []string{m.DockerConfig, m.ObserverConfig, m.RuntimeConfig, m.HostOSFile, m.GuestKernel, m.GuestImage, m.QEMUBinary, m.ShimBinary} {
+	for _, path := range []string{m.DockerConfig, m.RuntimeConfig, m.HostOSFile, m.GuestKernel, m.GuestImage, m.QEMUBinary, m.ShimBinary} {
 		if m.Files[path] == "" {
 			return ErrQualification
 		}
+	}
+	if !m.Standalone && m.Files[m.ObserverConfig] == "" {
+		return ErrQualification
 	}
 	if (m.Version != Version && !block) || (!m.Qualified && p.qualificationApproval == nil) || !strings.HasPrefix(m.EndpointIdentity, "docker-") || m.ConfigurationGeneration == "" || m.HostKernel == "" || m.DockerVersion == "" || m.KataVersion == "" || m.QEMUVersion == "" || m.GuestKernelVersion == "" || m.GuestImageVersion == "" || m.RuntimeSelector == "" || m.RuntimeSelector == "runc" || m.RuntimeSelector == "default" || !validRuntimeSelector(m.RuntimeSelector) || len(m.Files) < 5 || m.Files[m.QEMUBinary] == "" || m.Files[m.ShimBinary] == "" || m.VMNamePrefix == "" || strings.ContainsAny(m.VMNamePrefix, "/ ,\x00") || len(m.SandboxRoots) == 0 || len(m.SecurityReview) < 20 {
 		return ErrQualification
@@ -456,7 +463,11 @@ func (p *Profile) buildPlan(scope agent.StoreScope, s protocol.ExecutionSpec) (d
 		plan.HostConfig.CapAdd[i] = "CAP_" + strings.TrimPrefix(capability, "CAP_")
 	}
 	slices.Sort(plan.HostConfig.CapAdd)
-	plan.HostConfig.StorageOpt = map[string]string{"size": strconv.FormatUint(m.Storage.OuterBytes, 10)}
+	if m.Standalone {
+		delete(plan.HostConfig.Tmpfs, "/runner/_work")
+	} else {
+		plan.HostConfig.StorageOpt = map[string]string{"size": strconv.FormatUint(m.Storage.OuterBytes, 10)}
+	}
 	plan.HostConfig.Tmpfs = map[string]string{"/run": "rw,nosuid,nodev,size=134217728", "/tmp": "rw,nosuid,nodev,size=67108864"}
 	if m.Storage.Block != nil {
 		settings, _ := json.Marshal(GuestBlockSettings{Version: "runnerd09-guest-block-v1", Device: "/dev/neticora-execution", UUID: p.blockUUID(plan.Name), Bytes: m.Storage.Block.Bytes, UID: p.Base.RunnerUID})
@@ -490,6 +501,9 @@ func (p *Profile) Probe(ctx context.Context, e *dockerengine.Engine) error {
 			return err
 		}
 	}
+	if p.Manifest.Standalone {
+		return e.CheckStandaloneKataTuple(ctx, p.Manifest.RuntimeSelector, p.Manifest.DockerVersion, p.Manifest.Storage.DockerRoot, p.Manifest.ShimBinary, p.Manifest.RuntimeConfig, p.Manifest.DockerConfig, p.Manifest.Files[p.Manifest.DockerConfig])
+	}
 	return e.CheckKataTuple(ctx, p.Manifest.RuntimeSelector, p.Manifest.DockerVersion, p.Manifest.Storage.DockerRoot, p.Manifest.ShimBinary, p.Manifest.RuntimeConfig, p.Manifest.DockerConfig, p.Manifest.Files[p.Manifest.DockerConfig])
 }
 
@@ -505,6 +519,9 @@ func (p *Profile) RecoverProbe(ctx context.Context, e *dockerengine.Engine) erro
 		if err := e.CheckKataHostCgroupDriver(ctx); err != nil {
 			return err
 		}
+	}
+	if p.Manifest.Standalone {
+		return e.CheckStandaloneKataTuple(ctx, p.Manifest.RuntimeSelector, p.Manifest.DockerVersion, p.Manifest.Storage.DockerRoot, p.Manifest.ShimBinary, p.Manifest.RuntimeConfig, p.Manifest.DockerConfig, p.Manifest.Files[p.Manifest.DockerConfig])
 	}
 	return e.CheckKataTuple(ctx, p.Manifest.RuntimeSelector, p.Manifest.DockerVersion, p.Manifest.Storage.DockerRoot, p.Manifest.ShimBinary, p.Manifest.RuntimeConfig, p.Manifest.DockerConfig, p.Manifest.Files[p.Manifest.DockerConfig])
 }
