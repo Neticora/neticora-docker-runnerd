@@ -1448,7 +1448,7 @@ func TestAbruptProcessCrashAtDurabilityBoundaries(t *testing.T) {
 
 func TestStorageJournalIdentityRejectsDatabaseReplacement(t *testing.T) {
 	ctx := context.Background()
-	dir := t.TempDir()
+	dir := privateDir(t)
 	store, err := OpenRecovery(ctx, dir, Options{})
 	if err != nil {
 		t.Fatal(err)

@@ -139,7 +139,21 @@ func AdministrativePeerRecovery(ctx context.Context, c config.Config, operation,
 			return nil, err
 		}
 		if completed {
-			return applyPeerRecovery(ctx, coordinator, c.CredentialFile, credentials, approved)
+			// Native completion was committed only after verifying the signed
+			// platform receipt. A retry can acknowledge that same terminal
+			// result without reopening the old Kata launch profile.
+			plan := approved.Manifest.Plan
+			endpoint, err := runtime.Probe(ctx)
+			if err != nil || endpoint != plan.TargetEndpointIdentity || plan.BootId != actualBoot ||
+				plan.InstallationId != credentials.InstallationID {
+				return nil, ErrReconcile
+			}
+			if originalCredentials.Identity != credentials.Identity || originalCredentials.BootID != actualBoot || originalCredentials.EndpointIdentity != endpoint {
+				if err := commitRecoveredCredentials(c.CredentialFile, credentials, endpoint); err != nil {
+					return nil, err
+				}
+			}
+			return recoveredPeerStatus(approved.Manifest.ApprovalId)
 		}
 	}
 	if x.Kata != nil {
@@ -179,7 +193,11 @@ func applyPeerRecovery(ctx context.Context, coordinator *PeerRecoveryCoordinator
 	if err := commitRecoveredCredentials(credentialPath, credentials, approved.Manifest.Plan.TargetEndpointIdentity); err != nil {
 		return nil, err
 	}
-	return peerrecovery.Canonical(map[string]string{"approvalId": approved.Manifest.ApprovalId, "state": "completed-drained"})
+	return recoveredPeerStatus(approved.Manifest.ApprovalId)
+}
+
+func recoveredPeerStatus(approvalID string) ([]byte, error) {
+	return peerrecovery.Canonical(map[string]string{"approvalId": approvalID, "state": "completed-drained"})
 }
 
 func persistRecoveryDrain(dir string) error {
