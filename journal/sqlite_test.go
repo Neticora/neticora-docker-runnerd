@@ -1154,7 +1154,7 @@ func TestRestoredSnapshotCannotInventNeverStartedEvidence(t *testing.T) {
 }
 
 func TestMissingCorruptFutureOrStaleDatabaseFailsClosed(t *testing.T) {
-	for _, damage := range []string{"missing", "corrupt", "future-schema", "future-schema-rollback-mode", "stale", "unsafe-mode", "symlink", "hardlink", "sidecar-symlink"} {
+	for _, damage := range []string{"missing", "corrupt", "future-schema", "future-schema-rollback-mode", "foreign-version-4", "stale", "unsafe-mode", "symlink", "hardlink", "sidecar-symlink"} {
 		t.Run(damage, func(t *testing.T) {
 			dir := privateDir(t)
 			s := recovery(t, dir, Options{})
@@ -1174,13 +1174,18 @@ func TestMissingCorruptFutureOrStaleDatabaseFailsClosed(t *testing.T) {
 				t.Fatal(err)
 			}
 			path := filepath.Join(dir, databaseName)
-			if damage == "future-schema-rollback-mode" {
+			if damage == "future-schema-rollback-mode" || damage == "foreign-version-4" {
 				db, err := sql.Open("sqlite", path)
 				if err != nil {
 					t.Fatal(err)
 				}
 				if _, err = db.Exec("PRAGMA journal_mode=DELETE"); err != nil {
 					t.Fatal(err)
+				}
+				if damage == "foreign-version-4" {
+					if _, err = db.Exec("DROP TABLE kata_cache_heads; DROP TABLE kata_cache_volumes; CREATE TABLE execution_storage (record BLOB NOT NULL)"); err != nil {
+						t.Fatal(err)
+					}
 				}
 				if err = db.Close(); err != nil {
 					t.Fatal(err)

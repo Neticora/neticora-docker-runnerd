@@ -171,12 +171,21 @@ func OpenRecovery(ctx context.Context, path string, options Options) (_ *SQLiteS
 		}
 		var version int
 		e = probe.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version)
+		var cacheTables int
+		if e == nil && version == 4 {
+			// The separate execution-storage history also used version 4.
+			// Identify the Kata migration before opening the journal for writes.
+			e = probe.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_schema WHERE type = 'table' AND name IN ('kata_cache_volumes', 'kata_cache_heads')").Scan(&cacheTables)
+		}
 		closeErr := probe.Close()
 		if e != nil || closeErr != nil {
 			return nil, agent.ErrStoreUnavailable
 		}
 		if version < 1 || version > schemaVersion {
 			return nil, errors.New("unsupported recovery schema; preserve database")
+		}
+		if version == 4 && cacheTables != 2 {
+			return nil, errors.New("version 4 journal lacks the Kata cache schema; preserve database")
 		}
 	}
 	s.databaseFile, err = os.Lstat(filepath.Join(path, databaseName))
