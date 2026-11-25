@@ -9,6 +9,8 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/internal/dockerengine"
 )
 
+var ErrKataOnly = errors.New("standalone Docker/Kata is required for workload execution")
+
 func (c *Controller) StorageReady() bool {
 	state := c.storageStatus.Load()
 	return state == nil || state.(string) == ""
@@ -25,10 +27,28 @@ func (c *Controller) checkStorage(ctx context.Context) error {
 	return c.Kata.StoragePreflight()
 }
 
+func (c *Controller) checkAdmissionStorage(ctx context.Context) error {
+	err := c.checkStorage(ctx)
+	if err == nil && c.Kata != nil && c.Kata.Manifest.Qualified {
+		engine := kataRuntimeEngine(c.Runtime)
+		if engine == nil {
+			err = ErrKataOnly
+		} else {
+			err = c.Kata.Probe(ctx, engine)
+			if err == nil && c.cache != nil {
+				if _, poolErr := c.cache.lvm.Headroom(ctx, c.HostLimits.Slots); poolErr != nil {
+					err = errors.New("configured LVM Thin pool identity or status unavailable")
+				}
+			}
+		}
+	}
+	return err
+}
+
 func (c *Controller) reportStorageReady(ctx context.Context) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	err := c.checkStorage(ctx)
+	err := c.checkAdmissionStorage(ctx)
 	if err != nil {
 		c.storageStatus.Store(err.Error())
 		return false

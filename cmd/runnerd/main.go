@@ -22,12 +22,12 @@ func main() {
 }
 func run() error {
 	version := flag.Bool("version", false, "print actual executable version")
-	file := flag.String("config", "/etc/neticora-runnerd/config.json", "protected configuration file")
+	file := flag.String("config", "/etc/neticora-runnerd-kata/config.json", "protected configuration file")
 	kataCheck := flag.Bool("kata-check", false, "read-only check of an independently qualified Kata tuple; never grants admission")
 	recovery := flag.String("recovery", "", "operator recovery: diagnose, inspect, apply or broker-finalize; daemon must be stopped")
-	recoveryInput := flag.String("recovery-input", "", "protected challenge or signed approval JSON")
-	recoveryPublicKey := flag.String("recovery-public-key", "", "protected independent operator public key PEM (apply only)")
-	socket := flag.String("socket", "/run/neticora-runnerd/control.sock", "local control socket")
+	recoveryInput := flag.String("recovery-input", "", "protected challenge or signed approval JSON; normal service consumes a current-boot approval")
+	recoveryPublicKey := flag.String("recovery-public-key", "", "protected independent operator public key PEM")
+	socket := flag.String("socket", "/run/neticora-runnerd-kata/control.sock", "local control socket")
 	flag.Parse()
 	if *version {
 		fmt.Println(execution.Version())
@@ -70,6 +70,11 @@ func run() error {
 		}
 		_, err = os.Stdout.Write(append(result, '\n'))
 		return err
+	}
+	if *recoveryInput != "" || *recoveryPublicKey != "" {
+		if err := execution.RecoverOnBoot(ctx, c, *recoveryInput, *recoveryPublicKey); err != nil {
+			return err
+		}
 	}
 	return service.Run(ctx, c, *socket)
 }

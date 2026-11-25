@@ -12,6 +12,6 @@ func openConfiguredQualification(config.Config, *journal.SQLiteStore, *PolicyFil
 	return nil, nil, ErrReconcile
 }
 
-func loadStandalonePeerRecovery(config.Config, Credentials) (*katalinux.Profile, *kataCache, error) {
+func loadLabStandalonePeerRecovery(config.Config, Credentials) (*katalinux.Profile, *kataCache, error) {
 	return nil, nil, ErrReconcile
 }

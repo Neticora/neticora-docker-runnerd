@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+if [ -d /run/systemd/system ]; then systemctl daemon-reload; fi
+# Even purge intentionally preserves credentials, original keys, configuration,
+# journal, recovery evidence and the account that owns them. Decommissioning is
+# a separate explicitly authorized operation after verified resource disposal.
+if [ "$1" = purge ]; then echo 'Persistent Runnerd state retained; purge does not authorize decommissioning.'; fi

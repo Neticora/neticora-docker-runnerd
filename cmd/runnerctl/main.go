@@ -21,7 +21,7 @@ func main() {
 	}
 }
 func run() error {
-	socket := flag.String("socket", "/run/neticora-runnerd/control.sock", "local control socket")
+	socket := flag.String("socket", "/run/neticora-runnerd-kata/control.sock", "local control socket")
 	afterID := flag.String("after-execution", "", "exclusive execution diagnostic cursor")
 	afterGeneration := flag.String("after-generation", "", "execution diagnostic generation cursor")
 	executionID := flag.String("execution", "", "exact execution ID for trusted Kata evidence")

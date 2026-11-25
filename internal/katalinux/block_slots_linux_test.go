@@ -314,3 +314,26 @@ func TestStandalonePreflightPinsJournalAndRejectsDrift(t *testing.T) {
 		t.Fatal("rejection changed the owner", err)
 	}
 }
+
+func TestOrdinaryStandaloneRequiresIndependentAcceptance(t *testing.T) {
+	m := multiBlockFixture()
+	m.Standalone = true
+	delete(m.Files, m.ObserverConfig)
+	m.ObserverConfig = ""
+	m.Acceptance = make(map[string]string)
+	for _, name := range standaloneAcceptance {
+		m.Acceptance[name] = "Independently witnessed standalone acceptance"
+	}
+	if err := profile(m).validate(); err != nil {
+		t.Fatal(err)
+	}
+	m.Qualified = false
+	if err := profile(m).validate(); !errors.Is(err, ErrQualification) {
+		t.Fatal("ordinary loader accepted a lab descriptor", err)
+	}
+	m.Qualified = true
+	m.Acceptance["storage-pressure"] = " "
+	if err := profile(m).validate(); !errors.Is(err, ErrQualification) {
+		t.Fatal("ordinary loader accepted missing independent evidence", err)
+	}
+}

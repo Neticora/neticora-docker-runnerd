@@ -26,6 +26,32 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/transport"
 )
 
+func loadStandalonePeerRecovery(c config.Config, original Credentials) (*katalinux.Profile, *kataCache, error) {
+	if !c.StandaloneExecution() {
+		return nil, nil, ErrKataOnly
+	}
+	x, q := c.Execution, c.Execution.Kata
+	if q.QualificationBindingFile != "" || q.QualificationAuthorityPin != "" {
+		return loadLabStandalonePeerRecovery(c, original)
+	}
+	policy, err := NewPolicyFile(x.PolicyFile)
+	if err != nil {
+		return nil, nil, err
+	}
+	base := standardlinux.Settings{ImageRepository: x.ImageRepository, NetworkID: x.NetworkID,
+		BootstrapRoot: x.BootstrapRoot, RunnerUID: policy.Get().UID(), PidsLimit: x.PidsLimit}
+	profile, err := katalinux.Load(q.ProfileFile, q.PublicKeyFile, q.EvidenceDirectory, c.StateDir, base)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !profile.Manifest.Standalone || profile.Manifest.EndpointIdentity != original.EndpointIdentity {
+		return nil, nil, ErrReconcile
+	}
+	profile.BindStandaloneStorage(original.InstallationID, original.Identity.HostId, true)
+	cache := newKataCache(*q.StickyCache, original.InstallationID, original.TenantID, x.Repository, profile.Manifest.ImageDigest)
+	return profile, cache, nil
+}
+
 func actualBootID() (string, error) {
 	raw, err := os.ReadFile("/proc/sys/kernel/random/boot_id")
 	if err != nil {

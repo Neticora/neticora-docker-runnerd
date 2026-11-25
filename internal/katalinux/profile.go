@@ -216,9 +216,15 @@ func Load(file, public, evidence, journal string, base standardlinux.Settings) (
 	}
 	return p, nil
 }
+
+var standaloneAcceptance = []string{
+	"installed-lifecycle", "guest-isolation", "concurrent-cache", "storage-pressure",
+	"storage-ownership", "restart-recovery", "signed-recovery", "package-preservation",
+}
+
 func (p *Profile) validate() error {
 	m := p.Manifest
-	if m.Standalone && (m.Version != MultiBlockVersion || p.qualificationApproval == nil || m.RetirementPolicy != "" || m.ObserverConfig != "") {
+	if m.Standalone && (m.Version != MultiBlockVersion || m.RetirementPolicy != "" || m.ObserverConfig != "") {
 		return ErrQualification
 	}
 	if m.RetirementPolicy != "" && (m.RetirementPolicy != RetirementPolicy || m.Version != MultiBlockVersion) {
@@ -283,6 +289,15 @@ func (p *Profile) validate() error {
 		if m.Qualified || len(m.Acceptance) != 0 || p.qualificationApproval() != nil {
 			return ErrQualification
 		}
+	} else if m.Standalone {
+		if len(m.Acceptance) != len(standaloneAcceptance) {
+			return ErrQualification
+		}
+		for _, name := range standaloneAcceptance {
+			if len(strings.TrimSpace(m.Acceptance[name])) < 20 {
+				return ErrQualification
+			}
+		}
 	} else if len(m.Acceptance) != expectedCases {
 		return ErrQualification
 	}
@@ -317,7 +332,7 @@ func (p *Profile) validate() error {
 	if p.ProtectPaths(protected...) != nil {
 		return ErrQualification
 	}
-	if p.qualificationApproval == nil {
+	if p.qualificationApproval == nil && !m.Standalone {
 		for _, group := range []struct {
 			prefix string
 			n      int
@@ -494,8 +509,8 @@ func (p *Profile) Probe(ctx context.Context, e *dockerengine.Engine) error {
 	if p.ObserverSocket != "" {
 		return p.remote(ctx, "check", "", dockerengine.Plan{})
 	}
-	if p.Check(time.Now()) != nil {
-		return ErrQualification
+	if err := p.Check(time.Now()); err != nil {
+		return err
 	}
 	if p.Manifest.Version == MultiBlockVersion {
 		if err := e.CheckKataHostCgroupDriver(ctx); err != nil {
@@ -506,6 +521,14 @@ func (p *Profile) Probe(ctx context.Context, e *dockerengine.Engine) error {
 		return e.CheckStandaloneKataTuple(ctx, p.Manifest.RuntimeSelector, p.Manifest.DockerVersion, p.Manifest.Storage.DockerRoot, p.Manifest.ShimBinary, p.Manifest.RuntimeConfig, p.Manifest.DockerConfig, p.Manifest.Files[p.Manifest.DockerConfig])
 	}
 	return e.CheckKataTuple(ctx, p.Manifest.RuntimeSelector, p.Manifest.DockerVersion, p.Manifest.Storage.DockerRoot, p.Manifest.ShimBinary, p.Manifest.RuntimeConfig, p.Manifest.DockerConfig, p.Manifest.Files[p.Manifest.DockerConfig])
+}
+
+// BindStandaloneStorage scopes signed filesystem reconciliation to the enrolled
+// installation. Historical descriptors may inspect and release existing work.
+func (p *Profile) BindStandaloneStorage(installationID, hostID string, recoveryOnly bool) {
+	p.storageInstallationID = installationID
+	p.storageHostID = hostID
+	p.cleanupOnly = recoveryOnly
 }
 
 // Expiry stops new admission, never authorized recovery of existing work.

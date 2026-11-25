@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+if [ "$1" = configure ]; then
+  systemd-tmpfiles --create /usr/lib/tmpfiles.d/neticora-runnerd.conf
+  if [ -d /run/systemd/system ]; then systemctl daemon-reload; fi
+  echo 'Runnerd installed. Complete /usr/share/doc/neticora-runnerd/STANDALONE-INSTALL.md before activation.'
+fi

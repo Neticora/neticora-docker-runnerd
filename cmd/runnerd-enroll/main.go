@@ -97,6 +97,9 @@ func runArgs(args []string) error {
 		}
 		return json.NewEncoder(os.Stdout).Encode(map[string]any{"attemptRetired": true, "identityAndReceiptDeletedByCommand": false, "admissionEnabledByCommand": false})
 	}
+	if *installation != "" && !*standalone {
+		return errors.New("new execution credentials require standalone Kata enrollment")
+	}
 	var roots []byte
 	if *caFile != "" {
 		var e error

@@ -1,35 +1,36 @@
 [Unit]
-Description=Neticora Runnerd
-After=network-online.target
+Description=Neticora standalone Docker/Kata Runnerd
+Requires=docker.service
+After=docker.service network-online.target
 Wants=network-online.target
+RequiresMountsFor=/var/lib/neticora-runnerd-kata
 
 [Service]
 Type=simple
-User=neticora-runnerd
-Group=neticora-runnerd
-ExecStart=/usr/bin/runnerd --config /etc/neticora-runnerd/config.json
+User=root
+Group=root
+ExecStartPre=/usr/bin/install -d -o root -g root -m 0700 /run/neticora-runnerd-kata/devices
+ExecStart=/usr/bin/runnerd --config /etc/neticora-runnerd-kata/config.json --recovery-input /var/lib/neticora-runnerd-kata/recovery/approval.json --recovery-public-key /etc/neticora-runnerd-kata/recovery.pub
 Restart=on-failure
 RestartSec=5s
 TimeoutStopSec=10s
 KillMode=process
 UMask=0077
-StateDirectory=neticora-runnerd neticora-runnerd-keys
+StateDirectory=neticora-runnerd-kata
 StateDirectoryMode=0700
-RuntimeDirectory=neticora-runnerd
-RuntimeDirectoryMode=0750
+RuntimeDirectory=neticora-runnerd-kata
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
 NoNewPrivileges=yes
-ProtectSystem=strict
-ReadWritePaths=-/run/neticora-runnerd-bootstrap
+ProtectSystem=full
+ReadWritePaths=-/etc/lvm
 ProtectHome=yes
 PrivateTmp=yes
-PrivateDevices=yes
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
-ProtectControlGroups=yes
 RestrictSUIDSGID=yes
 LockPersonality=yes
-CapabilityBoundingSet=
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 
 [Install]
 WantedBy=multi-user.target

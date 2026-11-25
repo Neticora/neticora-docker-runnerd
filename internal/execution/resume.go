@@ -26,7 +26,7 @@ func (c *Controller) CheckResume(ctx context.Context) error {
 	if err != nil || endpoint != c.Scope.EndpointIdentity {
 		return ErrReconcile
 	}
-	if err := c.checkStorage(ctx); err != nil {
+	if err := c.checkAdmissionStorage(ctx); err != nil {
 		return err
 	}
 	if c.resumeGuard != nil {

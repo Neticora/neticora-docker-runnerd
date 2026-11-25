@@ -48,8 +48,8 @@ type Execution struct {
 	MinRuntimeFreeBytes uint64 `json:"minRuntimeFreeBytes,omitempty"`
 }
 
-// Kata is a dedicated-host opt-in; no default runtime or unqualified tuple is
-// inferred. The descriptor is independently signed, private and immutable.
+// Kata uses an independently signed and protected host descriptor. Legacy
+// values remain decodable for administrative recovery.
 type Kata struct {
 	StickyCache               *stickycache.Policy `json:"stickyCache,omitempty"`
 	QualificationBindingFile  string              `json:"qualificationBindingFile,omitempty"`
@@ -100,12 +100,12 @@ func Parse(data []byte) (Config, error) {
 		}
 		if x.Kata != nil {
 			q := x.Kata
-			if q.StickyCache != nil && (!q.StickyCache.Valid() || x.BrokerSocket != "" || q.ObserverSocket != "" || q.QualificationBindingFile == "" || q.QualificationAuthorityPin == "") {
-				return Config{}, errors.New("standalone Kata requires direct Docker and a signed lab binding")
+			if q.StickyCache != nil && (!q.StickyCache.Valid() || x.BrokerSocket != "" || q.ObserverSocket != "") {
+				return Config{}, errors.New("standalone Kata requires direct Docker and a valid thin pool")
 			}
 			if q.QualificationBindingFile != "" || q.QualificationAuthorityPin != "" {
 				if (x.BrokerSocket == "" && q.StickyCache == nil) || !filepath.IsAbs(q.QualificationBindingFile) || filepath.Clean(q.QualificationBindingFile) != q.QualificationBindingFile || len(q.QualificationAuthorityPin) != 64 || strings.ContainsAny(q.QualificationAuthorityPin, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
-					return Config{}, errors.New("qualification requires broker mode, protected binding and authority pin")
+					return Config{}, errors.New("lab qualification requires a protected binding and authority pin")
 				}
 				for _, c := range q.QualificationAuthorityPin {
 					if !strings.ContainsRune("0123456789abcdef", c) {
@@ -180,4 +180,14 @@ func Parse(data []byte) (Config, error) {
 	}
 	return c, nil
 }
+
+// StandaloneExecution is the only workload path available to the service.
+// The parser also accepts historical profile configuration for recovery.
+func (c Config) StandaloneExecution() bool {
+	x := c.Execution
+	return x != nil && x.Enabled && x.BrokerSocket == "" && x.Kata != nil &&
+		x.Kata.ObserverSocket == "" && x.Kata.StickyCache != nil && x.Kata.StickyCache.Valid() &&
+		c.RuntimeEndpoint == "unix:///run/docker.sock"
+}
+
 func (c Config) Timeout() time.Duration { return time.Duration(c.RequestTimeoutSeconds) * time.Second }

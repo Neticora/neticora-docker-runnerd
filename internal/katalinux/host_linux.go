@@ -157,6 +157,11 @@ func (p *Profile) Check(now time.Time) error {
 	if p == nil || p.validate() != nil {
 		return ErrQualification
 	}
+	if p.Manifest.Standalone && p.Manifest.Qualified {
+		if err := requireKVM(); err != nil {
+			return err
+		}
+	}
 	verified, e := time.Parse(time.RFC3339Nano, p.Manifest.VerifiedAt)
 	expiry, e2 := time.Parse(time.RFC3339Nano, p.Manifest.ExpiresAt)
 	if e != nil || e2 != nil || verified.After(now) || !expiry.After(now) || expiry.Sub(verified) > 24*time.Hour || expiry.Before(verified) {

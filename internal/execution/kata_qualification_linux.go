@@ -83,7 +83,7 @@ func OpenQualification(c config.Config, configFile string, store *journal.SQLite
 	return candidate, close, nil
 }
 
-func loadStandalonePeerRecovery(c config.Config, original Credentials) (*katalinux.Profile, *kataCache, error) {
+func loadLabStandalonePeerRecovery(c config.Config, original Credentials) (*katalinux.Profile, *kataCache, error) {
 	x := c.Execution
 	if x == nil || x.Kata == nil || x.Kata.StickyCache == nil || x.BrokerSocket != "" || x.Kata.ObserverSocket != "" {
 		return nil, nil, ErrReconcile

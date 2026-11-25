@@ -54,13 +54,11 @@ func (p *PolicyFile) Get() *standardlinux.Policy {
 }
 
 func Open(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drained func() bool) (*Controller, func(), error) {
-	if c.Execution != nil && c.Execution.Kata != nil {
-		q := c.Execution.Kata
-		if q.StickyCache != nil && (q.QualificationBindingFile == "" || q.QualificationAuthorityPin == "" || !q.StickyCache.Valid()) {
-			return nil, nil, ErrReconcile
-		}
+	if !c.StandaloneExecution() {
+		return nil, nil, ErrKataOnly
 	}
-	if c.Execution != nil && c.Execution.Kata != nil && (c.Execution.Kata.QualificationBindingFile != "" || c.Execution.Kata.QualificationAuthorityPin != "") {
+	q := c.Execution.Kata
+	if q.QualificationBindingFile != "" || q.QualificationAuthorityPin != "" {
 		return openConfiguredQualification(c, store, policy, drained)
 	}
 	return openWithKataLoader(c, store, policy, drained, katalinux.Load)
@@ -114,8 +112,11 @@ func openWithKataLoader(c config.Config, store *journal.SQLiteStore, policy *Pol
 	}
 	capabilities, err := protocol.DecodeHostCapabilities(raw)
 	isolated := x.Kata != nil
-	if err != nil || capabilities.DockerBuild != isolated || capabilities.HardStorageLimit != isolated || capabilities.EndpointIdentity != credentials.EndpointIdentity || capabilities.Host.Os != "linux" || capabilities.Engine.Os != "linux" {
+	if err != nil || capabilities.DockerBuild != isolated || capabilities.HardStorageLimit != isolated || capabilities.Host.Os != "linux" || capabilities.Engine.Os != "linux" {
 		return nil, nil, ErrReconcile
+	}
+	if capabilities.EndpointIdentity != credentials.EndpointIdentity {
+		return nil, nil, agent.ErrRecoveryRequired
 	}
 	var ca []byte
 	caDigest := ""
@@ -207,6 +208,7 @@ func openWithKataLoader(c config.Config, store *journal.SQLiteStore, policy *Pol
 			return nil, nil, katalinux.ErrQualification
 		}
 		if standalone {
+			controller.Kata.BindStandaloneStorage(credentials.InstallationID, credentials.Identity.HostId, false)
 			controller.Kata.StorageJournalID, err = store.StorageJournalID(context.Background())
 			if err != nil {
 				cleanup()
