@@ -75,3 +75,11 @@ Drain and stop the service before any replacement or removal. The maintainer
 scripts refuse to replace a running service. Removing the package preserves
 the journal, enrollment credentials, signed qualification and all owned
 volumes. Retiring a host and releasing its storage is a separate operation.
+
+After removal, systemd may retain a failed state for the removed unit. If
+reinstall is rejected, confirm the drained service has zero MainPID and
+ControlPID. Clear the stale state with
+`sudo systemctl reset-failed neticora-runnerd.service`, recheck the unit, and
+then reinstall. To restore automatic activation on boot after a remove and
+reinstall, run `sudo systemctl enable neticora-runnerd.service`. The signed
+recovery and launch qualification requirements still apply on the next boot.

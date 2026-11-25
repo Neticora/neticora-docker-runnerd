@@ -7,10 +7,22 @@ import (
 
 	"github.com/Neticora/neticora-docker-runnerd/agent"
 	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
+	"github.com/Neticora/neticora-docker-runnerd/internal/config"
 	"github.com/Neticora/neticora-docker-runnerd/internal/dockerengine"
 	"github.com/Neticora/neticora-docker-runnerd/internal/katalinux"
 	"github.com/Neticora/neticora-docker-runnerd/internal/standardlinux"
 )
+
+func TestKataControllerConstructorRejectsLegacyLaunch(t *testing.T) {
+	cfg := config.Config{
+		RuntimeEndpoint: "unix:///run/docker.sock",
+		Execution:       &config.Execution{Enabled: true},
+	}
+	controller, closeController, err := openWithKataLoader(cfg, nil, nil, nil, nil)
+	if !errors.Is(err, ErrKataOnly) || controller != nil || closeController != nil {
+		t.Fatalf("legacy controller construction = %v, want Kata-only error", err)
+	}
+}
 
 func TestKataLaunchAndRecoveryPlanningRemainSeparate(t *testing.T) {
 	scope := agent.StoreScope{InstallationID: "installation", TenantID: "tenant", HostID: "host", EndpointIdentity: "docker-historical"}
