@@ -251,3 +251,66 @@ func TestCorruptIndexCannotBeHiddenByReleasedExecutionTombstone(t *testing.T) {
 		t.Fatal("corrupt ownership hidden by tombstone", err)
 	}
 }
+
+func TestStandalonePreflightPinsJournalAndRejectsDrift(t *testing.T) {
+	m := multiBlockFixture()
+	m.Storage.Block.Pool.Root = t.TempDir()
+	p := profile(m)
+	p.EvidenceDirectory = t.TempDir()
+	p.JournalDirectory = filepath.Join(t.TempDir(), "journal")
+	p.StorageJournalID = strings.Repeat("a", 64)
+	evidence, err := os.OpenRoot(p.EvidenceDirectory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer evidence.Close()
+	pool, err := os.OpenRoot(m.Storage.Block.Pool.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	if missing, _, err := p.checkBlockPoolOwner(pool, evidence); err != nil || !missing {
+		t.Fatal("fresh storage preflight failed", err)
+	}
+	if _, err := evidence.Lstat(blockSlotsFile); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("preflight created an index")
+	}
+	if err := p.ensureBlockPoolOwner(pool, evidence); err != nil {
+		t.Fatal(err)
+	}
+	savedOwner, err := pool.ReadFile(blockPoolOwnerFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, change := range map[string]func(*Profile){
+		"journal replacement": func(p *Profile) { p.StorageJournalID = strings.Repeat("b", 64) },
+		"foreign journal":     func(p *Profile) { p.JournalDirectory += "-other" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			changed := *p
+			change(&changed)
+			if _, _, err := changed.checkBlockPoolOwner(pool, evidence); !errors.Is(err, ErrStorageForeignOwner) {
+				t.Fatal("preflight accepted changed ownership", err)
+			}
+			if err := changed.ensureBlockPoolOwner(pool, evidence); !errors.Is(err, ErrStorageForeignOwner) {
+				t.Fatal("allocation accepted changed ownership", err)
+			}
+		})
+	}
+	if err := evidence.Remove(blockSlotsFile); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.ensureBlockPoolOwner(pool, evidence); !errors.Is(err, ErrStorageIndex) {
+		t.Fatal("a missing index was accepted", err)
+	}
+	if err := evidence.WriteFile(blockSlotsFile, []byte("{}"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.ensureBlockPoolOwner(pool, evidence); !errors.Is(err, ErrStorageIndex) {
+		t.Fatal("a corrupt index was accepted", err)
+	}
+	owner, err := pool.ReadFile(blockPoolOwnerFile)
+	if err != nil || string(owner) != string(savedOwner) {
+		t.Fatal("rejection changed the owner", err)
+	}
+}

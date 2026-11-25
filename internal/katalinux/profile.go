@@ -135,6 +135,7 @@ type Profile struct {
 	ID                    string
 	EvidenceDirectory     string
 	JournalDirectory      string
+	StorageJournalID      string
 	Base                  standardlinux.Settings
 }
 

@@ -270,3 +270,15 @@ func (l LVM) Retained(ctx context.Context, name, uuid string) bool {
 	row, exists, err := l.owned(rows, name, uuid)
 	return err == nil && exists && row.Active == "" && row.Open != "open"
 }
+
+// VerifyAbsent checks the exact cache LV without adopting or touching it.
+func (l LVM) VerifyAbsent(ctx context.Context, name string) error {
+	rows, err := l.report(ctx)
+	if err != nil {
+		return err
+	}
+	if _, exists, err := l.owned(rows, name, ""); err != nil || exists {
+		return ErrVolume
+	}
+	return nil
+}

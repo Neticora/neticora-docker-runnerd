@@ -46,6 +46,7 @@ type PeerRecoveryCoordinator struct {
 	Runtime                                        RecoveryRuntime // Production wiring uses OpenReadOnly.
 	Remote                                         PeerRecoveryRemote
 	Profile                                        standardlinux.Settings
+	signingKey                                     ed25519.PrivateKey
 	PublicKey                                      []byte // Independent operator public key, never a signer.
 	Identity                                       protocol.HostIdentity
 	TenantID, InstallationID, BootID, AgentVersion string
@@ -207,6 +208,14 @@ func (c *PeerRecoveryCoordinator) Propose(ctx context.Context, challenge protoco
 			return protocol.SignedPeerRecoveryPlan{}, ErrReconcile
 		}
 		epoch := origin.SessionEpoch
+		if c.cache != nil && observed == "absent" && claim == "ambiguous" {
+			reader := &Controller{Store: c.Store, Kata: c.Kata, cache: c.cache}
+			a := c.originalAuthority(origin)
+			if c.Store.ExistingNeverStartedFence(ctx, executionKey(e), a) == nil && reader.verifyUnallocated(ctx, e, p) == nil {
+				claim = "not-claimed"
+			}
+		}
+
 		serverFound := false
 		for _, entry := range authority.Entries {
 			if entry.ExecutionId == e.Identity.ExecutionID && entry.Generation == e.Identity.Generation {
@@ -527,7 +536,7 @@ func (c *PeerRecoveryCoordinator) Apply(ctx context.Context, approved protocol.S
 		return err
 	}
 	held := false
-	origin := &Controller{Scope: c.scope(plan), Profile: c.Profile, Kata: c.Kata, cache: c.cache}
+	origin := &Controller{Store: c.Store, Scope: c.scope(plan), Profile: c.Profile, Kata: c.Kata, cache: c.cache}
 	origin.Scope.EndpointIdentity = plan.SourceEndpointIdentity
 	for _, decision := range approved.Manifest.Decisions {
 		if decision.Action == "hold" {
@@ -554,6 +563,12 @@ func (c *PeerRecoveryCoordinator) Apply(ctx context.Context, approved protocol.S
 		}
 		if entry == nil {
 			return ErrReconcile
+		}
+		if decision.Action == "verify-never-started" {
+			if err = c.completePeerNeverStarted(ctx, approved, origin, e, p); err != nil {
+				return err
+			}
+			continue
 		}
 		id := ""
 		if entry.ObservedResourceId != nil {
@@ -732,4 +747,43 @@ func (c *PeerRecoveryCoordinator) finalize(ctx context.Context, approved protoco
 	}
 	h := c.Store.Health(ctx)
 	return c.Store.CompletePeerRecovery(ctx, completion, agent.RecoveryCheckpoint{JournalID: h.JournalID, Revision: h.Revision, Scope: c.scope(plan), InventoryGeneration: finalGeneration, ObservedAt: finalObserved})
+}
+
+func (c *PeerRecoveryCoordinator) originalAuthority(scope agent.StoreScope) journal.Authority {
+	return journal.Authority{TenantID: scope.TenantID, HostID: scope.HostID, SessionEpoch: scope.SessionEpoch, EndpointIdentity: scope.EndpointIdentity, KeyID: c.Identity.KeyId}
+}
+
+func (c *PeerRecoveryCoordinator) completePeerNeverStarted(ctx context.Context, approved protocol.SignedPeerRecoveryApproval, origin *Controller, e agent.Execution, p dockerengine.Plan) error {
+	plan := approved.Manifest.Plan
+	a, err := c.authorization(ctx, approved)
+	if err != nil {
+		return err
+	}
+	scope, err := c.Store.PeerRecoveryExecutionScope(ctx, e.Identity.ExecutionID, e.Identity.Generation)
+	if err != nil || scope.EndpointIdentity != plan.SourceEndpointIdentity {
+		return errors.Join(ErrReconcile, err)
+	}
+	if _, err = c.Runtime.Inspect(ctx, p.Name, p); !errors.Is(err, dockerengine.ErrAbsent) {
+		return ErrReconcile
+	}
+	if err = origin.verifyUnallocated(ctx, e, p); err != nil {
+		return err
+	}
+	proof, err := c.Store.AttestPeerNeverStarted(ctx, a, executionKey(e), c.originalAuthority(scope), c.signingKey)
+	if err != nil {
+		return err
+	}
+	// Publish the replacement peer's authenticated, complete inventory after
+	// the original fence proof and before committing the normal final event.
+	if _, _, err = c.inventory(ctx, plan); err != nil {
+		return err
+	}
+	event, err := origin.event(e, nil, nil, proof)
+	if err != nil {
+		return err
+	}
+	if err = c.Store.CompleteNeverStarted(ctx, c.scope(plan), event); err != nil {
+		return err
+	}
+	return c.flush(ctx, plan)
 }

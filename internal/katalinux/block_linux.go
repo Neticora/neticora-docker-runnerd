@@ -202,12 +202,20 @@ func (p *Profile) blockInventory(allowed string) error {
 // Lock the physical pool across observer instances, including differently named
 // service sockets. Never wait past a request deadline or allow parallel allocators.
 func (p *Profile) lockBlockPool() (*os.File, error) {
+	return p.openBlockPoolLock(true)
+}
+
+func (p *Profile) openBlockPoolLock(create bool) (*os.File, error) {
 	pool, err := hostfs.OpenState(p.Manifest.Storage.Block.Pool.Root)
 	if err != nil {
 		return nil, err
 	}
 	defer pool.Close()
-	f, err := pool.OpenFile(".runnerd.lock", os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0600)
+	flags := os.O_RDONLY | syscall.O_NOFOLLOW | syscall.O_NONBLOCK
+	if create {
+		flags = os.O_CREATE | os.O_RDWR | syscall.O_NOFOLLOW | syscall.O_NONBLOCK
+	}
+	f, err := pool.OpenFile(".runnerd.lock", flags, 0600)
 	if err != nil {
 		return nil, err
 	}
@@ -237,14 +245,17 @@ func (p *Profile) prepareBlock(ctx context.Context, plan dockerengine.Plan) erro
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	if err = p.blockInventory(""); err != nil {
-		return err
-	}
 	ownerPool, err := hostfs.OpenState(p.Manifest.Storage.Block.Pool.Root)
 	if err != nil {
 		return err
 	}
-	err = p.ensureBlockPoolOwner(ownerPool, root)
+	_, _, err = p.checkBlockPoolOwner(ownerPool, root)
+	if err == nil {
+		err = p.blockInventory("")
+	}
+	if err == nil {
+		err = p.ensureBlockPoolOwner(ownerPool, root)
+	}
 	ownerPool.Close()
 	if err != nil {
 		return err

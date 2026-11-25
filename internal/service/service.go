@@ -84,7 +84,7 @@ func Run(ctx context.Context, c config.Config, socket string) error {
 		if controller != nil {
 			reason = controller.Status()
 		}
-		return control.Snapshot{ExecutionReason: reason, ExecutionEnabled: executing, State: state, AdmissionEnabled: executing && !draining.Load() && health.Ready, RuntimeQualified: false, RecoveryReady: health.Ready, RecoveryReason: health.Reason}
+		return control.Snapshot{ExecutionReason: reason, ExecutionEnabled: executing, State: state, AdmissionEnabled: executing && !draining.Load() && health.Ready && (controller == nil || controller.StorageReady()), RuntimeQualified: false, RecoveryReady: health.Ready, RecoveryReason: health.Reason}
 	}, func() {
 		draining.Store(true)
 	}, func(event string) { log.Print(event) })

@@ -83,6 +83,7 @@ type SQLiteStore struct {
 	fences               *Store
 	db                   *sql.DB
 	dir                  string
+	databaseFile         os.FileInfo
 	options              Options
 	gate                 chan struct{}
 	maintenanceMu        sync.Mutex
@@ -177,6 +178,10 @@ func OpenRecovery(ctx context.Context, path string, options Options) (_ *SQLiteS
 		if version < 1 || version > schemaVersion {
 			return nil, errors.New("unsupported recovery schema; preserve database")
 		}
+	}
+	s.databaseFile, err = os.Lstat(filepath.Join(path, databaseName))
+	if err != nil {
+		return nil, err
 	}
 	q := url.Values{"mode": {"rw"}, "_txlock": {"immediate"}, "_pragma": {
 		"busy_timeout(5000)", "journal_mode(WAL)", "synchronous(FULL)", "foreign_keys(ON)",
@@ -516,6 +521,29 @@ func (s *SQLiteStore) requireScope(scope agent.StoreScope) error {
 
 func (s *SQLiteStore) reconciled() bool {
 	return s.ready && s.reconciledGeneration == s.runtimeGeneration.Load() && fresh(s.inventoryObservedAt)
+}
+
+// StorageJournalID returns the pinned identity only while the opened journal and
+// its on-disk anchor still agree. A new journal at the old path has a new ID.
+func (s *SQLiteStore) StorageJournalID(ctx context.Context) (string, error) {
+	_, release, err := s.acquire(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer release()
+	if s.failed.Load() || s.anchorUncertain || s.checkFiles() != nil {
+		return "", agent.ErrRecoveryRequired
+	}
+	current, err := os.Lstat(filepath.Join(s.dir, databaseName))
+	if err != nil || !os.SameFile(s.databaseFile, current) {
+		return "", agent.ErrRecoveryRequired
+	}
+	raw, err := s.fences.root.ReadFile(anchorName)
+	var durable anchor
+	if err != nil || len(raw) > 4096 || json.Unmarshal(raw, &durable) != nil || durable != s.anchor {
+		return "", agent.ErrRecoveryRequired
+	}
+	return durable.JournalID, nil
 }
 
 func (s *SQLiteStore) Health(ctx context.Context) agent.StoreHealth {

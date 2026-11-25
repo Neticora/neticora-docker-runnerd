@@ -124,7 +124,24 @@ func AdministrativePeerRecovery(ctx context.Context, c config.Config, operation,
 	}
 	defer client.Close()
 	remote := &HostRemote{Client: client, Credentials: credentials, Key: key, Version: Version()}
-	coordinator := &PeerRecoveryCoordinator{Store: store, Runtime: runtime, Remote: remote, Profile: standardlinux.Settings{ImageRepository: x.ImageRepository, NetworkID: x.NetworkID, BootstrapRoot: x.BootstrapRoot, RunnerUID: os.Geteuid(), PidsLimit: x.PidsLimit}, Identity: credentials.Identity, TenantID: credentials.TenantID, InstallationID: credentials.InstallationID, BootID: actualBoot, AgentVersion: Version()}
+	coordinator := &PeerRecoveryCoordinator{signingKey: key, Store: store, Runtime: runtime, Remote: remote, Profile: standardlinux.Settings{ImageRepository: x.ImageRepository, NetworkID: x.NetworkID, BootstrapRoot: x.BootstrapRoot, RunnerUID: os.Geteuid(), PidsLimit: x.PidsLimit}, Identity: credentials.Identity, TenantID: credentials.TenantID, InstallationID: credentials.InstallationID, BootID: actualBoot, AgentVersion: Version()}
+	if operation == "apply" {
+		coordinator.PublicKey, err = hostfs.ReadPrivate(publicKeyPath, 16384)
+		if err != nil {
+			return nil, err
+		}
+		checked, err := peerrecovery.VerifyRecordedApproval(input, coordinator.PublicKey, approved.Manifest.Plan, time.Now())
+		if err != nil {
+			return nil, err
+		}
+		completed, err := store.CompletedPeerRecovery(ctx, checked)
+		if err != nil {
+			return nil, err
+		}
+		if completed {
+			return applyPeerRecovery(ctx, coordinator, c.CredentialFile, credentials, approved)
+		}
+	}
 	if x.Kata != nil {
 		if x.Kata.StickyCache != nil {
 			coordinator.Kata, coordinator.cache, err = loadStandalonePeerRecovery(c, originalCredentials)
@@ -149,17 +166,17 @@ func AdministrativePeerRecovery(ctx context.Context, c config.Config, operation,
 		}
 		return peerrecovery.Canonical(plan)
 	}
-	coordinator.PublicKey, err = hostfs.ReadPrivate(publicKeyPath, 16384)
-	if err != nil {
-		return nil, err
-	}
-	if err = coordinator.Apply(ctx, approved); err != nil {
+	return applyPeerRecovery(ctx, coordinator, c.CredentialFile, credentials, approved)
+}
+
+func applyPeerRecovery(ctx context.Context, coordinator *PeerRecoveryCoordinator, credentialPath string, credentials Credentials, approved protocol.SignedPeerRecoveryApproval) ([]byte, error) {
+	if err := coordinator.Apply(ctx, approved); err != nil {
 		return nil, err
 	}
 	// Only after verified cleanup, final native ACKs and platform completion may
 	// credentials follow the approved peer. The local drain remains in force;
 	// new qualification and an explicit resume remain separate operator steps.
-	if err = commitRecoveredCredentials(c.CredentialFile, credentials, approved.Manifest.Plan.TargetEndpointIdentity); err != nil {
+	if err := commitRecoveredCredentials(credentialPath, credentials, approved.Manifest.Plan.TargetEndpointIdentity); err != nil {
 		return nil, err
 	}
 	return peerrecovery.Canonical(map[string]string{"approvalId": approved.Manifest.ApprovalId, "state": "completed-drained"})

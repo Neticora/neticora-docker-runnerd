@@ -32,6 +32,7 @@ type blockSlots struct {
 	PoolRoot      string                     `json:"poolRoot"`
 	PoolUUID      string                     `json:"poolUUID"`
 	BackingDevice string                     `json:"backingDevice"`
+	JournalID     string                     `json:"journalId,omitempty"`
 	Active        map[string]blockAllocation `json:"active"`
 }
 
@@ -41,6 +42,7 @@ type blockPoolOwner struct {
 	EvidenceDevice    uint64 `json:"evidenceDevice"`
 	EvidenceInode     uint64 `json:"evidenceInode"`
 	JournalDirectory  string `json:"journalDirectory"`
+	JournalID         string `json:"journalId,omitempty"`
 	PoolUUID          string `json:"poolUUID"`
 	BackingDevice     string `json:"backingDevice"`
 }
@@ -140,7 +142,7 @@ func (p *Profile) readBlockSlots(root *os.Root) (blockSlots, error) {
 		// therefore makes a missing index lost durability evidence, not empty
 		// capacity. Never recreate it from an apparently empty directory.
 		if _, ownerErr := os.Lstat(filepath.Join(b.Pool.Root, blockPoolOwnerFile)); !errors.Is(ownerErr, os.ErrNotExist) {
-			return index, ErrQualification
+			return index, ErrStorageIndex
 		}
 		// Import the old single claim conservatively. A historical active claim
 		// consumes the whole pool until its own verified cleanup completes.
@@ -226,34 +228,78 @@ func (p *Profile) writeActiveBlock(root *os.Root, record BlockRecord) error {
 	return writeCheckedBlockJSON(root, blockSlotsFile, index)
 }
 
-func (p *Profile) ensureBlockPoolOwner(pool, evidence *os.Root) error {
+func (p *Profile) expectedPoolOwner(evidence *os.Root) (blockPoolOwner, error) {
 	info, err := evidence.Stat(".")
 	if err != nil {
-		return err
+		return blockPoolOwner{}, err
 	}
 	st, ok := info.Sys().(*syscall.Stat_t)
 	if !ok {
-		return ErrQualification
+		return blockPoolOwner{}, ErrQualification
 	}
 	b := p.Manifest.Storage.Block
-	want := blockPoolOwner{"runnerd09-block-pool-owner-v1", p.EvidenceDirectory, uint64(st.Dev), st.Ino, p.JournalDirectory, b.Pool.UUID, b.Pool.BackingDevice}
+	return blockPoolOwner{
+		Version: "runnerd09-block-pool-owner-v1", EvidenceDirectory: p.EvidenceDirectory,
+		EvidenceDevice: uint64(st.Dev), EvidenceInode: st.Ino, JournalDirectory: p.JournalDirectory,
+		JournalID: p.StorageJournalID, PoolUUID: b.Pool.UUID, BackingDevice: b.Pool.BackingDevice,
+	}, nil
+}
+
+func (p *Profile) checkBlockPoolOwner(pool, evidence *os.Root) (bool, blockSlots, error) {
+	want, err := p.expectedPoolOwner(evidence)
+	if err != nil {
+		return false, blockSlots{}, err
+	}
 	var current blockPoolOwner
 	err = readCheckedBlockJSON(pool, blockPoolOwnerFile, &current)
-	if errors.Is(err, os.ErrNotExist) {
-		index, e := p.readBlockSlots(evidence)
-		if e != nil || len(index.Active) != 0 {
-			// Legacy active work must drain/recover before changing its pool
-			// accounting format. Cleanup does not require this new-owner path.
-			return ErrQualification
+	missing := errors.Is(err, os.ErrNotExist)
+	if !missing {
+		if err != nil {
+			return false, blockSlots{}, ErrStorageIndex
 		}
-		if e = writeCheckedBlockJSON(evidence, blockSlotsFile, index); e != nil {
-			return e
+		if want.JournalID != "" && current.JournalID == "" {
+			legacy := want
+			legacy.JournalID = ""
+			if current == legacy {
+				return false, blockSlots{}, ErrStorageJournalBinding
+			}
 		}
-		return writeCheckedBlockJSON(pool, blockPoolOwnerFile, want)
+		if current != want {
+			return false, blockSlots{}, ErrStorageForeignOwner
+		}
 	}
-	if err != nil || current != want {
-		return ErrQualification
+	index, err := p.readBlockSlots(evidence)
+	if err != nil || (missing && len(index.Active) != 0) {
+		return false, blockSlots{}, ErrStorageIndex
 	}
-	_, err = p.readBlockSlots(evidence)
-	return err
+	if want.JournalID != "" && index.JournalID != want.JournalID {
+		_, indexErr := evidence.Lstat(blockSlotsFile)
+		_, legacyErr := evidence.Lstat(blockSlot)
+		if !missing || !errors.Is(indexErr, os.ErrNotExist) || !errors.Is(legacyErr, os.ErrNotExist) {
+			return false, blockSlots{}, ErrStorageIndex
+		}
+		index.JournalID = want.JournalID
+	}
+	return missing, index, nil
+}
+
+func (p *Profile) ensureBlockPoolOwner(pool, evidence *os.Root) error {
+	missing, index, err := p.checkBlockPoolOwner(pool, evidence)
+	if err != nil || !missing {
+		return err
+	}
+	want, err := p.expectedPoolOwner(evidence)
+	if err != nil {
+		return err
+	}
+	// An index already committed by this journal can survive a crash before
+	// the owner write. An existing index must never be replaced to add an owner.
+	if _, err = evidence.Lstat(blockSlotsFile); errors.Is(err, os.ErrNotExist) {
+		if err = writeCheckedBlockJSON(evidence, blockSlotsFile, index); err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	}
+	return writeCheckedBlockJSON(pool, blockPoolOwnerFile, want)
 }

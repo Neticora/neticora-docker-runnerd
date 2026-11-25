@@ -82,7 +82,7 @@ func (c *Controller) cachePlan(ctx context.Context, e agent.Execution, p dockere
 				return p, checkErr
 			}
 		}
-		name := "nrdc-" + p.Name[4:52]
+		name := cacheVolumeName(p)
 		if err = c.Store.BeginKataCache(ctx, c.Scope, cursor, c.cache.key, name, !warmAllowed); err != nil {
 			return p, err
 		}
@@ -264,3 +264,6 @@ func (c *Controller) reportCachePresence(ctx context.Context) {
 	}
 	_ = remote.ReportKataCache(ctx, c.Repository, c.Kata.ID, warm)
 }
+
+// cacheVolumeName is defined by the deterministic execution plan name.
+func cacheVolumeName(p dockerengine.Plan) string { return "nrdc-" + p.Name[4:52] }

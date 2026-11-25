@@ -89,10 +89,14 @@ type Controller struct {
 	inventoryGeneration string
 	inventoryObservedAt time.Time
 	heartbeatGeneration atomic.Value
+	storageStatus       atomic.Value
 	status              atomic.Value
 }
 
 func (c *Controller) Status() string {
+	if value := c.storageStatus.Load(); value != nil && value.(string) != "" {
+		return value.(string)
+	}
 	v := c.status.Load()
 	if v == nil {
 		return "starting"
@@ -101,6 +105,10 @@ func (c *Controller) Status() string {
 }
 func failureReason(err error) string {
 	switch {
+	case errors.Is(err, katalinux.ErrStorageForeignOwner),
+		errors.Is(err, katalinux.ErrStorageJournalBinding), errors.Is(err, katalinux.ErrStorageIndex),
+		errors.Is(err, katalinux.ErrStorageFilesystem):
+		return err.Error()
 	case errors.Is(err, ErrBootstrap):
 		return "bootstrap-envelope-rejected"
 	case errors.Is(err, standardlinux.ErrAdmission):
@@ -619,11 +627,19 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 			return e2
 		}
 		if c.cache != nil {
-			if e2 = c.Kata.ReleaseStandalone(ctx, p); e2 != nil {
-				return e2
-			}
-			if e2 = c.finishCache(ctx, e, false); e2 != nil {
-				return e2
+			if absent := c.verifyUnallocated(ctx, e, p); absent != nil {
+				if e2 = c.Kata.ReleaseStandalone(ctx, p); e2 != nil {
+					return errors.Join(absent, e2)
+				}
+				if e2 = c.finishCache(ctx, e, false); e2 != nil {
+					return e2
+				}
+				if e2 = c.Kata.VerifyExecutionDevicesAbsent(ctx, p); e2 != nil {
+					return e2
+				}
+				if e2 = c.cache.lvm.VerifyAbsent(ctx, cacheVolumeName(p)); e2 != nil {
+					return e2
+				}
 			}
 		} else if c.Kata != nil && !c.brokerKata() {
 			if e2 = c.Kata.DiscardPrepared(ctx, p); e2 != nil {
@@ -697,6 +713,9 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 		return err
 	}
 	if c.Kata != nil && !c.brokerKata() {
+		if err = c.checkStorage(ctx); err != nil {
+			return err
+		}
 		if err = c.Kata.PrepareHealth(p); err != nil {
 			return err
 		}

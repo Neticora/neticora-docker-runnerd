@@ -443,11 +443,12 @@ func (e PeerRecoveryAuthorizationStatus) Valid() bool {
 
 // Defines values for PeerRecoveryDecisionAction.
 const (
-	PeerRecoveryDecisionActionCleanup           PeerRecoveryDecisionAction = "cleanup"
-	PeerRecoveryDecisionActionHold              PeerRecoveryDecisionAction = "hold"
-	PeerRecoveryDecisionActionObserveAndCleanup PeerRecoveryDecisionAction = "observe-and-cleanup"
-	PeerRecoveryDecisionActionReplayFinalAck    PeerRecoveryDecisionAction = "replay-final-ack"
-	PeerRecoveryDecisionActionVerifyAbsent      PeerRecoveryDecisionAction = "verify-absent"
+	PeerRecoveryDecisionActionCleanup            PeerRecoveryDecisionAction = "cleanup"
+	PeerRecoveryDecisionActionHold               PeerRecoveryDecisionAction = "hold"
+	PeerRecoveryDecisionActionObserveAndCleanup  PeerRecoveryDecisionAction = "observe-and-cleanup"
+	PeerRecoveryDecisionActionReplayFinalAck     PeerRecoveryDecisionAction = "replay-final-ack"
+	PeerRecoveryDecisionActionVerifyAbsent       PeerRecoveryDecisionAction = "verify-absent"
+	PeerRecoveryDecisionActionVerifyNeverStarted PeerRecoveryDecisionAction = "verify-never-started"
 )
 
 // Valid indicates whether the value is a known member of the PeerRecoveryDecisionAction enum.
@@ -462,6 +463,8 @@ func (e PeerRecoveryDecisionAction) Valid() bool {
 	case PeerRecoveryDecisionActionReplayFinalAck:
 		return true
 	case PeerRecoveryDecisionActionVerifyAbsent:
+		return true
+	case PeerRecoveryDecisionActionVerifyNeverStarted:
 		return true
 	default:
 		return false

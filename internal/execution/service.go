@@ -207,6 +207,13 @@ func openWithKataLoader(c config.Config, store *journal.SQLiteStore, policy *Pol
 			return nil, nil, katalinux.ErrQualification
 		}
 		if standalone {
+			controller.Kata.StorageJournalID, err = store.StorageJournalID(context.Background())
+			if err != nil {
+				cleanup()
+				return nil, nil, err
+			}
+			controller.storageStatus.Store("execution storage preflight pending")
+			remote.StorageReady = controller.reportStorageReady
 			controller.cache = newKataCache(*x.Kata.StickyCache, credentials.InstallationID, credentials.TenantID, x.Repository, controller.Kata.Manifest.ImageDigest)
 		}
 		controller.Kata.ObserverSocket = x.Kata.ObserverSocket

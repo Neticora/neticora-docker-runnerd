@@ -1445,3 +1445,29 @@ func TestAbruptProcessCrashAtDurabilityBoundaries(t *testing.T) {
 		}
 	}
 }
+
+func TestStorageJournalIdentityRejectsDatabaseReplacement(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	store, err := OpenRecovery(ctx, dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if id, err := store.StorageJournalID(ctx); err != nil || len(id) != 64 {
+		t.Fatal("journal identity unavailable", err)
+	}
+	path := filepath.Join(dir, databaseName)
+	if err := os.Rename(path, path+".original"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.StorageJournalID(ctx); !errors.Is(err, agent.ErrRecoveryRequired) {
+		t.Fatal("replacement database inherited the opened journal identity", err)
+	}
+	if err := os.Rename(path+".original", path); err != nil {
+		t.Fatal(err)
+	}
+}

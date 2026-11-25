@@ -79,6 +79,7 @@ type HostRemote struct {
 	PolicyGeneration func() string
 	Version          string
 	CheckTransport   func() error
+	StorageReady     func(context.Context) bool
 	mu               sync.Mutex
 	token            string
 	expires          time.Time
@@ -269,6 +270,9 @@ func (r *HostRemote) Heartbeat(ctx context.Context, generation string) error {
 		return e
 	}
 	capabilities := r.Capabilities
+	if r.StorageReady != nil {
+		capabilities.HardStorageLimit = capabilities.HardStorageLimit && r.StorageReady(ctx)
+	}
 	capabilities.ObservedAt = time.Now().UTC().Format(wireTime)
 	capabilities.ProbeGeneration = generation
 	m, e := protocol.EncodeValidated("HostHeartbeat", map[string]any{"identity": r.Credentials.Identity, "agentVersion": r.Version, "protocolVersion": "1.0.0", "inventoryGeneration": generation, "effectivePolicyGeneration": r.PolicyGeneration(), "capabilities": capabilities})
