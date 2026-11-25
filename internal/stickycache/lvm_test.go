@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -229,4 +230,56 @@ func TestNativeThinCachePressure(t *testing.T) {
 		t.Fatalf("%s data=%s%% metadata=%s%% admission=%t error=%v", phase, row.Data, row.Meta, admitted, err)
 	}
 	t.Logf("%s active_slots=%d data=%s%% metadata=%s%% sticky_allowed=%t", phase, active, row.Data, row.Meta, admitted)
+}
+
+func TestPrepareSelectsThinSnapshotWithoutLegacyTarget(t *testing.T) {
+	t.Parallel()
+	policy := testPolicy()
+	parent := "nrdc-" + strings.Repeat("a", 48)
+	child := "nrdc-" + strings.Repeat("b", 48)
+	const parentUUID = "a1b2c3-aabb-ccdd-eeff-0011-2233-a1b2c3"
+	const childUUID = "d4e5f6-aabb-ccdd-eeff-0011-2233-d4e5f6"
+	const fsUUID = "f30d2037-1767-47a6-a25c-cdfb01685b69"
+	created := false
+	lvm := LVM{Policy: policy, command: func(_ context.Context, tool string, args ...string) ([]byte, error) {
+		switch tool {
+		case "lvs":
+			rows := []volume{
+				{Name: policy.ThinPool, UUID: policy.PoolUUID, Type: "thin-pool"},
+				{Name: parent, UUID: parentUUID, Type: "thin", Pool: policy.ThinPool, Size: "3221225472", Tags: "neticora." + parent},
+			}
+			if created {
+				rows = append(rows, volume{Name: child, UUID: childUUID, Type: "thin", Pool: policy.ThinPool, Size: "3221225472", Tags: "neticora." + child})
+			}
+			return json.Marshal(map[string]any{"report": []any{map[string]any{"lv": rows}}})
+		case "lvcreate":
+			want := []string{"--yes", "--name", child, "--addtag", "neticora." + child,
+				"--setactivationskip", "y", "--snapshot", "--type", "thin", policy.VolumeGroup + "/" + parent}
+			if !slices.Equal(args, want) {
+				return nil, errors.New("native command would resolve the legacy snapshot target")
+			}
+			created = true
+			return nil, nil
+		case "lvchange":
+			return nil, nil
+		case "blkid":
+			return []byte(fsUUID), nil
+		default:
+			return nil, fmt.Errorf("unexpected command %s", tool)
+		}
+	}}
+	uuid, fs, err := lvm.Prepare(t.Context(), child, parentUUID)
+	if err != nil || uuid != childUUID || fs != fsUUID {
+		t.Fatalf("thin snapshot result: %s %s %v", uuid, fs, err)
+	}
+}
+
+func TestNativeExitClassificationDoesNotCopyStderr(t *testing.T) {
+	t.Parallel()
+	if got := lvmExitReason([]byte("snapshot: Required device-mapper target(s) not detected in your kernel. private-context")); got != "device-mapper-target-unavailable" {
+		t.Fatal(got)
+	}
+	if got := lvmExitReason([]byte("private-context")); got != "nonzero-exit" {
+		t.Fatal(got)
+	}
 }

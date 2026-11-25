@@ -1,6 +1,7 @@
 package stickycache
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os/exec"
@@ -58,9 +59,17 @@ func commandDiagnostic(ctx context.Context, command string, err error) Diagnosti
 	case errors.Is(ctx.Err(), context.Canceled), errors.Is(err, context.Canceled):
 		event.Result = "cancelled"
 	case errors.As(err, &exit):
-		event.Result, event.ExitStatus = "nonzero-exit", exit.ExitCode()
+		event.Result, event.ExitStatus = lvmExitReason(exit.Stderr), exit.ExitCode()
 	default:
 		event.Result = "command-unavailable"
 	}
 	return event
+}
+
+// Classify known native failures without copying stderr into the journal log.
+func lvmExitReason(stderr []byte) string {
+	if bytes.Contains(stderr, []byte("Required device-mapper target(s) not detected")) {
+		return "device-mapper-target-unavailable"
+	}
+	return "nonzero-exit"
 }

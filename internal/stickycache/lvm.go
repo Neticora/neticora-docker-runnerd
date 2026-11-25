@@ -204,7 +204,9 @@ func (l LVM) Prepare(ctx context.Context, name, parentUUID string) (lvUUID, file
 			if err != nil || !present || parent.Active == "active" {
 				return "", "", ErrVolume
 			}
-			args = append(args, "--snapshot", l.Policy.VolumeGroup+"/"+parent.Name)
+			// LVM probes the requested segment target during argument validation.
+			// Choose thin explicitly so creating a thin snapshot needs no classic dm-snapshot target.
+			args = append(args, "--snapshot", "--type", "thin", l.Policy.VolumeGroup+"/"+parent.Name)
 		}
 		stage = "snapshot-create"
 		if _, err = l.run(ctx, "lvcreate", args...); err != nil {
