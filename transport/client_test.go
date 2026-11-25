@@ -275,3 +275,20 @@ func TestKataCacheDecisionAndCanonicalPresence(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestKataCacheAuthorizationDoesNotExposePrivateResponse(t *testing.T) {
+	t.Parallel()
+	const payload = "private-provider-response"
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, payload, http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+	allowed, err := trustedClient(t, server).KataCacheAccess(t.Context(), "unused-private-bearer", "run-a", "2")
+	kind, status := RequestFailureDetails(err)
+	if allowed || err == nil || kind != "http-status" || status != http.StatusServiceUnavailable {
+		t.Fatalf("authorization did not fail closed: allowed=%t kind=%s status=%d", allowed, kind, status)
+	}
+	if strings.Contains(err.Error(), payload) || strings.Contains(err.Error(), "unused-private-bearer") {
+		t.Fatal("cache authorization returned private data")
+	}
+}

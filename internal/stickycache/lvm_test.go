@@ -21,12 +21,15 @@ func TestHeadroomChecksBothThresholdsAndAllSlots(t *testing.T) {
 	for _, item := range []struct {
 		data, meta string
 		want       bool
-	}{{"0.00", "1.59", true}, {"65.00", "1.59", false}, {"0.00", "61.00", false}} {
+		reason     string
+	}{{"0.00", "1.59", true, "available"}, {"65.00", "1.59", false, "data-watermark"}, {"0.00", "61.00", false, "metadata-watermark"}, {"65.00", "61.00", false, "data-and-metadata-watermarks"}} {
 		lvm := LVM{Policy: policy, command: func(_ context.Context, _ string, _ ...string) ([]byte, error) {
 			return []byte(fmt.Sprintf(`{"report":[{"lv":[{"lv_name":"cache","lv_uuid":"pool-uuid","segtype":"thin-pool","lv_size":"42949672960","data_percent":"%s","metadata_percent":"%s"}]}]}`, item.data, item.meta)), nil
 		}}
+		var event Diagnostic
+		lvm = lvm.WithDiagnostics(func(observed Diagnostic) { event = observed })
 		got, err := lvm.Headroom(t.Context(), 2)
-		if err != nil || got != item.want {
+		if err != nil || got != item.want || event.Result != item.reason || event.ReservationPercent != 15 || event.ReservationSlots != 2 {
 			t.Fatalf("data %s metadata %s: %t, %v", item.data, item.meta, got, err)
 		}
 	}

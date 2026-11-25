@@ -56,6 +56,7 @@ type volume struct {
 type LVM struct {
 	Policy  Policy
 	command func(context.Context, string, ...string) ([]byte, error)
+	record  func(Diagnostic)
 }
 
 func (l LVM) run(ctx context.Context, binary string, args ...string) ([]byte, error) {
@@ -68,7 +69,9 @@ func (l LVM) run(ctx context.Context, binary string, args ...string) ([]byte, er
 		"lvremove": "/usr/sbin/lvremove", "mkfs.ext4": "/usr/sbin/mkfs.ext4", "blkid": "/usr/sbin/blkid"}
 	cmd := exec.CommandContext(ctx, paths[binary], args...)
 	cmd.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL=C"}
-	return cmd.Output()
+	out, err := cmd.Output()
+	l.diagnostic(commandDiagnostic(ctx, binary, err))
+	return out, err
 }
 
 func (l LVM) report(ctx context.Context) ([]volume, error) {
@@ -115,10 +118,26 @@ func (l LVM) Headroom(ctx context.Context, slots uint64) (bool, error) {
 	data, e2 := strconv.ParseFloat(row.Data, 64)
 	meta, e3 := strconv.ParseFloat(row.Meta, 64)
 	if size == 0 || slots == 0 || e1 != nil || e2 != nil || e3 != nil || math.IsNaN(data) || math.IsNaN(meta) || data < 0 || meta < 0 {
+		l.diagnostic(Diagnostic{Stage: "headroom", Result: "invalid-pool-telemetry"})
 		return false, ErrVolume
 	}
 	reservedPercent := 100 * float64(l.Policy.VolumeBytes) * float64(slots) / float64(size)
-	return data+0.01+reservedPercent <= float64(l.Policy.MaxDataPercent) && meta+0.01 < float64(l.Policy.MaxMetaPercent), nil
+	dataAllowed := data+0.01+reservedPercent <= float64(l.Policy.MaxDataPercent)
+	metadataAllowed := meta+0.01 < float64(l.Policy.MaxMetaPercent)
+	event := Diagnostic{Stage: "headroom", Result: "available", PoolBytes: size, DataPercent: data,
+		MetadataPercent: meta, ReservationSlots: slots, VolumeBytes: l.Policy.VolumeBytes,
+		ReservationPercent: reservedPercent, MaxDataPercent: l.Policy.MaxDataPercent,
+		MaxMetadataPercent: l.Policy.MaxMetaPercent, DataAllowed: dataAllowed, MetadataAllowed: metadataAllowed}
+	switch {
+	case !dataAllowed && !metadataAllowed:
+		event.Result = "data-and-metadata-watermarks"
+	case !dataAllowed:
+		event.Result = "data-watermark"
+	case !metadataAllowed:
+		event.Result = "metadata-watermark"
+	}
+	l.diagnostic(event)
+	return dataAllowed && metadataAllowed, nil
 }
 
 func (l LVM) owned(rows []volume, name, uuid string) (volume, bool, error) {
@@ -150,7 +169,15 @@ func (l LVM) path(name string) string {
 // Prepare may retry an intent whose creation response was lost. The caller
 // must hold the execution journal and must keep this LV out of Docker until
 // the returned UUID and filesystem UUID are durable.
-func (l LVM) Prepare(ctx context.Context, name, parentUUID string) (string, string, error) {
+func (l LVM) Prepare(ctx context.Context, name, parentUUID string) (lvUUID, filesystemUUID string, failure error) {
+	stage := "snapshot-inventory"
+	defer func() {
+		result := "ok"
+		if failure != nil {
+			result = "failed"
+		}
+		l.diagnostic(Diagnostic{Stage: stage, Result: result, LVUUID: DiagnosticUUID(lvUUID), FilesystemUUID: filesystemUUID})
+	}()
 	rows, err := l.report(ctx)
 	if err != nil {
 		return "", "", err
@@ -172,15 +199,18 @@ func (l LVM) Prepare(ctx context.Context, name, parentUUID string) (string, stri
 					break
 				}
 			}
+			stage = "snapshot-origin-verification"
 			_, present, err := l.owned(rows, parent.Name, parentUUID)
 			if err != nil || !present || parent.Active == "active" {
 				return "", "", ErrVolume
 			}
 			args = append(args, "--snapshot", l.Policy.VolumeGroup+"/"+parent.Name)
 		}
+		stage = "snapshot-create"
 		if _, err = l.run(ctx, "lvcreate", args...); err != nil {
 			return "", "", err
 		}
+		stage = "snapshot-created-volume-verification"
 		rows, err = l.report(ctx)
 		if err != nil {
 			return "", "", err
@@ -190,17 +220,21 @@ func (l LVM) Prepare(ctx context.Context, name, parentUUID string) (string, stri
 			return "", "", ErrVolume
 		}
 	}
+	stage = "snapshot-detached-verification"
 	if current.Open == "open" {
 		return "", "", ErrVolume
 	}
+	stage = "snapshot-activate"
 	if _, err = l.run(ctx, "lvchange", "-ay", "-K", target); err != nil {
 		return "", "", err
 	}
 	if parentUUID == "" {
+		stage = "snapshot-format"
 		if _, err = l.run(ctx, "mkfs.ext4", "-Fq", "-m", "0", "-E", "nodiscard", l.path(name)); err != nil {
 			return "", "", err
 		}
 	}
+	stage = "snapshot-filesystem-uuid"
 	raw, err := l.run(ctx, "blkid", "-p", "-s", "UUID", "-o", "value", l.path(name))
 	if err != nil || !ext4UUID.Match(bytes.TrimSpace(raw)) {
 		return "", "", ErrVolume
@@ -265,10 +299,21 @@ func (l LVM) Delete(ctx context.Context, name, uuid string) error {
 func (l LVM) Retained(ctx context.Context, name, uuid string) bool {
 	rows, err := l.report(ctx)
 	if err != nil {
+		l.diagnostic(Diagnostic{Stage: "retained-volume-verification", Result: "inventory-unavailable", LVUUID: DiagnosticUUID(uuid)})
 		return false
 	}
 	row, exists, err := l.owned(rows, name, uuid)
-	return err == nil && exists && row.Active == "" && row.Open != "open"
+	event := Diagnostic{Stage: "retained-volume-verification", Result: "verified", LVUUID: DiagnosticUUID(uuid)}
+	switch {
+	case err != nil:
+		event.Result = "identity-mismatch"
+	case !exists:
+		event.Result = "volume-missing"
+	case row.Active != "" || row.Open == "open":
+		event.Result = "volume-in-use"
+	}
+	l.diagnostic(event)
+	return event.Result == "verified"
 }
 
 // VerifyAbsent checks the exact cache LV without adopting or touching it.

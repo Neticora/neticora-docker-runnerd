@@ -112,22 +112,22 @@ func (c *Client) post(ctx context.Context, path, token string, data []byte, vali
 	}
 	response, err := c.http.Do(req)
 	if err != nil {
-		return nil, errors.New("protocol request failed")
+		return nil, &requestFailure{message: "protocol request failed", kind: transportFailureKind(err)}
 	}
 	defer response.Body.Close()
 	c.observeClock(response)
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, errors.New("protocol request rejected")
+		return nil, &requestFailure{message: "protocol request rejected", kind: "http-status", status: response.StatusCode}
 	}
 	if encoding := response.Header.Get("Content-Encoding"); encoding != "" && encoding != "identity" {
-		return nil, errors.New("compressed protocol response is disabled")
+		return nil, &requestFailure{message: "compressed protocol response is disabled", kind: "response-encoding", status: response.StatusCode}
 	}
 	raw, err := io.ReadAll(io.LimitReader(response.Body, protocol.MaxWireBytes+1))
 	if err != nil || len(raw) > protocol.MaxWireBytes {
-		return nil, errors.New("protocol response unreadable or oversized")
+		return nil, &requestFailure{message: "protocol response unreadable or oversized", kind: "response-read", status: response.StatusCode}
 	}
 	if !validate(raw) {
-		return nil, errors.New("invalid protocol response")
+		return nil, &requestFailure{message: "invalid protocol response", kind: "response-schema", status: response.StatusCode}
 	}
 	return raw, nil
 }
