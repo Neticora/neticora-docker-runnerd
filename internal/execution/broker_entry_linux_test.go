@@ -58,6 +58,11 @@ func TestBrokerEntryDescriptorChild(t *testing.T) {
 		t.Skip("subprocess only")
 	}
 	expected := os.Getenv("RUNNERD09_ENTRY_FD_EXPECT")
+	// The hosted test runner can pass unrelated descriptors into this child.
+	// Preserve the injected descriptor and isolate it from the harness's files.
+	if err := unix.CloseRange(4, ^uint(0), unix.CLOSE_RANGE_CLOEXEC); err != nil {
+		t.Fatal(err)
+	}
 	err := CheckBrokerEntryDescriptors()
 	if err == nil || !strings.Contains(err.Error(), expected) {
 		t.Fatal("privileged inherited resource accepted", err)

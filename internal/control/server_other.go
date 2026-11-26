@@ -20,6 +20,8 @@ type Server struct{}
 
 func (*Server) SetDurableDrain(func() error) {}
 
+func (*Server) ExposeResume(func(context.Context) error, func(string)) {}
+
 func (*Server) ExposeExecutions(func(context.Context, string, string) (any, error))   {}
 func (*Server) ExposeKataEvidence(func(context.Context, string, string) (any, error)) {}
 

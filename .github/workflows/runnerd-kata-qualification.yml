@@ -27,10 +27,18 @@ jobs:
         # or customer sockets are supplied. Do not convert this to a PR job on
         # a persistent customer runner.
         run: |
-          sudo env "PATH=$PATH" "GOMODCACHE=$(go env GOMODCACHE)" \
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          test ! -e /etc/neticora-runnerd-lab
+          sudo install -m 0644 /dev/null /etc/neticora-runnerd-lab
+          output="$RUNNER_TEMP/runnerd09-native"
+          trap 'sudo rm -f /etc/neticora-runnerd-lab; if [ -d "$output" ]; then sudo chown -R "$(id -u):$(id -g)" "$output"; fi' EXIT
+          sudo systemd-run --wait --pipe --collect \
+            --property=RuntimeMaxSec=10min --property=CPUQuota=400% --property=KillMode=control-group \
+            --working-directory="$GITHUB_WORKSPACE" \
+            /usr/bin/env "PATH=$PATH" "GOMODCACHE=$(go env GOMODCACHE)" \
             "GOCACHE=$RUNNER_TEMP/runnerd09-go-cache" GOTOOLCHAIN=local \
-            TMPDIR=/var/tmp bash .github/scripts/qualify-kata-native.sh "$RUNNER_TEMP/runnerd09-native"
-          sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/runnerd09-native"
+            RUNNERD09_SANDBOX_STRESS=1 TMPDIR=/var/tmp \
+            bash .github/scripts/qualify-kata-native.sh "$output"
       - name: Preserve complete native test output
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
