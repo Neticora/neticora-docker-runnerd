@@ -22,10 +22,8 @@ jobs:
       - name: Require compiler, namespaces and actual native passes
         env:
           TMPDIR: /var/tmp
-        # Manual qualification on a disposable GitHub-hosted runner. Root is
-        # used only for local namespace capability; no platform/host credentials
-        # or customer sockets are supplied. Do not convert this to a PR job on
-        # a persistent customer runner.
+        # Use a private PID namespace so the native scanners encounter the
+        # full stress fixture without unrelated processes from the runner VM.
         run: |
           test "$RUNNER_ENVIRONMENT" = github-hosted
           test ! -e /etc/neticora-runnerd-lab
@@ -38,6 +36,7 @@ jobs:
             /usr/bin/env "PATH=$PATH" "GOMODCACHE=$(go env GOMODCACHE)" \
             "GOCACHE=$RUNNER_TEMP/runnerd09-go-cache" GOTOOLCHAIN=local \
             RUNNERD09_SANDBOX_STRESS=1 TMPDIR=/var/tmp \
+            unshare --fork --pid --mount-proc \
             bash .github/scripts/qualify-kata-native.sh "$output"
       - name: Preserve complete native test output
         if: always()
