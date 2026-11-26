@@ -55,14 +55,14 @@ func TestLostEnrollmentResponseRetainsIdenticalRequest(t *testing.T) {
 			if !bytes.Equal(data, first) {
 				t.Error("retry changed durable enrollment request")
 			}
-			io.WriteString(w, `{"identity":{"hostId":"host-1","keyId":"key-1","keyVersion":"1","sessionEpoch":"1"},"protocol":{"version":"1.0.0","minimumRecoveryVersion":"1.0.0","minimumAdmissionVersion":"1.0.0"}}`)
+			io.WriteString(w, `{"identity":{"hostId":"host-1","keyId":"key-1","keyVersion":"1","sessionEpoch":"1"},"protocol":{"version":"2.0.0","minimumRecoveryVersion":"2.0.0","minimumAdmissionVersion":"2.0.0"}}`)
 		case "/token":
 			io.WriteString(w, `{"accessToken":"private-access","expiresAt":"2099-01-01T00:00:00.000Z"}`)
 		case "/me/config":
 			if r.Header.Get("Authorization") != "Bearer private-access" {
 				t.Error("missing signed authentication")
 			}
-			io.WriteString(w, `{"admissionEnabled":false,"protocol":{"version":"1.0.0","minimumRecoveryVersion":"1.0.0","minimumAdmissionVersion":"1.0.0"},"policy":{"generation":"1","allowedTrustClasses":[],"allowedProfiles":[],"limits":{"cpuMillis":"0","memoryBytes":"0","storageBytes":"0","slots":"0"}}}`)
+			io.WriteString(w, `{"admissionEnabled":false,"protocol":{"version":"2.0.0","minimumRecoveryVersion":"2.0.0","minimumAdmissionVersion":"2.0.0"},"policy":{"generation":"1","allowedTrustClasses":[],"allowedProfiles":[],"limits":{"cpuMillis":"0","memoryBytes":"0","storageBytes":"0","slots":"0"}}}`)
 		default:
 			t.Error("unexpected endpoint")
 			http.NotFound(w, r)

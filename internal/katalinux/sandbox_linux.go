@@ -21,6 +21,7 @@ import (
 // the original captured directory identity allow the next cleanup-only retry.
 var errSandboxCleanupPending = errors.New("sandbox cleanup request budget exhausted; retain allocation and retry")
 var errSandboxReferenceHeld = errors.New("sandbox inode or device still referenced")
+var errSandboxReclamationUnfenced = errors.New("sandbox metadata reclamation requires a retirement fence")
 
 func sandboxReferenceHeld() error { return errors.Join(ErrQualification, errSandboxReferenceHeld) }
 
@@ -101,18 +102,18 @@ func (p *Profile) captureSandboxDirectories(id string) ([]SandboxDirectory, erro
 	return out, nil
 }
 
-// Runtime residue can outlive an OOM-killed shim. Cleanup is confined to a
-// pre-crash captured directory inode, never a newly discovered matching name.
-// Every destructive step rechecks the VM/peer guards and rejects references,
-// mount points, symlinks, foreign ownership and filesystem crossings.
-func (p *Profile) removeSandboxResidue(ctx context.Context, id string, directories []SandboxDirectory, guard func() error) error {
+// Reconcile only pre-crash captured sandbox identities. An unfenced
+// historical recovery may verify absence after the original runtime removed
+// its metadata. A negative reference scan cannot authorize an unlink.
+func (p *Profile) reconcileSandboxResidue(ctx context.Context, id string, directories []SandboxDirectory, guard func() error, diagnosticReclamation bool) error {
 	ctx = context.WithValue(ctx, procDecodeKey{}, &procDecoder{})
-	if f, ok := ctx.Value(retirementFenceKey{}).(*retirementFence); ok {
+	f, fenced := ctx.Value(retirementFenceKey{}).(*retirementFence)
+	if fenced {
 		if f.profile != p || f.record.Container != id || f.reclaim(ctx) != nil {
 			return ErrQualification
 		}
 	}
-	if p.Manifest.RetirementPolicy != "" && ctx.Value(retirementFenceKey{}) == nil {
+	if p.Manifest.RetirementPolicy != "" && !fenced {
 		return ErrQualification
 	}
 	allowed := map[string]bool{}
@@ -132,7 +133,7 @@ func (p *Profile) removeSandboxResidue(ctx context.Context, id string, directori
 		if errors.Is(err, os.ErrNotExist) {
 			filesystemPath, e := sandboxFilesystemPath(filepath.Join(expected.Root, id), expected.Device)
 			var references error
-			if f, ok := ctx.Value(retirementFenceKey{}).(*retirementFence); ok {
+			if fenced {
 				references = f.verify(ctx)
 			} else if noBlockUsers(ctx, BlockRecord{FileDevice: expected.Device, FileInode: expected.Inode}) != nil || noSandboxNamespaceReferences(ctx, expected.Device, expected.Inode, filesystemPath) != nil {
 				references = ErrQualification
@@ -155,6 +156,9 @@ func (p *Profile) removeSandboxResidue(ctx context.Context, id string, directori
 		}
 		if err != nil || actual != expected {
 			return ErrQualification
+		}
+		if !fenced && !diagnosticReclamation {
+			return errors.Join(ErrQualification, errSandboxReclamationUnfenced)
 		}
 		root, err := openSandboxParent(p.Manifest.Storage.Runtime.Root, expected.Root)
 		if err != nil {

@@ -275,7 +275,7 @@ func (r *HostRemote) Heartbeat(ctx context.Context, generation string) error {
 	}
 	capabilities.ObservedAt = time.Now().UTC().Format(wireTime)
 	capabilities.ProbeGeneration = generation
-	m, e := protocol.EncodeValidated("HostHeartbeat", map[string]any{"identity": r.Credentials.Identity, "agentVersion": r.Version, "protocolVersion": "1.0.0", "inventoryGeneration": generation, "effectivePolicyGeneration": r.PolicyGeneration(), "capabilities": capabilities})
+	m, e := protocol.EncodeValidated("HostHeartbeat", map[string]any{"identity": r.Credentials.Identity, "agentVersion": r.Version, "protocolVersion": "2.0.0", "inventoryGeneration": generation, "effectivePolicyGeneration": r.PolicyGeneration(), "capabilities": capabilities})
 	if e != nil {
 		return e
 	}

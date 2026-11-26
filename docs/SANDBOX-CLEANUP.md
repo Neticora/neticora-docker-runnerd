@@ -202,8 +202,12 @@ quarantine. New-policy cross-boot cleanup remains unsupported and fails closed.
 
 Metadata traversal remains bounded: 64 names per read, 4,096 entries per captured
 directory per request, maximum depth 32, parent fsync after each removal. These limits
-are operational bounds, not acquisition fences. Legacy scan-based cleanup remains an
-immutable-history/diagnostic path and cannot qualify the revised acquisition contract.
+are operational bounds, not acquisition fences. Standalone execution and signed
+standalone recovery use the direct LVM and block cleanup paths. Historical broker
+recovery reaches physical absence verification. Without a retirement fence it
+preserves the original ownership if metadata remains, and verifies references and
+durable absence after the original runtime removes the metadata. The unfenced
+mutating scanner is confined to native diagnostics.
 
 ## Qualification
 

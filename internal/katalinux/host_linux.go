@@ -730,7 +730,7 @@ func (p *Profile) VerifyAbsent(ctx context.Context, id string, plan dockerengine
 	}
 	if p.Manifest.Version == MultiBlockVersion && len(record.Sandboxes) > 0 {
 		guard := p.cleanupSandboxGuard(ctx, plan, record, verifyProcesses)
-		if err := p.removeSandboxResidue(ctx, id, record.Sandboxes, guard); err != nil {
+		if err := p.reconcileSandboxResidue(ctx, id, record.Sandboxes, guard, false); err != nil {
 			return err
 		}
 	}

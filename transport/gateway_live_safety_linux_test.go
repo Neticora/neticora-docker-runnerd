@@ -275,7 +275,7 @@ func TestRotationRecoveryReconstructsPersistedAttempt(t *testing.T) {
 	if persistRotationAttempt(dir, attempt) == nil {
 		t.Fatal("existing uncertain rotation overwritten")
 	}
-	raw := []byte(`{"identity":{"hostId":"host-a","keyId":"key-b","keyVersion":"2","sessionEpoch":"2"},"protocol":{"version":"1.0.0","minimumRecoveryVersion":"1.0.0","minimumAdmissionVersion":"1.0.0"}}`)
+	raw := []byte(`{"identity":{"hostId":"host-a","keyId":"key-b","keyVersion":"2","sessionEpoch":"2"},"protocol":{"version":"2.0.0","minimumRecoveryVersion":"2.0.0","minimumAdmissionVersion":"2.0.0"}}`)
 	if _, err := commitRotationResponse(dir, bytes.Replace(raw, []byte("host-a"), []byte("host-b"), 1)); err == nil {
 		t.Fatal("different host rotation response accepted")
 	}

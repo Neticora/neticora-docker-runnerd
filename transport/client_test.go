@@ -207,7 +207,7 @@ func TestInFlightCancellationIsBoundedAndRedacted(t *testing.T) {
 }
 
 func TestGatewayEnrollmentAndConfigTransport(t *testing.T) {
-	config := `{"admissionEnabled":false,"protocol":{"version":"1.0.0","minimumRecoveryVersion":"1.0.0","minimumAdmissionVersion":"1.0.0"},"policy":{"generation":"1","allowedTrustClasses":[],"allowedProfiles":[],"limits":{"cpuMillis":"0","memoryBytes":"0","storageBytes":"0","slots":"0"}}}`
+	config := `{"admissionEnabled":false,"protocol":{"version":"2.0.0","minimumRecoveryVersion":"2.0.0","minimumAdmissionVersion":"2.0.0"},"policy":{"generation":"1","allowedTrustClasses":[],"allowedProfiles":[],"limits":{"cpuMillis":"0","memoryBytes":"0","storageBytes":"0","slots":"0"}}}`
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/me/config" {
 			if r.Method != "GET" || r.Header.Get("Authorization") != "Bearer secret" {

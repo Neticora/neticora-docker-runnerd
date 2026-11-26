@@ -7,6 +7,7 @@ import sys
 PACKAGE = "github.com/Neticora/neticora-docker-runnerd/internal/katalinux"
 REQUIRED = frozenset({
     "TestNativeSandboxResidueCleanup",
+    "TestNativeSandboxHistoricalReconciliationRetainsResidue",
     "TestNativeSandboxHeldReferenceRetainsOwnership",
     "TestNativeSandboxReplacementAndGuardRejectDeletion",
     "TestNativeSandboxCwdRetainsDirectory",

@@ -51,7 +51,7 @@ func Enrollment(private ed25519.PrivateKey, requestID, token string) (protocol.O
 		return protocol.Outbound{}, err
 	}
 	digest := sha256.Sum256([]byte(token))
-	proof, err := sign(private, map[string]any{"purpose": "neticora-host-enroll-v1", "requestId": requestID, "tokenHash": hex.EncodeToString(digest[:]), "publicKeyFingerprint": fingerprint})
+	proof, err := sign(private, map[string]any{"purpose": "neticora-host-enroll-v2", "requestId": requestID, "tokenHash": hex.EncodeToString(digest[:]), "publicKeyFingerprint": fingerprint})
 	if err != nil {
 		return protocol.Outbound{}, err
 	}
@@ -80,7 +80,7 @@ func Assertion(private ed25519.PrivateKey, host protocol.HostIdentity, bootID, j
 		return protocol.Outbound{}, errors.New("invalid assertion identity")
 	}
 	header, _ := json.Marshal(map[string]any{"alg": "EdDSA", "typ": "JWT", "kid": host.KeyId})
-	claims, _ := json.Marshal(map[string]any{"iss": host.HostId, "sub": host.HostId, "aud": "neticora-runner-hosts", "iat": now.Unix(), "exp": now.Unix() + 60, "jti": jti, "bootId": bootID, "sessionEpoch": host.SessionEpoch, "keyVersion": host.KeyVersion})
+	claims, _ := json.Marshal(map[string]any{"iss": host.HostId, "sub": host.HostId, "aud": "neticora-runner-hosts-v2", "iat": now.Unix(), "exp": now.Unix() + 60, "jti": jti, "bootId": bootID, "sessionEpoch": host.SessionEpoch, "keyVersion": host.KeyVersion})
 	data := base64.RawURLEncoding.EncodeToString(header) + "." + base64.RawURLEncoding.EncodeToString(claims)
 	assertion := data + "." + base64.RawURLEncoding.EncodeToString(ed25519.Sign(private, []byte(data)))
 	return protocol.EncodeValidated("TokenRequest", map[string]any{"assertion": assertion})

@@ -46,7 +46,7 @@ func retirementFixture(t *testing.T) (string, *os.Root) {
 	credentials := execution.Credentials{InstallationID: "installation-1", TenantID: a.TenantID, EndpointIdentity: "docker-test-peer", Identity: identity, BootID: a.BootID, PrivateKeyPEM: string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}))}
 	for name, value := range map[string]any{
 		"attempt.json": a, "identity.json": credentials,
-		"enrollment.json": map[string]any{"identity": identity, "protocol": map[string]string{"version": "1.0.0", "minimumRecoveryVersion": "1.0.0", "minimumAdmissionVersion": "1.0.0"}},
+		"enrollment.json": map[string]any{"identity": identity, "protocol": map[string]string{"version": "2.0.0", "minimumRecoveryVersion": "2.0.0", "minimumAdmissionVersion": "2.0.0"}},
 	} {
 		raw, err := json.Marshal(value)
 		if err != nil {

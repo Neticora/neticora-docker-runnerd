@@ -348,6 +348,21 @@ func (e ExecutionSpecTrustClass) Valid() bool {
 	}
 }
 
+// Defines values for HostHeartbeatProtocolVersion.
+const (
+	HostHeartbeatProtocolVersionN200 HostHeartbeatProtocolVersion = "2.0.0"
+)
+
+// Valid indicates whether the value is a known member of the HostHeartbeatProtocolVersion enum.
+func (e HostHeartbeatProtocolVersion) Valid() bool {
+	switch e {
+	case HostHeartbeatProtocolVersionN200:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for LocalPolicyAllowedTrustClasses.
 const (
 	LocalPolicyAllowedTrustClassesTrusted   LocalPolicyAllowedTrustClasses = "trusted"
@@ -567,6 +582,51 @@ func (e PlatformOs) Valid() bool {
 	case PlatformOsLinux:
 		return true
 	case PlatformOsWindows:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProtocolCompatibilityMinimumAdmissionVersion.
+const (
+	ProtocolCompatibilityMinimumAdmissionVersionN200 ProtocolCompatibilityMinimumAdmissionVersion = "2.0.0"
+)
+
+// Valid indicates whether the value is a known member of the ProtocolCompatibilityMinimumAdmissionVersion enum.
+func (e ProtocolCompatibilityMinimumAdmissionVersion) Valid() bool {
+	switch e {
+	case ProtocolCompatibilityMinimumAdmissionVersionN200:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProtocolCompatibilityMinimumRecoveryVersion.
+const (
+	ProtocolCompatibilityMinimumRecoveryVersionN200 ProtocolCompatibilityMinimumRecoveryVersion = "2.0.0"
+)
+
+// Valid indicates whether the value is a known member of the ProtocolCompatibilityMinimumRecoveryVersion enum.
+func (e ProtocolCompatibilityMinimumRecoveryVersion) Valid() bool {
+	switch e {
+	case ProtocolCompatibilityMinimumRecoveryVersionN200:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProtocolCompatibilityVersion.
+const (
+	ProtocolCompatibilityVersionN200 ProtocolCompatibilityVersion = "2.0.0"
+)
+
+// Valid indicates whether the value is a known member of the ProtocolCompatibilityVersion enum.
+func (e ProtocolCompatibilityVersion) Valid() bool {
+	switch e {
+	case ProtocolCompatibilityVersionN200:
 		return true
 	default:
 		return false
@@ -1007,13 +1067,16 @@ type HostEvent2 = interface{}
 
 // HostHeartbeat defines model for HostHeartbeat.
 type HostHeartbeat struct {
-	AgentVersion              string           `json:"agentVersion"`
-	Capabilities              HostCapabilities `json:"capabilities"`
-	EffectivePolicyGeneration Generation       `json:"effectivePolicyGeneration"`
-	Identity                  HostIdentity     `json:"identity"`
-	InventoryGeneration       Generation       `json:"inventoryGeneration"`
-	ProtocolVersion           string           `json:"protocolVersion"`
+	AgentVersion              string                       `json:"agentVersion"`
+	Capabilities              HostCapabilities             `json:"capabilities"`
+	EffectivePolicyGeneration Generation                   `json:"effectivePolicyGeneration"`
+	Identity                  HostIdentity                 `json:"identity"`
+	InventoryGeneration       Generation                   `json:"inventoryGeneration"`
+	ProtocolVersion           HostHeartbeatProtocolVersion `json:"protocolVersion"`
 }
+
+// HostHeartbeatProtocolVersion defines model for HostHeartbeat.ProtocolVersion.
+type HostHeartbeatProtocolVersion string
 
 // HostIdentity defines model for HostIdentity.
 type HostIdentity struct {
@@ -1237,10 +1300,19 @@ type Problem struct {
 
 // ProtocolCompatibility defines model for ProtocolCompatibility.
 type ProtocolCompatibility struct {
-	MinimumAdmissionVersion string `json:"minimumAdmissionVersion"`
-	MinimumRecoveryVersion  string `json:"minimumRecoveryVersion"`
-	Version                 string `json:"version"`
+	MinimumAdmissionVersion ProtocolCompatibilityMinimumAdmissionVersion `json:"minimumAdmissionVersion"`
+	MinimumRecoveryVersion  ProtocolCompatibilityMinimumRecoveryVersion  `json:"minimumRecoveryVersion"`
+	Version                 ProtocolCompatibilityVersion                 `json:"version"`
 }
+
+// ProtocolCompatibilityMinimumAdmissionVersion defines model for ProtocolCompatibility.MinimumAdmissionVersion.
+type ProtocolCompatibilityMinimumAdmissionVersion string
+
+// ProtocolCompatibilityMinimumRecoveryVersion defines model for ProtocolCompatibility.MinimumRecoveryVersion.
+type ProtocolCompatibilityMinimumRecoveryVersion string
+
+// ProtocolCompatibilityVersion defines model for ProtocolCompatibility.Version.
+type ProtocolCompatibilityVersion string
 
 // ProviderObservation defines model for ProviderObservation.
 type ProviderObservation struct {

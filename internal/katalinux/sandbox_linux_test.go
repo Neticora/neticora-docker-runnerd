@@ -4,6 +4,7 @@ package katalinux
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,12 @@ import (
 	"testing"
 	"time"
 )
+
+// Keep the original mutating scanner available to native diagnostics.
+// Shipped recovery only reconciles metadata through the guarded entry point.
+func (p *Profile) removeSandboxResidue(ctx context.Context, id string, directories []SandboxDirectory, guard func() error) error {
+	return p.reconcileSandboxResidue(ctx, id, directories, guard, true)
+}
 
 func settleSandboxTest(t *testing.T, operation func() error) {
 	t.Helper()
@@ -80,6 +87,41 @@ func TestNativeSandboxResidueCleanup(t *testing.T) {
 	if raw, err := os.ReadFile(filepath.Join(peer, "keep")); err != nil || string(raw) != "unrelated" {
 		t.Fatal("peer changed")
 	}
+}
+
+func TestNativeSandboxHistoricalReconciliationRetainsResidue(t *testing.T) {
+	p, root, id, stamp := sandboxNative(t)
+	dir := filepath.Join(root, id)
+	target := filepath.Join(dir, "rw", "hosts")
+	before, err := os.Stat(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reconcile := func() error {
+		return p.reconcileSandboxResidue(t.Context(), id, []SandboxDirectory{stamp}, func() error { return nil }, false)
+	}
+	if err := reconcile(); !errors.Is(err, errSandboxReclamationUnfenced) || !errors.Is(err, ErrQualification) {
+		t.Fatalf("unfenced residue must retain its ownership: %v", err)
+	}
+	if after, err := os.Stat(target); err != nil || !os.SameFile(before, after) {
+		t.Fatalf("unfenced reconciliation changed the original inode: %v", err)
+	}
+	held, err := os.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Close()
+	// Model removal by the original runtime, leaving an external reference.
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := reconcile(); !errors.Is(err, ErrQualification) {
+		t.Fatalf("absent pathname with a retained directory reference was accepted: %v", err)
+	}
+	if err := held.Close(); err != nil {
+		t.Fatal(err)
+	}
+	settleSandboxTest(t, reconcile)
 }
 
 func TestNativeSandboxHeldReferenceRetainsOwnership(t *testing.T) {

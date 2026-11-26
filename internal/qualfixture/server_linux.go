@@ -248,7 +248,7 @@ func (s *Server) Snapshot() State {
 	return state
 }
 func (s *Server) configResponse() protocol.ConfigResponse {
-	return protocol.ConfigResponse{AdmissionEnabled: !s.state.ReservationReleased, Policy: s.config.Policy, Protocol: protocol.ProtocolCompatibility{MinimumAdmissionVersion: "1.0.0", MinimumRecoveryVersion: "1.0.0", Version: "1.0.0"}}
+	return protocol.ConfigResponse{AdmissionEnabled: !s.state.ReservationReleased, Policy: s.config.Policy, Protocol: protocol.ProtocolCompatibility{MinimumAdmissionVersion: "2.0.0", MinimumRecoveryVersion: "2.0.0", Version: "2.0.0"}}
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -454,7 +454,7 @@ func (s *Server) authenticate(w http.ResponseWriter, raw []byte) {
 		SessionEpoch       string `json:"sessionEpoch"`
 		KeyVersion         string `json:"keyVersion"`
 	}
-	if e1 != nil || e2 != nil || json.Unmarshal(headerRaw, &header) != nil || json.Unmarshal(claimsRaw, &claims) != nil || header.Alg != "EdDSA" || header.Typ != "JWT" || header.Kid != s.config.Identity.KeyId || claims.Iss != s.config.Identity.HostId || claims.Sub != claims.Iss || claims.Aud != "neticora-runner-hosts" || claims.BootID != s.config.BootID || claims.SessionEpoch != s.config.Identity.SessionEpoch || claims.KeyVersion != s.config.Identity.KeyVersion || claims.Exp <= time.Now().Unix() || claims.Iat > time.Now().Unix()+5 || claims.Exp-claims.Iat > 60 || len(claims.Jti) < 16 || len(claims.Jti) > 256 {
+	if e1 != nil || e2 != nil || json.Unmarshal(headerRaw, &header) != nil || json.Unmarshal(claimsRaw, &claims) != nil || header.Alg != "EdDSA" || header.Typ != "JWT" || header.Kid != s.config.Identity.KeyId || claims.Iss != s.config.Identity.HostId || claims.Sub != claims.Iss || claims.Aud != "neticora-runner-hosts-v2" || claims.BootID != s.config.BootID || claims.SessionEpoch != s.config.Identity.SessionEpoch || claims.KeyVersion != s.config.Identity.KeyVersion || claims.Exp <= time.Now().Unix() || claims.Iat > time.Now().Unix()+5 || claims.Exp-claims.Iat > 60 || len(claims.Jti) < 16 || len(claims.Jti) > 256 {
 		refuse()
 		return
 	}
