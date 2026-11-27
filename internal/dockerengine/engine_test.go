@@ -18,6 +18,10 @@ func fakeEngine(t *testing.T) (*Engine, Plan, *bool, *bool, *int, *string) {
 }
 
 func fakeEngineWithHook(t *testing.T, hook func(string)) (*Engine, Plan, *bool, *bool, *int, *string) {
+	return fakeEngineWithResponder(t, hook, nil)
+}
+
+func fakeEngineWithResponder(t *testing.T, hook func(string), respond func(http.ResponseWriter, *http.Request, string) bool) (*Engine, Plan, *bool, *bool, *int, *string) {
 	t.Helper()
 	exists, running := false, false
 	creates := 0
@@ -35,6 +39,9 @@ func fakeEngineWithHook(t *testing.T, hook func(string)) (*Engine, Plan, *bool, 
 		path := strings.TrimPrefix(r.URL.Path, "/v1.52")
 		if hook != nil {
 			hook(path)
+		}
+		if respond != nil && respond(w, r, path) {
+			return
 		}
 		switch {
 		case path == "/_ping":
@@ -80,6 +87,34 @@ func fakeEngineWithHook(t *testing.T, hook func(string)) (*Engine, Plan, *bool, 
 	return e, p, &exists, &running, &creates, &daemon
 }
 
+func TestBrokerImageAuthorizationPrecedesActualPull(t *testing.T) {
+	pulls := 0
+	e, p, _, _, _, _ := fakeEngineWithResponder(t, nil, func(w http.ResponseWriter, r *http.Request, path string) bool {
+		if strings.HasPrefix(path, "/networks/") {
+			_ = json.NewEncoder(w).Encode(map[string]any{"Id": "approved-network", "Driver": "bridge", "Scope": "local"})
+			return true
+		}
+		if r.Method == http.MethodGet && strings.HasPrefix(path, "/images/") {
+			http.Error(w, `{"message":"absent"}`, 404)
+			return true
+		}
+		if r.Method == http.MethodPost && path == "/images/create" {
+			pulls++
+			http.Error(w, `{"message":"test pull refused"}`, 500)
+			return true
+		}
+		return false
+	})
+	p.HostConfig.NetworkMode = "approved-network"
+	denied := errors.New("current authority revoked")
+	if err := e.PrepareImageAuthorized(t.Context(), p, func() error { return denied }); !errors.Is(err, denied) || pulls != 0 {
+		t.Fatalf("pull bypassed authorization: %v, pulls=%d", err, pulls)
+	}
+	if err := e.PrepareImageAuthorized(t.Context(), p, nil); !errors.Is(err, ErrConflict) || pulls != 0 {
+		t.Fatal("nil authorization allowed pull")
+	}
+}
+
 func TestLostCreateReplyAdoptsWithoutCreatingOrStartingAgain(t *testing.T) {
 	e, p, _, running, creates, _ := fakeEngine(t)
 	claims := 0
@@ -96,6 +131,30 @@ func TestLostCreateReplyAdoptsWithoutCreatingOrStartingAgain(t *testing.T) {
 	}
 	if _, err = e.Start(context.Background(), o.ID, p, func() error { return nil }); err != nil || !*running {
 		t.Fatal(err)
+	}
+}
+
+func TestHistoricalPlanCanInspectButCannotPrepareCreateOrStart(t *testing.T) {
+	requests := 0
+	e, p, exists, running, creates, _ := fakeEngineWithHook(t, func(string) { requests++ })
+	p.RecoveryOnly = true
+	*exists = true
+	called := false
+	authorize := func() error { called = true; return nil }
+	if err := e.PrepareImage(t.Context(), p); !errors.Is(err, ErrRecoveryPlan) {
+		t.Fatal("historical image preparation accepted", err)
+	}
+	if _, err := e.Ensure(t.Context(), p, authorize); !errors.Is(err, ErrRecoveryPlan) {
+		t.Fatal("historical create accepted", err)
+	}
+	if _, err := e.Start(t.Context(), p.Name, p, authorize); !errors.Is(err, ErrRecoveryPlan) {
+		t.Fatal("historical start accepted", err)
+	}
+	if requests != 0 || called || *running || *creates != 0 {
+		t.Fatal("historical launch touched the runtime or creation authority")
+	}
+	if object, err := e.Inspect(t.Context(), p.Name, p); err != nil || object.State != "prepared" {
+		t.Fatal("historical inspection blocked", object, err)
 	}
 }
 
@@ -116,6 +175,40 @@ func TestOwnershipAndRestartDriftPreventMutation(t *testing.T) {
 	}
 }
 
+func TestCgroupParentDriftFences(t *testing.T) {
+	for _, example := range []struct{ name, parent string }{{"missing", ""}, {"foreign", "system.slice"}} {
+		t.Run(example.name, func(t *testing.T) {
+			e, p, exists, _, _, _ := fakeEngine(t)
+			*exists = true
+			actual := p.HostConfig
+			expected := *actual
+			p.HostConfig = &expected
+			p.HostConfig.CgroupParent = "neticora-runnerd-e" + strings.Repeat("a", 64) + ".slice"
+			actual.CgroupParent = example.parent
+			if _, err := e.Inspect(t.Context(), p.Name, p); !errors.Is(err, ErrConflict) {
+				t.Fatal("foreign or missing host boundary adopted", err)
+			}
+			called := false
+			if _, err := e.Start(t.Context(), p.Name, p, func() error { called = true; return nil }); !errors.Is(err, ErrConflict) {
+				t.Fatal("foreign boundary allowed launch", err)
+			}
+			if called {
+				t.Fatal("drift reached launch authorization")
+			}
+			if err := e.Remove(t.Context(), p.Name, p); !errors.Is(err, ErrConflict) {
+				t.Fatal("foreign boundary allowed destructive mutation", err)
+			}
+		})
+	}
+}
+
+func TestMissingHostCgroupDriverCannotFallBackForKata(t *testing.T) {
+	e, _, _, _, _, _ := fakeEngine(t)
+	if err := e.CheckKataHostCgroupDriver(t.Context()); !errors.Is(err, ErrConflict) {
+		t.Fatal("missing systemd/cgroup-v2 evidence accepted", err)
+	}
+}
+
 func TestEndpointChangeInvalidatesContinuity(t *testing.T) {
 	e, _, _, _, _, daemon := fakeEngine(t)
 	lost := 0
@@ -131,5 +224,45 @@ func TestEndpointChangeInvalidatesContinuity(t *testing.T) {
 	second, err := e.Probe(context.Background())
 	if err != nil || first == second {
 		t.Fatal("replacement retained old binding", err)
+	}
+}
+
+func TestImagePreparationRecoveryCannotPullOrCreate(t *testing.T) {
+	for _, mode := range []string{"present", "absent", "substituted"} {
+		t.Run(mode, func(t *testing.T) {
+			var plan Plan
+			mutations := 0
+			e, p, _, _, _, _ := fakeEngineWithResponder(t, nil, func(w http.ResponseWriter, r *http.Request, path string) bool {
+				if r.Method != http.MethodGet && r.Method != http.MethodHead {
+					mutations++
+					http.Error(w, "mutation forbidden", 500)
+					return true
+				}
+				if strings.HasPrefix(path, "/networks/") {
+					_ = json.NewEncoder(w).Encode(map[string]any{"Id": "approved-network", "Driver": "bridge", "Scope": "local"})
+					return true
+				}
+				if strings.HasPrefix(path, "/images/") {
+					if mode == "absent" {
+						http.Error(w, `{"message":"absent"}`, 404)
+						return true
+					}
+					digest := plan.Config.Image
+					if mode == "substituted" {
+						digest = "other@sha256:" + strings.Repeat("c", 64)
+					}
+					_ = json.NewEncoder(w).Encode(map[string]any{"Id": "sha256:" + strings.Repeat("b", 64), "Os": "linux", "Architecture": "amd64", "RepoDigests": []string{digest}, "Config": map[string]any{"Labels": plan.Config.Labels}})
+					return true
+				}
+				return false
+			})
+			p.HostConfig.NetworkMode = "approved-network"
+			p.Config.Labels[LabelPrefix+"template"] = "approved-template"
+			plan = p
+			err := e.ObservePreparedImage(t.Context(), p)
+			if (mode == "present") != (err == nil) || mutations != 0 {
+				t.Fatalf("unsafe observation: mode=%s error=%v mutations=%d", mode, err, mutations)
+			}
+		})
 	}
 }

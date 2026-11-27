@@ -9,8 +9,10 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"net/http"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -157,5 +159,68 @@ func TestRecoveryHoldNeverAuthorizesMutation(t *testing.T) {
 	}
 	if !e.readOnly {
 		t.Fatal("recovery approval enabled normal mutations")
+	}
+}
+
+func TestRecoveryNetworkDetachmentUsesExactBridgeOnCurrentPeer(t *testing.T) {
+	network := strings.Repeat("d", 64)
+	resource := strings.Repeat("c", 64)
+	for _, tc := range []struct {
+		name      string
+		status    int
+		body      string
+		want      error
+		peerDrift bool
+	}{
+		{name: "bridge gone", status: http.StatusNotFound},
+		{name: "detached from bridge", status: http.StatusOK, body: `{"Id":"` + network + `","Containers":{}}`},
+		{name: "attached to bridge", status: http.StatusOK, body: `{"Id":"` + network + `","Containers":{"` + resource + `":{}}}`, want: ErrConflict},
+		{name: "different bridge", status: http.StatusOK, body: `{"Id":"other"}`, want: ErrConflict},
+		{name: "Docker unavailable", status: http.StatusInternalServerError, want: ErrUnavailable},
+		{name: "peer changed after absence", status: http.StatusNotFound, peerDrift: true, want: ErrUnavailable},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var inspected atomic.Bool
+			e, _, _, _, _, _ := fakeEngineWithResponder(t, nil, func(w http.ResponseWriter, r *http.Request, path string) bool {
+				if r.Method != http.MethodGet || path != "/networks/"+network {
+					return false
+				}
+				inspected.Store(true)
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.body))
+				return true
+			})
+			if err := e.VerifyStandaloneRecoveryNetworkDetached(t.Context(), resource, network); !errors.Is(err, ErrRecoveryApprovalRequired) {
+				t.Fatal("writable peer accepted recovery check", err)
+			}
+			e.readOnly = true
+			if err := e.VerifyStandaloneRecoveryNetworkDetached(t.Context(), resource, "bridge"); !errors.Is(err, ErrConflict) {
+				t.Fatal("bridge alias accepted", err)
+			}
+			if err := e.VerifyStandaloneRecoveryNetworkDetached(t.Context(), "container", network); !errors.Is(err, ErrConflict) {
+				t.Fatal("container alias accepted", err)
+			}
+			if tc.peerDrift {
+				e.observePeer = func(context.Context, string) (string, error) {
+					if inspected.Load() {
+						return "other-peer", nil
+					}
+					return "qualified-direct-dockerd-peer", nil
+				}
+			}
+			if err := e.VerifyStandaloneRecoveryNetworkDetached(t.Context(), resource, network); !errors.Is(err, tc.want) {
+				t.Fatalf("got %v, want %v", err, tc.want)
+			}
+		})
+	}
+	e, _, _, _, _, _ := fakeEngineWithResponder(t, nil, func(w http.ResponseWriter, _ *http.Request, path string) bool {
+		if path != "/networks/"+network {
+			return false
+		}
+		w.WriteHeader(http.StatusNotFound)
+		return true
+	})
+	if err := e.VerifyNetworkDetached(t.Context(), resource, network); !errors.Is(err, ErrUnavailable) {
+		t.Fatal("ordinary cleanup accepted missing bridge", err)
 	}
 }

@@ -27,7 +27,7 @@ var migrations embed.FS
 
 const databaseName = "journal.db"
 const anchorName = "recovery.anchor.json"
-const schemaVersion = 3
+const schemaVersion = 4
 
 type Options struct {
 	// Zero values select conservative defaults, never unlimited growth.
@@ -83,6 +83,7 @@ type SQLiteStore struct {
 	fences               *Store
 	db                   *sql.DB
 	dir                  string
+	databaseFile         os.FileInfo
 	options              Options
 	gate                 chan struct{}
 	maintenanceMu        sync.Mutex
@@ -170,6 +171,12 @@ func OpenRecovery(ctx context.Context, path string, options Options) (_ *SQLiteS
 		}
 		var version int
 		e = probe.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version)
+		var cacheTables int
+		if e == nil && version == 4 {
+			// The separate execution-storage history also used version 4.
+			// Identify the Kata migration before opening the journal for writes.
+			e = probe.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_schema WHERE type = 'table' AND name IN ('kata_cache_volumes', 'kata_cache_heads')").Scan(&cacheTables)
+		}
 		closeErr := probe.Close()
 		if e != nil || closeErr != nil {
 			return nil, agent.ErrStoreUnavailable
@@ -177,6 +184,13 @@ func OpenRecovery(ctx context.Context, path string, options Options) (_ *SQLiteS
 		if version < 1 || version > schemaVersion {
 			return nil, errors.New("unsupported recovery schema; preserve database")
 		}
+		if version == 4 && cacheTables != 2 {
+			return nil, errors.New("version 4 journal lacks the Kata cache schema; preserve database")
+		}
+	}
+	s.databaseFile, err = os.Lstat(filepath.Join(path, databaseName))
+	if err != nil {
+		return nil, err
 	}
 	q := url.Values{"mode": {"rw"}, "_txlock": {"immediate"}, "_pragma": {
 		"busy_timeout(5000)", "journal_mode(WAL)", "synchronous(FULL)", "foreign_keys(ON)",
@@ -260,7 +274,7 @@ func (s *SQLiteStore) migrate(ctx context.Context, fresh bool) error {
 	}
 	defer tx.Rollback()
 	for next := version + 1; next <= schemaVersion; next++ {
-		name := map[int]string{1: "migrations/001_initial.sql", 2: "migrations/002_peer_recovery.sql", 3: "migrations/003_peer_recovery_completion.sql"}[next]
+		name := map[int]string{1: "migrations/001_initial.sql", 2: "migrations/002_peer_recovery.sql", 3: "migrations/003_peer_recovery_completion.sql", 4: "migrations/004_kata_cache.sql"}[next]
 		raw, e := migrations.ReadFile(name)
 		if e != nil {
 			return e
@@ -516,6 +530,29 @@ func (s *SQLiteStore) requireScope(scope agent.StoreScope) error {
 
 func (s *SQLiteStore) reconciled() bool {
 	return s.ready && s.reconciledGeneration == s.runtimeGeneration.Load() && fresh(s.inventoryObservedAt)
+}
+
+// StorageJournalID returns the pinned identity only while the opened journal and
+// its on-disk anchor still agree. A new journal at the old path has a new ID.
+func (s *SQLiteStore) StorageJournalID(ctx context.Context) (string, error) {
+	_, release, err := s.acquire(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer release()
+	if s.failed.Load() || s.anchorUncertain || s.checkFiles() != nil {
+		return "", agent.ErrRecoveryRequired
+	}
+	current, err := os.Lstat(filepath.Join(s.dir, databaseName))
+	if err != nil || !os.SameFile(s.databaseFile, current) {
+		return "", agent.ErrRecoveryRequired
+	}
+	raw, err := s.fences.root.ReadFile(anchorName)
+	var durable anchor
+	if err != nil || len(raw) > 4096 || json.Unmarshal(raw, &durable) != nil || durable != s.anchor {
+		return "", agent.ErrRecoveryRequired
+	}
+	return durable.JournalID, nil
 }
 
 func (s *SQLiteStore) Health(ctx context.Context) agent.StoreHealth {

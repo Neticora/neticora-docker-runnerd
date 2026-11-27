@@ -1,6 +1,6 @@
 {
   "formatVersion": 1,
-  "protocolVersion": "1.0.0",
+  "protocolVersion": "2.0.0",
   "files": [
     {
       "path": "canonicalization.json",
@@ -24,7 +24,7 @@
     },
     {
       "path": "validation.json",
-      "sha256": "21022f4254e64c31be9cd4da75715ca0d9340daced0c15c1a8fc0ed60382a86b"
+      "sha256": "5c9e0737213dc354a8ee5ea31b3ad55236f31be373076c17d22d0f3a62f3ef49"
     }
   ]
 }

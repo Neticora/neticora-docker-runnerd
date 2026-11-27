@@ -21,18 +21,24 @@ func main() {
 	}
 }
 func run() error {
-	socket := flag.String("socket", "/run/neticora-runnerd/control.sock", "local control socket")
+	socket := flag.String("socket", "/run/neticora-runnerd-kata/control.sock", "local control socket")
 	afterID := flag.String("after-execution", "", "exclusive execution diagnostic cursor")
 	afterGeneration := flag.String("after-generation", "", "execution diagnostic generation cursor")
+	executionID := flag.String("execution", "", "exact execution ID for trusted Kata evidence")
+	generation := flag.String("generation", "", "exact generation for trusted Kata evidence")
 	flag.Parse()
 	if flag.NArg() != 1 {
-		return errors.New("usage: runnerctl [--socket PATH] status|doctor|capabilities|executions|drain")
+		return errors.New("usage: runnerctl [--socket PATH] [--execution ID --generation N] status|doctor|capabilities|executions|kata-evidence|drain|resume")
 	}
 	command := flag.Arg(0)
 	method := http.MethodGet
 	switch command {
 	case "status", "doctor", "capabilities", "executions":
-	case "drain":
+	case "kata-evidence":
+		if *executionID == "" || *generation == "" {
+			return errors.New("exact execution and generation required")
+		}
+	case "drain", "resume":
 		method = http.MethodPost
 	default:
 		return errors.New("unsupported administrative command")
@@ -41,11 +47,19 @@ func run() error {
 		return (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, "unix", *socket)
 	}, DisableCompression: true}
 	defer transport.CloseIdleConnections()
-	client := &http.Client{Transport: transport, Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	timeout := 5 * time.Second
+	if command == "kata-evidence" {
+		timeout = 15 * time.Second
+	}
+	client := &http.Client{Transport: transport, Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	query := url.Values{}
 	if command == "executions" {
 		query.Set("afterExecutionId", *afterID)
 		query.Set("afterGeneration", *afterGeneration)
+	}
+	if command == "kata-evidence" {
+		query.Set("executionId", *executionID)
+		query.Set("generation", *generation)
 	}
 	req, _ := http.NewRequest(method, "http://localhost/"+command+"?"+query.Encode(), nil)
 	response, err := client.Do(req)

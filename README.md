@@ -7,21 +7,19 @@ Runnerd is designed to connect customer-managed hosts to Neticora and manage the
 local lifecycle of ephemeral CI runners, while keeping execution subject to
 customer-defined policy.
 
+For manual registration with a pool enrollment token from the UI, see
+[Manual testing](docs/MANUAL-TEST.md). Candidate archives include `runnerd-enroll`
+and a hidden-prompt wrapper; enrollment does not grant execution admission.
+
 ## Project status
 
-Runnerd is under active development. This repository currently contains the
-versioned host protocol, Go SDK, a SQLite recovery store with a durable event
-outbox, and an experimental opt-in Linux Standard GitHub controller.
-Existing configurations remain drained. Execution requires explicit local
-configuration, independent image trust and authenticated platform authorization.
-An offline verification foundation checks signed update artifacts against
-independently provisioned trust. Production installation and runner execution are
-not yet supported.
-
-Runnerd07 separates Docker mechanics, a trusted process-only profile, and durable
-reconciliation. See Alpha's `docs/runnerd/RUNNERD07-LINUX-GITHUB.md` for the exact
-configuration, protected JIT handoff, cleanup contract and remaining live gates.
-No production tuple or Docker live-restore guarantee is implied.
+Runnerd 09 runs GitHub jobs in individual Kata VMs on Linux AMD64. The
+trusted host service uses the local Docker socket directly. The guest runs
+its own Docker and BuildKit, with execution storage and sticky cache managed
+by the host. Host protocol 2.0.0 requires a fresh enrollment and journal.
+Execution requires a signed qualification, local policy and authenticated
+platform authorization. See [Standalone installation](docs/STANDALONE-INSTALL.md)
+and [Sandbox cleanup](docs/SANDBOX-CLEANUP.md).
 
 Runnerd08 keeps each Docker adapter bound to its first verified endpoint and
 checks continuity again after inspections and before mutation. A replacement
@@ -184,8 +182,8 @@ remain separate milestones. See Alpha's `docs/runnerd/RUNNERD05-DISPATCH.md`.
 
 # Runnerd05 creation fence
 
-The repository declares Go 1.26 and pins the Go 1.27.3 toolchain. Contract CI
-installs Go 1.27.3 with `GOTOOLCHAIN=local`; its root-module compile, race tests and
+The repository declares Go 1.26 and pins the Go 1.27.4 toolchain. Contract CI
+installs Go 1.27.4 with `GOTOOLCHAIN=local`; its root-module compile, race tests and
 build include both `journal` and `transport`. This supports `crypto/hkdf` and
 `os.Root`; Go 1.23 is below the repository's supported version.
 

@@ -463,7 +463,7 @@ func TestPeerRecoveryDiagnosticNeedsNoIdentityAndCannotBecomeApproval(t *testing
 	if err = store.Close(); err != nil {
 		t.Fatal(err)
 	}
-	result, err := AdministrativePeerRecovery(context.Background(), config.Config{StateDir: dir, RuntimeEndpoint: "unix:///nonexistent/runnerd-recovery-test.sock", CredentialFile: "/nonexistent/identity.json"}, "diagnose", "", "")
+	result, err := diagnosePeerRecovery(context.Background(), config.Config{StateDir: dir, RuntimeEndpoint: "unix:///nonexistent/runnerd-recovery-test.sock", CredentialFile: "/nonexistent/identity.json"})
 	if err != nil {
 		t.Fatal("offline diagnostic required a credential", err)
 	}

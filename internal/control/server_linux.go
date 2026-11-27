@@ -34,6 +34,28 @@ type drainAction struct{ run func() error }
 
 func (s *Server) SetDurableDrain(action func() error) { s.drainAction.run = action }
 
+// ExposeResume only clears a local administrative fence. The service must
+// independently check recovery and runtime continuity; this grants no execution
+// authority and never repairs or replaces identity or journal records.
+func (s *Server) ExposeResume(action func(context.Context) error, audit func(string)) {
+	s.mux.HandleFunc("POST /resume", func(w http.ResponseWriter, r *http.Request) {
+		uid, ok := r.Context().Value(peerKey{}).(uint32)
+		if !ok || (uid != 0 && int(uid) != os.Geteuid()) {
+			audit("resume rejected")
+			http.Error(w, "administrative permission required", http.StatusForbidden)
+			return
+		}
+		if err := action(r.Context()); err != nil {
+			audit("resume refused; admission remains fenced")
+			http.Error(w, "resume refused; recovery and runtime checks required", http.StatusServiceUnavailable)
+			return
+		}
+		audit("resume accepted")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+	})
+}
+
 // Listen uses a service-owned directory and never removes an existing socket.
 // Stale sockets require explicit operator inspection, not a destructive reset.
 func Listen(path string, snapshot func() Snapshot, drain func(), audit func(string)) (*Server, error) {
@@ -105,6 +127,40 @@ func (s *Server) ExposeExecutions(list func(context.Context, string, string) (an
 		value, err := list(r.Context(), r.URL.Query().Get("afterExecutionId"), r.URL.Query().Get("afterGeneration"))
 		if err != nil {
 			http.Error(w, "recovery diagnostic unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(value)
+	})
+}
+
+// Qualification diagnostics have the same owner/root boundary as journal export;
+// ordinary status observers and guest workloads cannot request host signatures.
+func (s *Server) ExposeKataEvidence(read func(context.Context, string, string) (any, error)) {
+	s.mux.HandleFunc("GET /kata-evidence", func(w http.ResponseWriter, r *http.Request) {
+		uid, ok := r.Context().Value(peerKey{}).(uint32)
+		if !ok || (uid != 0 && int(uid) != os.Geteuid()) {
+			http.Error(w, "administrative permission required", http.StatusForbidden)
+			return
+		}
+		query := r.URL.Query()
+		id, generation := query.Get("executionId"), query.Get("generation")
+		if len(query) != 2 || len(query["executionId"]) != 1 || len(query["generation"]) != 1 || len(id) < 1 || len(id) > 256 || len(generation) < 1 || len(generation) > 20 {
+			http.Error(w, "explicit execution scope required", http.StatusBadRequest)
+			return
+		}
+		// Fresh physical absence checks can outlast ordinary status requests.
+		// Extend only this authorized read, never execution or cleanup deadlines.
+		if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(12 * time.Second)); err != nil {
+			http.Error(w, "trusted Kata evidence unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		value, err := read(ctx, id, generation)
+		if err != nil {
+			http.Error(w, "trusted Kata evidence unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		w.Header().Set("Cache-Control", "no-store")

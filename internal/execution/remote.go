@@ -78,6 +78,7 @@ type HostRemote struct {
 	PolicyGeneration func() string
 	Version          string
 	CheckTransport   func() error
+	StorageReady     func(context.Context) bool
 	mu               sync.Mutex
 	token            string
 	expires          time.Time
@@ -206,9 +207,12 @@ func (r *HostRemote) Heartbeat(ctx context.Context, generation string) error {
 		return e
 	}
 	capabilities := r.Capabilities
+	if r.StorageReady != nil {
+		capabilities.HardStorageLimit = capabilities.HardStorageLimit && r.StorageReady(ctx)
+	}
 	capabilities.ObservedAt = time.Now().UTC().Format(wireTime)
 	capabilities.ProbeGeneration = generation
-	m, e := protocol.EncodeValidated("HostHeartbeat", map[string]any{"identity": r.Credentials.Identity, "agentVersion": r.Version, "protocolVersion": "1.0.0", "inventoryGeneration": generation, "effectivePolicyGeneration": r.PolicyGeneration(), "capabilities": capabilities})
+	m, e := protocol.EncodeValidated("HostHeartbeat", map[string]any{"identity": r.Credentials.Identity, "agentVersion": r.Version, "protocolVersion": "2.0.0", "inventoryGeneration": generation, "effectivePolicyGeneration": r.PolicyGeneration(), "capabilities": capabilities})
 	if e != nil {
 		return e
 	}
@@ -232,4 +236,28 @@ func (r *HostRemote) PeerRecovery(ctx context.Context, id string, complete bool)
 		return nil, err
 	}
 	return r.Client.Post(ctx, "/me/recovery", token, request, "PeerRecoveryAuthorization")
+}
+
+func (r *HostRemote) KataCacheDecision(ctx context.Context, cursor agent.ExecutionCursor) (string, error) {
+	token, err := r.credential(ctx)
+	if err != nil {
+		return "", err
+	}
+	return r.Client.KataCacheDecision(ctx, token, cursor.ExecutionID, cursor.Generation)
+}
+
+func (r *HostRemote) ReportKataCache(ctx context.Context, repository, profile string, warm bool) error {
+	token, err := r.credential(ctx)
+	if err != nil {
+		return err
+	}
+	return r.Client.ReportKataCache(ctx, token, repository, profile, warm)
+}
+
+func (r *HostRemote) KataCacheAccess(ctx context.Context, cursor agent.ExecutionCursor) (bool, error) {
+	token, err := r.credential(ctx)
+	if err != nil {
+		return false, err
+	}
+	return r.Client.KataCacheAccess(ctx, token, cursor.ExecutionID, cursor.Generation)
 }

@@ -1,0 +1,52 @@
+name: Runnerd09 Native Qualification
+on:
+  workflow_call:
+  workflow_dispatch:
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  native-regressions:
+    name: Required Linux native coverage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-contract
+      - name: Require compiler, namespaces and actual native passes
+        env:
+          TMPDIR: /var/tmp
+        # Use a private PID namespace so the native scanners encounter the
+        # full stress fixture without unrelated processes from the runner VM.
+        run: |
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          test ! -e /etc/neticora-runnerd-lab
+          sudo install -m 0644 /dev/null /etc/neticora-runnerd-lab
+          output="$RUNNER_TEMP/runnerd09-native"
+          trap 'sudo rm -f /etc/neticora-runnerd-lab; if [ -d "$output" ]; then sudo chown -R "$(id -u):$(id -g)" "$output"; fi' EXIT
+          sudo systemd-run --wait --pipe --collect \
+            --property=RuntimeMaxSec=10min --property=CPUQuota=400% --property=KillMode=control-group \
+            --working-directory="$GITHUB_WORKSPACE" \
+            /usr/bin/env "PATH=$PATH" "GOMODCACHE=$(go env GOMODCACHE)" \
+            "GOCACHE=$RUNNER_TEMP/runnerd09-go-cache" GOTOOLCHAIN=local \
+            TMPDIR=/var/tmp \
+            unshare --fork --pid --mount-proc \
+            bash .github/scripts/qualify-kata-native.sh "$output"
+      - name: Preserve complete native test output
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: runnerd09-native-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/runnerd09-native/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Scope of this qualification
+        if: always()
+        run: |
+          echo 'Native Linux regressions only. Live Kata/QEMU attachment, signed host qualification and the installed standalone lifecycle remain independent gates.' >> "$GITHUB_STEP_SUMMARY"

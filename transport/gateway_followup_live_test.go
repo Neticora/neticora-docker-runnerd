@@ -164,7 +164,7 @@ func TestLiveGatewayHeartbeatRotation(t *testing.T) {
 	}
 	platform := map[string]any{"os": runtime.GOOS, "architecture": runtime.GOARCH, "build": "qualification-no-runtime-probed"}
 	payload := map[string]any{
-		"identity": enrolled.Identity, "agentVersion": "runnerd04-sdk-qualification", "protocolVersion": "1.0.0",
+		"identity": enrolled.Identity, "agentVersion": "runnerd04-sdk-qualification", "protocolVersion": "2.0.0",
 		"inventoryGeneration": "1", "effectivePolicyGeneration": config.Policy.Generation,
 		"capabilities": map[string]any{"host": platform, "engine": platform, "endpointIdentity": "qualification-unprobed",
 			"runtimeVersion": "unprobed", "runtimeMechanism": "unprobed", "configurationGeneration": "1", "probeGeneration": "1",

@@ -207,7 +207,7 @@ func TestInFlightCancellationIsBoundedAndRedacted(t *testing.T) {
 }
 
 func TestGatewayEnrollmentAndConfigTransport(t *testing.T) {
-	config := `{"admissionEnabled":false,"protocol":{"version":"1.0.0","minimumRecoveryVersion":"1.0.0","minimumAdmissionVersion":"1.0.0"},"policy":{"generation":"1","allowedTrustClasses":[],"allowedProfiles":[],"limits":{"cpuMillis":"0","memoryBytes":"0","storageBytes":"0","slots":"0"}}}`
+	config := `{"admissionEnabled":false,"protocol":{"version":"2.0.0","minimumRecoveryVersion":"2.0.0","minimumAdmissionVersion":"2.0.0"},"policy":{"generation":"1","allowedTrustClasses":[],"allowedProfiles":[],"limits":{"cpuMillis":"0","memoryBytes":"0","storageBytes":"0","slots":"0"}}}`
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/me/config" {
 			if r.Method != "GET" || r.Header.Get("Authorization") != "Bearer secret" {
@@ -237,5 +237,58 @@ func TestGatewayEnrollmentAndConfigTransport(t *testing.T) {
 	}
 	if _, err := client.Config(context.Background(), ""); err == nil {
 		t.Fatal("config accepted no credential")
+	}
+}
+
+func TestKataCacheDecisionAndCanonicalPresence(t *testing.T) {
+	responses := []string{`{"decision":"success"}`, `{"decision":"pending"}`,
+		`{"decision":"success","extra":true}`, `{"decision":"success","decision":"discard"}`, `{"accepted":true}`}
+	var requests atomic.Int32
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		index := int(requests.Add(1)) - 1
+		if index >= len(responses) {
+			http.Error(w, "unexpected", http.StatusBadRequest)
+			return
+		}
+		wantPath := "/me/cache/decision"
+		wantBody := `{"entries":[{"executionId":"run-a","generation":"2"}]}`
+		if index == len(responses)-1 {
+			wantPath = "/me/cache/presence"
+			wantBody = `{"profile":"profile-a","repository":"org/repo","warm":true}`
+		}
+		raw, err := io.ReadAll(r.Body)
+		if err != nil || r.Method != http.MethodPost || r.URL.Path != wantPath ||
+			r.Header.Get("Authorization") != "Bearer test-token" || string(raw) != wantBody {
+			t.Errorf("unexpected cache request at %s: %s %v", r.URL.Path, raw, err)
+		}
+		_, _ = w.Write([]byte(responses[index]))
+	}))
+	defer server.Close()
+	client := trustedClient(t, server)
+	for _, want := range []string{"success", "pending", "", ""} {
+		got, err := client.KataCacheDecision(t.Context(), "test-token", "run-a", "2")
+		if got != want || (want == "") != (err != nil) {
+			t.Fatalf("decision %q, error %v, want %q", got, err, want)
+		}
+	}
+	if err := client.ReportKataCache(t.Context(), "test-token", "org/repo", "profile-a", true); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestKataCacheAuthorizationDoesNotExposePrivateResponse(t *testing.T) {
+	t.Parallel()
+	const payload = "private-provider-response"
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, payload, http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+	allowed, err := trustedClient(t, server).KataCacheAccess(t.Context(), "unused-private-bearer", "run-a", "2")
+	kind, status := RequestFailureDetails(err)
+	if allowed || err == nil || kind != "http-status" || status != http.StatusServiceUnavailable {
+		t.Fatalf("authorization did not fail closed: allowed=%t kind=%s status=%d", allowed, kind, status)
+	}
+	if strings.Contains(err.Error(), payload) || strings.Contains(err.Error(), "unused-private-bearer") {
+		t.Fatal("cache authorization returned private data")
 	}
 }

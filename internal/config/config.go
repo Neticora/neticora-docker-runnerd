@@ -10,11 +10,13 @@ import (
 	"time"
 
 	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
+	"github.com/Neticora/neticora-docker-runnerd/internal/stickycache"
 )
 
 const MaxConfigBytes = 65536
 
 type Config struct {
+	SourceFile            string     `json:"-"`
 	ControlPlaneURL       string     `json:"controlPlaneUrl"`
 	StateDir              string     `json:"stateDir"`
 	RuntimeEndpoint       string     `json:"runtimeEndpoint"`
@@ -26,6 +28,7 @@ type Config struct {
 // Execution is an explicit operator opt-in. Old foundation configurations remain
 // drained and never open Docker or contact the platform.
 type Execution struct {
+	Kata                *Kata  `json:"kata,omitempty"`
 	Repository          string `json:"repository"`
 	CustomCAFile        string `json:"customCaFile,omitempty"`
 	Enabled             bool   `json:"enabled"`
@@ -42,6 +45,18 @@ type Execution struct {
 	Pool                string `json:"pool"`
 	PidsLimit           int64  `json:"pidsLimit"`
 	MinRuntimeFreeBytes uint64 `json:"minRuntimeFreeBytes,omitempty"`
+}
+
+// Kata uses an independently signed and protected host descriptor. Legacy
+// values remain decodable for administrative recovery.
+type Kata struct {
+	StickyCache               *stickycache.Policy `json:"stickyCache,omitempty"`
+	QualificationBindingFile  string              `json:"qualificationBindingFile,omitempty"`
+	QualificationAuthorityPin string              `json:"qualificationAuthorityPin,omitempty"`
+	ObserverSocket            string              `json:"observerSocket"`
+	ProfileFile               string              `json:"profileFile"`
+	PublicKeyFile             string              `json:"publicKeyFile"`
+	EvidenceDirectory         string              `json:"evidenceDirectory"`
 }
 
 func Parse(data []byte) (Config, error) {
@@ -79,6 +94,40 @@ func Parse(data []byte) (Config, error) {
 		return Config{}, errors.New("request timeout must be between 1 and 60 seconds")
 	}
 	if x := c.Execution; x != nil && x.Enabled {
+		if x.Kata != nil {
+			q := x.Kata
+			if q.StickyCache != nil && (!q.StickyCache.Valid() || q.ObserverSocket != "") {
+				return Config{}, errors.New("standalone Kata requires direct Docker and a valid thin pool")
+			}
+			if q.QualificationBindingFile != "" || q.QualificationAuthorityPin != "" {
+				if q.StickyCache == nil || !filepath.IsAbs(q.QualificationBindingFile) || filepath.Clean(q.QualificationBindingFile) != q.QualificationBindingFile || len(q.QualificationAuthorityPin) != 64 || strings.ContainsAny(q.QualificationAuthorityPin, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
+					return Config{}, errors.New("lab qualification requires a protected binding and authority pin")
+				}
+				for _, c := range q.QualificationAuthorityPin {
+					if !strings.ContainsRune("0123456789abcdef", c) {
+						return Config{}, errors.New("invalid qualification authority pin")
+					}
+				}
+			}
+			paths := []string{x.Kata.ProfileFile, x.Kata.PublicKeyFile, x.Kata.EvidenceDirectory}
+			if x.Kata.QualificationBindingFile != "" {
+				paths = append(paths, x.Kata.QualificationBindingFile)
+			}
+			if q.StickyCache == nil {
+				paths = append(paths, x.Kata.ObserverSocket)
+			}
+			for _, path := range paths {
+				if !filepath.IsAbs(path) || filepath.Clean(path) != path {
+					return Config{}, errors.New("Kata paths must be protected absolute paths")
+				}
+				for _, exposed := range []string{c.StateDir, x.BootstrapRoot} {
+					rel, e := filepath.Rel(exposed, path)
+					if e != nil || rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))) {
+						return Config{}, errors.New("Kata trust/evidence must remain outside journal and guest handoff")
+					}
+				}
+			}
+		}
 		if x.MinRuntimeFreeBytes != 0 && x.MinRuntimeFreeBytes < 64<<20 {
 			return Config{}, errors.New("runtime storage headroom must be at least 64 MiB")
 		}
@@ -89,6 +138,14 @@ func Parse(data []byte) (Config, error) {
 			rel, e := filepath.Rel(x.BootstrapRoot, private)
 			if e != nil || rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))) {
 				return Config{}, errors.New("host credentials, policy and trust must remain outside bootstrap mounts")
+			}
+		}
+		if x.Kata != nil {
+			healthRoot := x.BootstrapRoot + "-health"
+			for _, private := range []string{c.StateDir, c.CredentialFile, x.BootstrapRoot, x.KeysDirectory, x.PolicyFile, x.CapabilitiesFile, x.TrustRoots, x.ImageBundles, x.CustomCAFile, x.Kata.ProfileFile, x.Kata.PublicKeyFile, x.Kata.EvidenceDirectory, x.Kata.ObserverSocket, x.Kata.QualificationBindingFile} {
+				if private != "" && (private == healthRoot || strings.HasPrefix(private, healthRoot+string(filepath.Separator)) || strings.HasPrefix(healthRoot, private+string(filepath.Separator))) {
+					return Config{}, errors.New("private state and trust must remain separate from guest health output")
+				}
 			}
 		}
 		repo := strings.Split(x.Repository, "/")
@@ -116,4 +173,14 @@ func Parse(data []byte) (Config, error) {
 	}
 	return c, nil
 }
+
+// StandaloneExecution is the only workload path available to the service.
+// Legacy lab configuration alone cannot select the installed service.
+func (c Config) StandaloneExecution() bool {
+	x := c.Execution
+	return x != nil && x.Enabled && x.Kata != nil &&
+		x.Kata.ObserverSocket == "" && x.Kata.StickyCache != nil && x.Kata.StickyCache.Valid() &&
+		c.RuntimeEndpoint == "unix:///run/docker.sock"
+}
+
 func (c Config) Timeout() time.Duration { return time.Duration(c.RequestTimeoutSeconds) * time.Second }

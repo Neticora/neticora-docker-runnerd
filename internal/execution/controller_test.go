@@ -106,6 +106,7 @@ func (f *fakeRuntime) Remove(context.Context, string, dockerengine.Plan) error {
 func (f *fakeRuntime) Watch(ctx context.Context, _ func()) error { <-ctx.Done(); return ctx.Err() }
 
 type fakeRemote struct {
+	tenant, host    string
 	expires         string
 	t               *testing.T
 	start           protocol.StartCommand
@@ -122,7 +123,11 @@ func (f *fakeRemote) Recovery(_ context.Context, lookups []agent.ExecutionCursor
 	if entries == nil {
 		entries = []protocol.RecoveryEntry{{ExecutionId: f.start.Spec.ExecutionId, Generation: f.start.Generation, CommandId: f.start.CommandId, SpecHash: f.start.Spec.SpecHash, ContiguousSequence: "0"}}
 	}
-	return protocol.RecoveryState{Identity: protocol.HostIdentity{HostId: "host-a", KeyId: "key-a", KeyVersion: "1", SessionEpoch: "1"}, EndpointIdentity: "engine-a", InventoryGeneration: f.inventory, Entries: entries}, nil
+	host := f.host
+	if host == "" {
+		host = "host-a"
+	}
+	return protocol.RecoveryState{Identity: protocol.HostIdentity{HostId: host, KeyId: "key-a", KeyVersion: "1", SessionEpoch: "1"}, EndpointIdentity: "engine-a", InventoryGeneration: f.inventory, Entries: entries}, nil
 }
 func (f *fakeRemote) Commands(context.Context) ([]json.RawMessage, error) { return nil, nil }
 func (f *fakeRemote) Ack(context.Context, agent.Receipt) error            { return nil }
@@ -157,7 +162,14 @@ func (f *fakeRemote) Start(_ context.Context, m protocol.Outbound) (protocol.Sta
 	peer, _ := ecdh.X25519().NewPublicKey(peerRaw)
 	private, _ := ecdh.X25519().GenerateKey(rand.Reader)
 	secret, _ := private.ECDH(peer)
-	envelope := map[string]any{"version": "runnerd05-sealed-v1", "tenantId": "tenant-a", "hostId": "host-a", "executionId": req.ExecutionId, "generation": req.Generation, "startRequestId": req.StartRequestId, "specHash": req.SpecHash, "expiresAt": expires, "recipient": *req.BootstrapPublicKey, "ephemeral": base64.RawURLEncoding.EncodeToString(private.PublicKey().Bytes())}
+	tenant, host := f.tenant, f.host
+	if tenant == "" {
+		tenant = "tenant-a"
+	}
+	if host == "" {
+		host = "host-a"
+	}
+	envelope := map[string]any{"version": "runnerd05-sealed-v1", "tenantId": tenant, "hostId": host, "executionId": req.ExecutionId, "generation": req.Generation, "startRequestId": req.StartRequestId, "specHash": req.SpecHash, "expiresAt": expires, "recipient": *req.BootstrapPublicKey, "ephemeral": base64.RawURLEncoding.EncodeToString(private.PublicKey().Bytes())}
 	raw, _ := json.Marshal(envelope)
 	aad, _ := protocol.CanonicalizeJSON(raw)
 	salt := sha256.Sum256(aad)

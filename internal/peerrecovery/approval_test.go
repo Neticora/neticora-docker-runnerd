@@ -236,3 +236,35 @@ func TestApprovalRejectsStaleObservationEvenWhenOperatorSignsAgain(t *testing.T)
 		}
 	}
 }
+
+func TestNeverStartedApprovalRequiresFencedResourceAbsence(t *testing.T) {
+	pub, key := testKey(t)
+	p := testPlan(t)
+	e := &p.Executions[0]
+	e.ObservedState, e.ObservedResourceId, e.OriginalRuntimeRef = "absent", nil, nil
+	e.CreationClaim, e.NativeState = "not-claimed", "accepted"
+	e.LastSequence, e.AckSequence = "0", "0"
+	e.PendingEvents = []protocol.PeerRecoveryEventReference{}
+	m := testApproval(t, p)
+	m.Decisions[0].Action = "verify-never-started"
+	if _, err := VerifyApproval(encodedApproval(t, m, key), pub, p, testNow); err != nil {
+		t.Fatal("exact never-started approval rejected", err)
+	}
+	for name, change := range map[string]func(*protocol.PeerRecoveryExecutionPlan){
+		"ambiguous": func(e *protocol.PeerRecoveryExecutionPlan) { e.CreationClaim = "ambiguous" },
+		"uncertain": func(e *protocol.PeerRecoveryExecutionPlan) { e.ObservedState = "unknown" },
+		"runtime":   func(e *protocol.PeerRecoveryExecutionPlan) { e.NativeState = "started" },
+		"sequence":  func(e *protocol.PeerRecoveryExecutionPlan) { e.LastSequence, e.AckSequence = "1", "1" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			bad := p
+			bad.Executions = append([]protocol.PeerRecoveryExecutionPlan(nil), p.Executions...)
+			change(&bad.Executions[0])
+			approval := testApproval(t, bad)
+			approval.Decisions[0].Action = "verify-never-started"
+			if _, err := VerifyApproval(encodedApproval(t, approval, key), pub, bad, testNow); !errors.Is(err, ErrApproval) {
+				t.Fatal("unsafe never-started approval accepted", err)
+			}
+		})
+	}
+}

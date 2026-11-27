@@ -279,7 +279,7 @@ func (s *SQLiteStore) CheckPeerRecoveryMutation(ctx context.Context, a *peerreco
 	if err != nil {
 		return err
 	}
-	if allowed == nil || allowed.Action == "hold" || allowed.Action == "replay-final-ack" {
+	if allowed == nil || allowed.Action == "hold" || allowed.Action == "replay-final-ack" || allowed.Action == "verify-never-started" {
 		return agent.ErrRecoveryRequired
 	}
 	return nil

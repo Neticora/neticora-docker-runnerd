@@ -338,7 +338,7 @@ func (s *SQLiteStore) record(ctx context.Context, scope agent.StoreScope, raw js
 	if operation != "observe" && operation != "never" && (doc.Observation == nil || (operation == "cleanup" && doc.Observation.State != "cleanup-pending") || (operation == "complete" && doc.Observation.State != "cleaned")) {
 		return agent.ErrConflict
 	}
-	return s.write(ctx, operation == "complete", false, func(ctx context.Context, tx *sql.Tx) error {
+	return s.write(ctx, operation == "complete" || operation == "never", false, func(ctx context.Context, tx *sql.Tx) error {
 		if err := s.requireScope(scope); err != nil {
 			return err
 		}
@@ -346,8 +346,14 @@ func (s *SQLiteStore) record(ctx context.Context, scope agent.StoreScope, raw js
 		if err != nil {
 			return err
 		}
-		if recovery != nil && (operation == "never" || recovery.Action == "replay-final-ack" || doc.Observation == nil || doc.Observation.State == "prepared" || doc.Observation.State == "running") {
-			return agent.ErrRecoveryRequired
+		if recovery != nil {
+			if recovery.Action == "verify-never-started" {
+				if operation != "never" {
+					return agent.ErrRecoveryRequired
+				}
+			} else if operation == "never" || recovery.Action == "replay-final-ack" || doc.Observation == nil || doc.Observation.State == "prepared" || doc.Observation.State == "running" {
+				return agent.ErrRecoveryRequired
+			}
 		}
 		var existingHash, existingID string
 		err = tx.QueryRowContext(ctx, "SELECT event_id,payload_hash FROM outbox_events WHERE execution_id=? AND generation=? AND sequence=?", doc.ExecutionID, doc.Generation, padded(doc.Sequence)).Scan(&existingID, &existingHash)
@@ -361,9 +367,9 @@ func (s *SQLiteStore) record(ctx context.Context, scope agent.StoreScope, raw js
 			return err
 		}
 		var identityRaw, refRaw []byte
-		var state, last, endpoint string
+		var state, last, endpoint, epoch string
 		var cleanup, terminal bool
-		err = tx.QueryRowContext(ctx, "SELECT identity,state,runtime_ref,last_sequence,cleanup_pending,endpoint_identity,runtime_terminal FROM executions WHERE execution_id=? AND generation=?", doc.ExecutionID, doc.Generation).Scan(&identityRaw, &state, &refRaw, &last, &cleanup, &endpoint, &terminal)
+		err = tx.QueryRowContext(ctx, "SELECT identity,state,runtime_ref,last_sequence,cleanup_pending,endpoint_identity,runtime_terminal,session_epoch FROM executions WHERE execution_id=? AND generation=?", doc.ExecutionID, doc.Generation).Scan(&identityRaw, &state, &refRaw, &last, &cleanup, &endpoint, &terminal, &epoch)
 		if errors.Is(err, sql.ErrNoRows) {
 			return agent.ErrNotFound
 		}
@@ -387,7 +393,7 @@ func (s *SQLiteStore) record(ctx context.Context, scope agent.StoreScope, raw js
 			if json.Unmarshal(doc.NeverStarted, &proof) != nil {
 				return agent.ErrConflict
 			}
-			if proof["tenantId"] != scope.TenantID || proof["hostId"] != scope.HostID || proof["executionId"] != id.ExecutionID || proof["generation"] != id.Generation || proof["attemptId"] != id.AttemptID || proof["specHash"] != id.SpecHash || proof["endpointIdentity"] != endpoint || proof["sessionEpoch"] != scope.SessionEpoch {
+			if proof["tenantId"] != scope.TenantID || proof["hostId"] != scope.HostID || proof["executionId"] != id.ExecutionID || proof["generation"] != id.Generation || proof["attemptId"] != id.AttemptID || proof["specHash"] != id.SpecHash || proof["endpointIdentity"] != endpoint || proof["sessionEpoch"] != epoch || (recovery == nil && epoch != scope.SessionEpoch) {
 				return agent.ErrConflict
 			}
 			name, e := hash(map[string]string{"tenantId": scope.TenantID, "hostId": scope.HostID, "executionId": id.ExecutionID, "generation": id.Generation})
@@ -477,6 +483,15 @@ func (s *SQLiteStore) record(ctx context.Context, scope agent.StoreScope, raw js
 			state = doc.Observation.State
 			terminal = terminal || state == "exited" || state == "cleaned"
 			refRaw = doc.Observation.RuntimeRef
+		}
+		if operation == "complete" || operation == "never" {
+			// A cold choice pins the device-free plan until terminal cleanup.
+			// Retire it in the same transaction as the final event and release.
+			if _, err = tx.ExecContext(ctx, `DELETE FROM kata_cache_volumes
+			    WHERE execution_id=? AND generation=? AND state='cold' AND uuid='' AND filesystem_uuid=''`,
+				doc.ExecutionID, doc.Generation); err != nil {
+				return err
+			}
 		}
 		var count int
 		var size int64

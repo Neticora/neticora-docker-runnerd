@@ -22,11 +22,12 @@ func main() {
 }
 func run() error {
 	version := flag.Bool("version", false, "print actual executable version")
-	file := flag.String("config", "/etc/neticora-runnerd/config.json", "protected configuration file")
+	file := flag.String("config", "/etc/neticora-runnerd-kata/config.json", "protected configuration file")
+	kataCheck := flag.Bool("kata-check", false, "read-only check of an independently qualified Kata tuple; never grants admission")
 	recovery := flag.String("recovery", "", "operator recovery: diagnose, inspect or apply; daemon must be stopped")
-	recoveryInput := flag.String("recovery-input", "", "protected challenge or signed approval JSON")
-	recoveryPublicKey := flag.String("recovery-public-key", "", "protected independent operator public key PEM (apply only)")
-	socket := flag.String("socket", "/run/neticora-runnerd/control.sock", "local control socket")
+	recoveryInput := flag.String("recovery-input", "", "protected challenge or signed approval JSON; normal service consumes a current-boot approval")
+	recoveryPublicKey := flag.String("recovery-public-key", "", "protected independent operator public key PEM")
+	socket := flag.String("socket", "/run/neticora-runnerd-kata/control.sock", "local control socket")
 	flag.Parse()
 	if *version {
 		fmt.Println(execution.Version())
@@ -43,8 +44,20 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	c.SourceFile = *file
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if *kataCheck {
+		if *recovery != "" {
+			return fmt.Errorf("select one administrative operation")
+		}
+		result, err := execution.CheckKata(ctx, c)
+		if err != nil {
+			return err
+		}
+		_, err = os.Stdout.Write(append(result, '\n'))
+		return err
+	}
 	if *recovery != "" {
 		result, err := execution.AdministrativePeerRecovery(ctx, c, *recovery, *recoveryInput, *recoveryPublicKey)
 		if err != nil {
@@ -52,6 +65,11 @@ func run() error {
 		}
 		_, err = os.Stdout.Write(append(result, '\n'))
 		return err
+	}
+	if *recoveryInput != "" || *recoveryPublicKey != "" {
+		if err := execution.RecoverOnBoot(ctx, c, *recoveryInput, *recoveryPublicKey); err != nil {
+			return err
+		}
 	}
 	return service.Run(ctx, c, *socket)
 }

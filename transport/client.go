@@ -79,10 +79,18 @@ func (c *Client) Close() { c.http.CloseIdleConnections() }
 // Accepted responses are not authenticated command authority. No automatic retry,
 // redirect following or compression can duplicate or transform a request.
 func (c *Client) Post(ctx context.Context, path, token string, message protocol.Outbound, responseSchema string) ([]byte, error) {
-	if !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") || strings.ContainsAny(path, "?#\\\r\n") || strings.Contains(path, "..") || strings.Contains(path, "%") || responseSchema == "" {
+	if responseSchema == "" {
+		return nil, errors.New("response schema is required")
+	}
+	return c.post(ctx, path, token, message.Bytes(), func(raw []byte) bool {
+		return protocol.ValidateInboundJSON(responseSchema, raw) == nil
+	})
+}
+
+func (c *Client) post(ctx context.Context, path, token string, data []byte, validate func([]byte) bool) ([]byte, error) {
+	if !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") || strings.ContainsAny(path, "?#\\\r\n") || strings.Contains(path, "..") || strings.Contains(path, "%") {
 		return nil, errors.New("invalid protocol request path or response schema")
 	}
-	data := message.Bytes()
 	if len(data) == 0 {
 		return nil, errors.New("empty outbound message")
 	}
@@ -104,22 +112,22 @@ func (c *Client) Post(ctx context.Context, path, token string, message protocol.
 	}
 	response, err := c.http.Do(req)
 	if err != nil {
-		return nil, errors.New("protocol request failed")
+		return nil, &requestFailure{message: "protocol request failed", kind: transportFailureKind(err)}
 	}
 	defer response.Body.Close()
 	c.observeClock(response)
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, errors.New("protocol request rejected")
+		return nil, &requestFailure{message: "protocol request rejected", kind: "http-status", status: response.StatusCode}
 	}
 	if encoding := response.Header.Get("Content-Encoding"); encoding != "" && encoding != "identity" {
-		return nil, errors.New("compressed protocol response is disabled")
+		return nil, &requestFailure{message: "compressed protocol response is disabled", kind: "response-encoding", status: response.StatusCode}
 	}
 	raw, err := io.ReadAll(io.LimitReader(response.Body, protocol.MaxWireBytes+1))
 	if err != nil || len(raw) > protocol.MaxWireBytes {
-		return nil, errors.New("protocol response unreadable or oversized")
+		return nil, &requestFailure{message: "protocol response unreadable or oversized", kind: "response-read", status: response.StatusCode}
 	}
-	if err := protocol.ValidateInboundJSON(responseSchema, raw); err != nil {
-		return nil, errors.New("invalid protocol response")
+	if !validate(raw) {
+		return nil, &requestFailure{message: "invalid protocol response", kind: "response-schema", status: response.StatusCode}
 	}
 	return raw, nil
 }

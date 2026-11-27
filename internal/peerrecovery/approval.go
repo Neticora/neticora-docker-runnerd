@@ -230,6 +230,13 @@ func verifyApproval(raw, operatorPublicPEM []byte, expected protocol.PeerRecover
 			if err != nil || witnessTime.After(issued.Add(5*time.Second)) || issued.Sub(witnessTime) > 15*time.Minute {
 				return nil, ErrApproval
 			}
+		case "verify-never-started":
+			if execution.CreationClaim != "not-claimed" || execution.ObservedState != "absent" ||
+				execution.OriginalRuntimeRef != nil || execution.ObservedResourceId != nil ||
+				execution.NativeState != "accepted" || execution.LastSequence != "0" ||
+				execution.AckSequence != "0" || len(execution.PendingEvents) != 0 {
+				return nil, ErrApproval
+			}
 		case "replay-final-ack":
 			if execution.NativeState != "cleaned" || execution.ObservedState != "absent" {
 				return nil, ErrApproval

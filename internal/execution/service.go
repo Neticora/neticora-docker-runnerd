@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	goruntime "runtime"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/internal/config"
 	"github.com/Neticora/neticora-docker-runnerd/internal/dockerengine"
 	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
+	"github.com/Neticora/neticora-docker-runnerd/internal/katalinux"
 	"github.com/Neticora/neticora-docker-runnerd/internal/standardlinux"
 	"github.com/Neticora/neticora-docker-runnerd/journal"
 	"github.com/Neticora/neticora-docker-runnerd/transport"
@@ -52,8 +54,30 @@ func (p *PolicyFile) Get() *standardlinux.Policy {
 }
 
 func Open(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drained func() bool) (*Controller, func(), error) {
+	if !c.StandaloneExecution() {
+		return nil, nil, ErrKataOnly
+	}
+	q := c.Execution.Kata
+	if q.QualificationBindingFile != "" || q.QualificationAuthorityPin != "" {
+		return openConfiguredQualification(c, store, policy, drained)
+	}
+	return openWithKataLoader(c, store, policy, drained, katalinux.Load)
+}
+
+type kataLoader func(string, string, string, string, standardlinux.Settings) (*katalinux.Profile, error)
+
+// The public constructor always supplies the strict production loader. The
+// separately tagged lab constructor supplies its independently scoped authority.
+func openWithKataLoader(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drained func() bool, load kataLoader) (*Controller, func(), error) {
+	if !c.StandaloneExecution() {
+		return nil, nil, ErrKataOnly
+	}
 	x := c.Execution
-	if x == nil || !x.Enabled || goruntime.GOOS != "linux" || goruntime.GOARCH != "amd64" || os.Geteuid() == 0 || policy.Get().UID() != os.Geteuid() {
+	if goruntime.GOOS != "linux" || goruntime.GOARCH != "amd64" || policy == nil || policy.Get() == nil {
+		return nil, nil, ErrReconcile
+	}
+	guestUID := policy.Get().UID()
+	if guestUID < 1 || os.Geteuid() != 0 {
 		return nil, nil, ErrReconcile
 	}
 	credentials, key, err := ReadCredentials(c.CredentialFile)
@@ -89,8 +113,11 @@ func Open(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drain
 		return nil, nil, err
 	}
 	capabilities, err := protocol.DecodeHostCapabilities(raw)
-	if err != nil || capabilities.DockerBuild || capabilities.HardStorageLimit || capabilities.EndpointIdentity != credentials.EndpointIdentity || capabilities.Host.Os != "linux" || capabilities.Engine.Os != "linux" {
+	if err != nil || !capabilities.DockerBuild || !capabilities.HardStorageLimit || capabilities.Host.Os != "linux" || capabilities.Engine.Os != "linux" {
 		return nil, nil, ErrReconcile
+	}
+	if capabilities.EndpointIdentity != credentials.EndpointIdentity {
+		return nil, nil, agent.ErrRecoveryRequired
 	}
 	var ca []byte
 	caDigest := ""
@@ -106,16 +133,23 @@ func Open(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drain
 	if err != nil {
 		return nil, nil, err
 	}
-	runtime, err := dockerengine.Open(c.RuntimeEndpoint, credentials.InstallationID, func() {
+	invalidate := func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = store.InvalidateRuntime(ctx)
-	})
-	if err != nil {
+	}
+	engine, err := dockerengine.OpenStandalone(c.RuntimeEndpoint, credentials.InstallationID, invalidate, false)
+	cleanup := func() {
+		if engine != nil {
+			_ = engine.Close()
+		}
 		client.Close()
+		clear(key)
+	}
+	if err != nil {
+		cleanup()
 		return nil, nil, err
 	}
-	cleanup := func() { _ = runtime.Close(); client.Close(); clear(key) }
 	provisioned, _ := time.Parse(time.RFC3339Nano, x.TrustProvisionedAt)
 	verifier := standardlinux.ImageVerifier{RootDirectory: x.TrustRoots, BundleDirectory: x.ImageBundles, ProvisionedAt: provisioned}
 	remote := &HostRemote{Client: client, Credentials: credentials, Key: key, Capabilities: capabilities, PolicyGeneration: func() string { return policy.Get().Generation() }, Version: Version()}
@@ -138,8 +172,57 @@ func Open(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drain
 		skew, measured := client.ClockSkew()
 		return policy.Get().Transport(actualProxy, caDigest, skew, measured)
 	}
-	controller := &Controller{Store: store, Runtime: runtime, Remote: remote, SigningKey: key, Scope: agent.StoreScope{InstallationID: credentials.InstallationID, TenantID: credentials.TenantID, HostID: credentials.Identity.HostId, SessionEpoch: credentials.Identity.SessionEpoch, EndpointIdentity: credentials.EndpointIdentity}, Authority: journal.Authority{TenantID: credentials.TenantID, HostID: credentials.Identity.HostId, SessionEpoch: credentials.Identity.SessionEpoch, EndpointIdentity: credentials.EndpointIdentity, KeyID: credentials.Identity.KeyId}, Profile: standardlinux.Settings{ImageRepository: x.ImageRepository, NetworkID: x.NetworkID, BootstrapRoot: x.BootstrapRoot, RunnerUID: os.Geteuid(), PidsLimit: x.PidsLimit}, Policy: policy.Get, VerifyImage: verifier.Verify, KeysDirectory: x.KeysDirectory, Organization: x.Organization, Pool: x.Pool, Drained: drained}
+	controller := &Controller{Store: store, Runtime: engine, Remote: remote, SigningKey: key, Scope: agent.StoreScope{InstallationID: credentials.InstallationID, TenantID: credentials.TenantID, HostID: credentials.Identity.HostId, SessionEpoch: credentials.Identity.SessionEpoch, EndpointIdentity: credentials.EndpointIdentity}, Authority: journal.Authority{TenantID: credentials.TenantID, HostID: credentials.Identity.HostId, SessionEpoch: credentials.Identity.SessionEpoch, EndpointIdentity: credentials.EndpointIdentity, KeyID: credentials.Identity.KeyId}, Profile: standardlinux.Settings{ImageRepository: x.ImageRepository, NetworkID: x.NetworkID, BootstrapRoot: x.BootstrapRoot, RunnerUID: guestUID, PidsLimit: x.PidsLimit}, Policy: policy.Get, VerifyImage: verifier.Verify, KeysDirectory: x.KeysDirectory, Organization: x.Organization, Pool: x.Pool, Drained: drained}
 	controller.HostLimits = policy.Get().Limits()
+	controller.Kata, err = load(x.Kata.ProfileFile, x.Kata.PublicKeyFile, x.Kata.EvidenceDirectory, c.StateDir, controller.Profile)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	if controller.Kata == nil || !controller.Kata.Manifest.Standalone {
+		cleanup()
+		return nil, nil, katalinux.ErrQualification
+	}
+	controller.Kata.BindStandaloneStorage(credentials.InstallationID, credentials.Identity.HostId, false)
+	controller.Kata.StorageJournalID, err = store.StorageJournalID(context.Background())
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	controller.storageStatus.Store("execution storage preflight pending")
+	remote.StorageReady = controller.reportStorageReady
+	controller.cache = newKataCache(*x.Kata.StickyCache, credentials.InstallationID, credentials.TenantID, x.Repository, controller.Kata.Manifest.ImageDigest)
+	if err = hostfs.CheckAncestors(filepath.Dir(controller.Kata.HealthRoot())); err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	if err = os.Mkdir(controller.Kata.HealthRoot(), 0700); err != nil && !os.IsExist(err) {
+		cleanup()
+		return nil, nil, err
+	}
+	healthRoot, healthErr := hostfs.OpenState(controller.Kata.HealthRoot())
+	if healthErr != nil {
+		cleanup()
+		return nil, nil, healthErr
+	}
+	_ = healthRoot.Close()
+	if err = volatileDirectory(controller.Kata.HealthRoot()); err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	if controller.Kata.Manifest.ConfigurationGeneration != capabilities.ConfigurationGeneration || controller.Kata.Manifest.EndpointIdentity != credentials.EndpointIdentity || capabilities.RuntimeMechanism != "kata-runtime-rs-qemu" || !slices.Contains(capabilities.Profiles, controller.Kata.ID) {
+		cleanup()
+		return nil, nil, katalinux.ErrQualification
+	}
+	if err = controller.Kata.ProtectPaths(c.CredentialFile, x.KeysDirectory, x.PolicyFile, x.CapabilitiesFile, x.TrustRoots, x.ImageBundles, x.CustomCAFile, x.Kata.ProfileFile, x.Kata.PublicKeyFile); err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	if err = controller.Kata.RecoverProbe(context.Background(), engine); err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	controller.HostLimits.Slots = min(controller.HostLimits.Slots, controller.Kata.MaxConcurrentAllocations())
 	capacity := capabilities.Capacity
 	ceilings := []*uint64{&controller.HostLimits.CPUMillis, &controller.HostLimits.MemoryBytes, &controller.HostLimits.StorageBytes, &controller.HostLimits.Slots}
 	for i, value := range []string{capacity.CpuMillis, capacity.MemoryBytes, capacity.StorageBytes, capacity.Slots} {

@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+. /etc/os-release
+[ "$ID" = ubuntu ] && [ "$VERSION_ID" = 26.04 ] && [ "$(dpkg --print-architecture)" = amd64 ] || {
+  echo 'This engineering package supports Ubuntu 26.04 amd64 only.' >&2; exit 1;
+}
+# Preserve running executables/workloads during replacement. An operator must
+# explicitly drain and stop the daemon using the qualified recovery procedure.
+# RUNNERD_SERVICE_GUARD
+if [ -d /run/systemd/system ]; then runnerd_require_stopped; fi

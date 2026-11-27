@@ -3,7 +3,7 @@
   "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
   "info": {
     "title": "Neticora host protocol",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "description": "Initial reviewed-contract candidate; no endpoint/runtime implementation or live acceptance implied."
   },
   "servers": [
@@ -585,16 +585,19 @@
         "properties": {
           "version": {
             "type": "string",
+            "const": "2.0.0",
             "minLength": 1,
             "maxLength": 256
           },
           "minimumRecoveryVersion": {
             "type": "string",
+            "const": "2.0.0",
             "minLength": 1,
             "maxLength": 256
           },
           "minimumAdmissionVersion": {
             "type": "string",
+            "const": "2.0.0",
             "minLength": 1,
             "maxLength": 256
           }
@@ -725,6 +728,7 @@
           },
           "protocolVersion": {
             "type": "string",
+            "const": "2.0.0",
             "minLength": 1,
             "maxLength": 256
           },
@@ -2642,7 +2646,8 @@
               "cleanup",
               "hold",
               "verify-absent",
-              "replay-final-ack"
+              "replay-final-ack",
+              "verify-never-started"
             ],
             "type": "string"
           },

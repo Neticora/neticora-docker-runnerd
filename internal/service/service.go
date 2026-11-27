@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -38,6 +39,8 @@ func Run(ctx context.Context, c config.Config, socket string) error {
 	}
 	defer store.Close()
 	var draining atomic.Bool
+	var fenceMu sync.Mutex
+	var stopped bool
 	drainFile := filepath.Join(c.StateDir, "admission.drained")
 	_, drainErr := os.Lstat(drainFile)
 	if drainErr != nil && !os.IsNotExist(drainErr) {
@@ -81,7 +84,7 @@ func Run(ctx context.Context, c config.Config, socket string) error {
 		if controller != nil {
 			reason = controller.Status()
 		}
-		return control.Snapshot{ExecutionReason: reason, ExecutionEnabled: executing, State: state, AdmissionEnabled: executing && !draining.Load() && health.Ready, RuntimeQualified: false, RecoveryReady: health.Ready, RecoveryReason: health.Reason}
+		return control.Snapshot{ExecutionReason: reason, ExecutionEnabled: executing, State: state, AdmissionEnabled: executing && !draining.Load() && health.Ready && (controller == nil || controller.StorageReady()), RuntimeQualified: false, RecoveryReady: health.Ready, RecoveryReason: health.Reason}
 	}, func() {
 		draining.Store(true)
 	}, func(event string) { log.Print(event) })
@@ -89,7 +92,27 @@ func Run(ctx context.Context, c config.Config, socket string) error {
 		return err
 	}
 	defer server.Close()
-	server.SetDurableDrain(func() error { draining.Store(true); return persistDrain(drainFile) })
+	server.SetDurableDrain(func() error {
+		fenceMu.Lock()
+		defer fenceMu.Unlock()
+		draining.Store(true)
+		return persistDrain(drainFile)
+	})
+	server.ExposeResume(func(resumeCtx context.Context) error {
+		fenceMu.Lock()
+		defer fenceMu.Unlock()
+		if controller == nil || stopped || ctx.Err() != nil || controller.Status() != "ready" {
+			return errors.New("execution controller unavailable")
+		}
+		if err := controller.CheckResume(resumeCtx); err != nil {
+			return err
+		}
+		if err := clearDrain(drainFile); err != nil {
+			return err
+		}
+		draining.Store(false)
+		return nil
+	}, func(event string) { log.Print(event) })
 	server.ExposeExecutions(func(ctx context.Context, afterID, afterGeneration string) (any, error) {
 		rows, e := store.Incomplete(ctx, agent.ExecutionCursor{ExecutionID: afterID, Generation: afterGeneration}, 10)
 		if e != nil {
@@ -111,11 +134,17 @@ func Run(ctx context.Context, c config.Config, socket string) error {
 		return result, nil
 	})
 	if controller != nil {
+		server.ExposeKataEvidence(controller.KataEvidence)
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
-			if e := controller.Run(controllerCtx); e != nil {
-				draining.Store(true)
+			e := controller.Run(controllerCtx)
+			fenceMu.Lock()
+			stopped = true
+			draining.Store(true)
+			fenceMu.Unlock()
+			if e != nil {
+				_ = persistDrain(drainFile)
 				log.Print("execution controller stopped; admission fenced")
 			}
 		}()
@@ -137,6 +166,29 @@ func Run(ctx context.Context, c config.Config, socket string) error {
 		}
 		return <-result
 	}
+}
+
+func clearDrain(path string) error {
+	if _, err := os.Lstat(path); err == nil {
+		if _, err = hostfs.ReadPrivate(path, 0); err != nil {
+			return errors.New("unsafe drain fence")
+		}
+		if err = os.Remove(path); err != nil {
+			return errors.New("cannot remove drain fence")
+		}
+	} else if !os.IsNotExist(err) {
+		return errors.New("drain state unavailable")
+	}
+	dir, err := os.Open(filepath.Dir(path))
+	if err != nil {
+		return errors.New("cannot open drain directory")
+	}
+	defer dir.Close()
+	if dir.Sync() != nil {
+		_ = persistDrain(path)
+		return errors.New("cannot sync resumed admission")
+	}
+	return nil
 }
 
 func persistDrain(path string) error {

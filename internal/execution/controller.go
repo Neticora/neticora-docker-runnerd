@@ -23,6 +23,7 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
 	"github.com/Neticora/neticora-docker-runnerd/internal/dockerengine"
 	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
+	"github.com/Neticora/neticora-docker-runnerd/internal/katalinux"
 	"github.com/Neticora/neticora-docker-runnerd/internal/standardlinux"
 	"github.com/Neticora/neticora-docker-runnerd/journal"
 	"github.com/Neticora/neticora-docker-runnerd/transport"
@@ -59,6 +60,10 @@ type Remote interface {
 }
 
 type Controller struct {
+	resumeGuard         func(context.Context) error
+	recoveryOnly        bool // Explicit drained terminal reconciliation; never new admission.
+	Kata                *katalinux.Profile
+	cache               *kataCache
 	Store               *journal.SQLiteStore
 	Runtime             Runtime
 	Remote              Remote
@@ -76,16 +81,21 @@ type Controller struct {
 	HostLimits          agent.ReservationLimits
 	MinRuntimeFreeBytes uint64
 	mu                  sync.Mutex // One reconciliation owner; all work remains durable in Store.
+	reportMu            sync.Mutex // Preserve contiguous event ACKs.
 	launchMu            sync.Mutex // Serializes durable command acceptance with final Docker start.
 	wake                chan struct{}
 	cancelled           map[agent.ExecutionCursor]bool
 	inventoryGeneration string
 	inventoryObservedAt time.Time
 	heartbeatGeneration atomic.Value
+	storageStatus       atomic.Value
 	status              atomic.Value
 }
 
 func (c *Controller) Status() string {
+	if value := c.storageStatus.Load(); value != nil && value.(string) != "" {
+		return value.(string)
+	}
 	v := c.status.Load()
 	if v == nil {
 		return "starting"
@@ -94,6 +104,10 @@ func (c *Controller) Status() string {
 }
 func failureReason(err error) string {
 	switch {
+	case errors.Is(err, katalinux.ErrStorageForeignOwner),
+		errors.Is(err, katalinux.ErrStorageJournalBinding), errors.Is(err, katalinux.ErrStorageIndex),
+		errors.Is(err, katalinux.ErrStorageFilesystem):
+		return err.Error()
 	case errors.Is(err, ErrBootstrap):
 		return "bootstrap-envelope-rejected"
 	case errors.Is(err, standardlinux.ErrAdmission):
@@ -145,7 +159,9 @@ func (c *Controller) Run(ctx context.Context) error {
 		for {
 			endpoint, err := c.Runtime.Probe(ctx)
 			if err == nil && endpoint == c.Scope.EndpointIdentity {
-				_ = c.Remote.Heartbeat(ctx, c.heartbeatGeneration.Load().(string))
+				if c.Remote.Heartbeat(ctx, c.heartbeatGeneration.Load().(string)) == nil && c.cache != nil {
+					c.reportCachePresence(ctx)
+				}
 			} else if ctx.Err() == nil {
 				_ = c.Store.InvalidateRuntime(ctx)
 				c.trigger()
@@ -227,7 +243,7 @@ func (c *Controller) accept(ctx context.Context, raw json.RawMessage) (agent.Rec
 	if json.Unmarshal(raw, &command) != nil {
 		return agent.Receipt{}, ErrReconcile
 	}
-	if command.Kind == "start" && (command.Spec.PoolId != c.Pool || c.Drained() || c.Policy().Admit(c.Scope, command.Spec, time.Now()) != nil || c.Remote.Admission(ctx, command.Spec) != nil) {
+	if command.Kind == "start" && (command.Spec.PoolId != c.Pool || c.Drained() || c.admit(command.Spec, time.Now()) != nil || c.Remote.Admission(ctx, command.Spec) != nil) {
 		return agent.Receipt{}, standardlinux.ErrAdmission
 	}
 	if err = c.activateLimits(ctx); err != nil {
@@ -318,7 +334,11 @@ func (c *Controller) refresh(ctx context.Context) ([]agent.Execution, error) {
 		if json.Unmarshal(e.Command, &start) != nil {
 			return nil, ErrReconcile
 		}
-		plan, err := c.Profile.Plan(c.Scope, start.Spec)
+		plan, err := c.resolveRecoveryPlan(c.Scope, start.Spec)
+		if err != nil {
+			return nil, err
+		}
+		plan, err = c.cachePlan(ctx, e, plan, false)
 		if err != nil {
 			return nil, err
 		}
@@ -404,6 +424,9 @@ func (c *Controller) reconcile(ctx context.Context) error {
 		return err
 	}
 	var firstError error
+	if c.cache != nil {
+		firstError = c.cacheGarbage(ctx, c.cache.lvm.Policy.Retain)
+	}
 	for _, e := range rows {
 		if e.State == "cleaned" {
 			if p, e2 := c.plan(e); e2 == nil {
@@ -437,7 +460,12 @@ func (c *Controller) expireHandoffs(ctx context.Context, now time.Time) {
 			continue
 		}
 		dir := filepath.Join(c.Profile.BootstrapRoot, p.Name)
-		raw, err := hostfs.ReadPrivate(filepath.Join(dir, "bootstrap.json"), 131072)
+		var raw []byte
+		if c.cache != nil {
+			raw, err = hostfs.ReadGuestFile(filepath.Join(dir, "bootstrap.json"), 131072, c.Profile.RunnerUID)
+		} else {
+			raw, err = hostfs.ReadPrivate(filepath.Join(dir, "bootstrap.json"), 131072)
+		}
 		if err != nil {
 			continue
 		}
@@ -450,7 +478,12 @@ func (c *Controller) expireHandoffs(ctx context.Context, now time.Time) {
 		if err != nil || parseErr != nil || expires.After(now) {
 			continue
 		}
-		root, err := hostfs.OpenState(dir)
+		var root *os.Root
+		if c.cache != nil {
+			root, err = hostfs.OpenGuestDirectory(dir, c.Profile.RunnerUID, false)
+		} else {
+			root, err = hostfs.OpenState(dir)
+		}
 		if err == nil {
 			_ = root.Remove("bootstrap.json")
 			_ = root.Close()
@@ -512,7 +545,11 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 	if start.Spec.PoolId != c.Pool {
 		return standardlinux.ErrAdmission
 	}
-	p, err := c.Profile.Plan(c.Scope, start.Spec)
+	p, err := c.resolveRecoveryPlan(c.Scope, start.Spec)
+	if err != nil {
+		return err
+	}
+	p, err = c.cachePlan(ctx, e, p, false)
 	if err != nil {
 		return err
 	}
@@ -560,6 +597,14 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 			return c.cleanup(ctx, e, p, o)
 		}
 		if o.State == "running" {
+			if c.Kata != nil && !c.kataHealthy(ctx, p, o) {
+				return c.cleanup(ctx, e, p, o)
+			}
+			if c.Kata != nil && c.cache == nil {
+				if err = c.Kata.Capture(ctx, o.ID, p); err != nil {
+					return err
+				}
+			}
 			if e.State != "running" {
 				event, err := c.event(e, c.observation(e, o), nil)
 				if err != nil {
@@ -579,6 +624,33 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 		proof, e2 := c.Store.FenceNeverStarted(ctx, e.Command, fence, c.Authority, c.SigningKey, time.Now())
 		if e2 != nil {
 			return e2
+		}
+		if c.cache != nil {
+			if absent := c.verifyUnallocated(ctx, e, p); absent != nil {
+				if e2 = c.Kata.ReleaseStandalone(ctx, p); e2 != nil {
+					return errors.Join(absent, e2)
+				}
+				if e2 = c.finishCache(ctx, e, false); e2 != nil {
+					return e2
+				}
+				if e2 = c.Kata.VerifyExecutionDevicesAbsent(ctx, p); e2 != nil {
+					return e2
+				}
+				if e2 = c.cache.lvm.VerifyAbsent(ctx, cacheVolumeName(p)); e2 != nil {
+					return e2
+				}
+			}
+		} else if c.Kata != nil {
+			if e2 = c.Kata.DiscardPrepared(ctx, p); e2 != nil {
+				return e2
+			}
+		}
+		if runtime, ok := c.Runtime.(interface {
+			DisposeUnstarted(context.Context, dockerengine.Plan) error
+		}); ok {
+			if e2 = runtime.DisposeUnstarted(ctx, p); e2 != nil {
+				return e2
+			}
 		}
 		event, e2 := c.event(e, nil, nil, proof)
 		if e2 != nil {
@@ -602,17 +674,33 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 	if policy.UID() != c.Profile.RunnerUID {
 		return standardlinux.ErrAdmission
 	}
-	if err = policy.Admit(c.Scope, start.Spec, time.Now()); err != nil {
+	if err = c.admit(start.Spec, time.Now()); err != nil {
+		return err
+	}
+	p, err = c.resolvePlan(c.Scope, start.Spec)
+	if err != nil {
 		return err
 	}
 	if err = c.Remote.Admission(ctx, start.Spec); err != nil {
 		return err
 	}
-	if err = c.VerifyImage(ctx, policy, c.Profile.ImageRepository, start.Spec.ImageDigest, time.Now()); err != nil {
+	imageRepository := strings.Split(p.Config.Image, "@")[0]
+	if err = c.VerifyImage(ctx, policy, imageRepository, start.Spec.ImageDigest, time.Now()); err != nil {
 		return err
 	}
 	if err = c.Runtime.PrepareImage(ctx, p); err != nil {
 		return err
+	}
+	if c.Kata != nil {
+		if err = c.checkStorage(ctx); err != nil {
+			return err
+		}
+		if err = c.Kata.PrepareHealth(p); err != nil {
+			return err
+		}
+		if err = c.Kata.Prepare(p); err != nil {
+			return err
+		}
 	}
 	request, key, err := c.startIntent(ctx, e, start)
 	if err != nil {
@@ -633,6 +721,10 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 	if err != nil || bootstrapErr != nil || authorityErr != nil || !delivery.After(time.Now()) || delivery.After(bootstrap) || delivery.After(authority) {
 		return ErrBootstrap
 	}
+	p, err = c.cachePlan(ctx, e, p, true)
+	if err != nil {
+		return err
+	}
 	plain, err := transport.OpenBootstrap(response.EncryptedBootstrap.MustGet(), key, transport.BootstrapBinding{TenantID: c.Scope.TenantID, HostID: c.Scope.HostID, ExecutionID: e.Identity.ExecutionID, Generation: e.Identity.Generation, StartRequestID: requestID(e), SpecHash: e.Identity.SpecHash, ExpiresAt: *response.RecoveryExpiresAt}, time.Now())
 	if err != nil {
 		return ErrBootstrap
@@ -642,10 +734,18 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 		return err
 	}
 	authorize := func() error {
+		if c.Kata != nil {
+			if err := c.Kata.VerifyStorage(ctx, p); err != nil {
+				return err
+			}
+		}
+		if c.cache != nil && len(p.HostConfig.Devices) > 1 && !c.cacheAuthorized(ctx, e) {
+			return ErrReconcile
+		}
 		if c.Drained() || c.cancelled[executionKey(e)] || c.Policy().UID() != c.Profile.RunnerUID {
 			return ErrReconcile
 		}
-		if err := c.Policy().Admit(c.Scope, start.Spec, time.Now()); err != nil {
+		if err := c.admit(start.Spec, time.Now()); err != nil {
 			return err
 		}
 		if err := c.Remote.Admission(ctx, start.Spec); err != nil {
@@ -657,7 +757,7 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 		if err := c.runtimeHeadroom(ctx); err != nil {
 			return err
 		}
-		if err := c.VerifyImage(ctx, c.Policy(), c.Profile.ImageRepository, start.Spec.ImageDigest, time.Now()); err != nil {
+		if err := c.VerifyImage(ctx, c.Policy(), imageRepository, start.Spec.ImageDigest, time.Now()); err != nil {
 			return err
 		}
 		fresh, err := c.Remote.Start(ctx, request)
@@ -697,6 +797,12 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 	// accepted/ACKed until the bounded Docker start/inspection returns. Unknown
 	// start replies remain the same attempt; accepted cancellation wakes cleanup.
 	c.launchMu.Lock()
+	if c.Kata != nil && c.cache == nil {
+		if err = c.Kata.CapturePrepared(o.ID, p); err != nil {
+			c.launchMu.Unlock()
+			return err
+		}
+	}
 	o, err = c.Runtime.Start(ctx, o.ID, p, func() error {
 		if err := c.Store.VerifyCreationClaim(ctx, c.Scope, e.Command); err != nil {
 			return err
@@ -706,6 +812,11 @@ func (c *Controller) execution(ctx context.Context, e agent.Execution) error {
 	c.launchMu.Unlock()
 	if err != nil {
 		return err
+	}
+	if c.Kata != nil && c.cache == nil {
+		if err = c.Kata.Capture(ctx, o.ID, p); err != nil {
+			return err
+		}
 	}
 	event, err := c.event(e, c.observation(e, o), nil)
 	if err != nil {
@@ -779,12 +890,18 @@ func (c *Controller) startIntent(ctx context.Context, e agent.Execution, start p
 
 func (c *Controller) handoff(p dockerengine.Plan, plain []byte, expires string) error {
 	dir := filepath.Join(c.Profile.BootstrapRoot, p.Name)
-	if err := os.Mkdir(dir, 0700); err != nil && !os.IsExist(err) {
-		return ErrReconcile
+	var root *os.Root
+	var err error
+	if c.cache != nil {
+		root, err = hostfs.OpenGuestDirectory(dir, c.Profile.RunnerUID, true)
+	} else {
+		if err = os.Mkdir(dir, 0700); err != nil && !os.IsExist(err) {
+			return ErrReconcile
+		}
+		root, err = hostfs.OpenState(dir)
 	}
-	root, err := hostfs.OpenState(dir)
 	if err != nil {
-		return err
+		return ErrReconcile
 	}
 	defer root.Close()
 	raw, err := json.Marshal(map[string]any{"jit": string(plain), "expiresAt": expires, "organization": c.Organization, "repository": c.Repository, "pool": c.Pool})
@@ -792,27 +909,58 @@ func (c *Controller) handoff(p dockerengine.Plan, plain []byte, expires string) 
 		return err
 	}
 	defer clear(raw)
-	if existing, e := hostfs.ReadPrivate(filepath.Join(dir, "bootstrap.json"), 131072); e == nil {
+	path := filepath.Join(dir, "bootstrap.json")
+	var existing []byte
+	if c.cache != nil {
+		existing, err = hostfs.ReadGuestFile(path, 131072, c.Profile.RunnerUID)
+	} else {
+		existing, err = hostfs.ReadPrivate(path, 131072)
+	}
+	if err == nil {
 		defer clear(existing)
 		if string(existing) == string(raw) {
 			return nil
 		}
 		return ErrReconcile
 	}
-	f, err := root.OpenFile("bootstrap.json", os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	name := "bootstrap.json"
+	if c.cache != nil {
+		name = "bootstrap.pending"
+		_ = root.Remove(name)
+		defer root.Remove(name)
+	}
+	f, err := root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		return ErrReconcile
 	}
 	_, err = f.Write(raw)
+	if err == nil && c.cache != nil {
+		err = f.Chown(c.Profile.RunnerUID, c.Profile.RunnerUID)
+	}
 	if err == nil {
 		err = f.Sync()
 	}
-	_ = f.Close()
-	return err
+	if err = errors.Join(err, f.Close()); err != nil {
+		return err
+	}
+	if c.cache != nil {
+		return root.Rename(name, "bootstrap.json")
+	}
+	return nil
 }
 
 func (c *Controller) registration(ctx context.Context, e agent.Execution, p dockerengine.Plan) error {
-	raw, err := hostfs.ReadPrivate(filepath.Join(c.Profile.BootstrapRoot, p.Name, "registered.json"), 8192)
+	var raw []byte
+	var err error
+	if runtime, ok := c.Runtime.(interface {
+		Registration(context.Context, dockerengine.Plan) (json.RawMessage, error)
+	}); ok {
+		raw, err = runtime.Registration(ctx, p)
+	} else if c.cache != nil {
+		raw, err = hostfs.ReadGuestFile(filepath.Join(c.Profile.BootstrapRoot, p.Name, "registered.json"), 8192, c.Profile.RunnerUID)
+	} else {
+		raw, err = hostfs.ReadPrivate(filepath.Join(c.Profile.BootstrapRoot, p.Name, "registered.json"), 8192)
+	}
 	if err != nil {
 		return nil
 	}
@@ -833,6 +981,14 @@ func (c *Controller) registration(ctx context.Context, e agent.Execution, p dock
 }
 
 func (c *Controller) cleanup(ctx context.Context, e agent.Execution, p dockerengine.Plan, o dockerengine.Object) error {
+	if c.Kata != nil && c.cache == nil && o.State == "prepared" {
+		if err := c.Kata.CapturePrepared(o.ID, p); err != nil {
+			return err
+		}
+	}
+	if err := c.cacheCleanExit(ctx, e, o); err != nil {
+		return err
+	}
 	if !e.CleanupPending {
 		obs := c.observation(e, o)
 		obs["state"] = "cleanup-pending"
@@ -886,6 +1042,33 @@ func (c *Controller) cleanup(ctx context.Context, e agent.Execution, p dockereng
 	if _, err := c.refresh(ctx); err != nil {
 		return err
 	}
+	if c.cache != nil {
+		engine := kataRuntimeEngine(c.Runtime)
+		if engine == nil {
+			return ErrReconcile
+		}
+		if err := engine.VerifyNetworkDetached(ctx, ref.ResourceId, string(p.HostConfig.NetworkMode)); err != nil {
+			return err
+		}
+		if err := c.Kata.VerifyStandaloneRuntimeAbsent(ctx, ref.ResourceId); err != nil {
+			return err
+		}
+		if err := c.Kata.ReleaseStandalone(ctx, p); err != nil {
+			return err
+		}
+		if err := c.finishCache(ctx, e, true); err != nil {
+			return err
+		}
+	} else if err := c.verifyKataAbsence(ctx, ref.ResourceId, p); err != nil {
+		return err
+	}
+	if runtime, ok := c.Runtime.(interface {
+		VerifyDisposal(context.Context, string, dockerengine.Plan) error
+	}); ok {
+		if err := runtime.VerifyDisposal(ctx, ref.ResourceId, p); err != nil {
+			return err
+		}
+	}
 	observed := c.inventoryObservedAt
 	o.ID = ref.ResourceId
 	o.State = "cleaned"
@@ -903,32 +1086,70 @@ func (c *Controller) cleanup(ctx context.Context, e agent.Execution, p dockereng
 }
 
 func (c *Controller) plan(e agent.Execution) (dockerengine.Plan, error) {
+	start, err := c.storedStart(e)
+	if err != nil {
+		return dockerengine.Plan{}, err
+	}
+	return c.resolveRecoveryPlan(c.Scope, start.Spec)
+}
+
+func (c *Controller) storedStart(e agent.Execution) (protocol.StartCommand, error) {
 	// Retired housekeeping must not map inconsistent stored metadata to another
 	// attempt's private files, even before current-session reconciliation.
 	if err := protocol.ValidateInboundJSON("StartCommand", e.Command); err != nil {
-		return dockerengine.Plan{}, ErrReconcile
+		return protocol.StartCommand{}, ErrReconcile
 	}
 	var start protocol.StartCommand
 	if json.Unmarshal(e.Command, &start) != nil {
-		return dockerengine.Plan{}, ErrReconcile
+		return protocol.StartCommand{}, ErrReconcile
 	}
 	if e.Identity.InstallationID != c.Scope.InstallationID || e.Identity.TenantID != c.Scope.TenantID || e.Identity.HostID != c.Scope.HostID || start.CommandId != e.CommandID || start.Spec.ExecutionId != e.Identity.ExecutionID || start.Generation != e.Identity.Generation || start.Spec.Generation != e.Identity.Generation || start.Spec.AttemptId != e.Identity.AttemptID || start.Spec.SpecHash != e.Identity.SpecHash {
+		return protocol.StartCommand{}, ErrReconcile
+	}
+	return start, nil
+}
+
+// Final-ACKed history needs only its immutable private namespace, not an active
+// runtime profile. This deliberately returns no runnable Docker configuration.
+// Unresolved work still uses plan() and the exact historical runtime contract.
+func (c *Controller) retiredPrivatePlan(e agent.Execution) (dockerengine.Plan, error) {
+	if e.State != "cleaned" || e.CleanupPending || e.AckSequence != e.LastSequence {
 		return dockerengine.Plan{}, ErrReconcile
 	}
-	return c.Profile.Plan(c.Scope, start.Spec)
+	start, err := c.storedStart(e)
+	if err != nil {
+		return dockerengine.Plan{}, err
+	}
+	p, err := c.Profile.Plan(c.Scope, start.Spec)
+	if err != nil {
+		return dockerengine.Plan{}, err
+	}
+	return dockerengine.Plan{Name: p.Name, RecoveryOnly: true}, nil
 }
 
 func (c *Controller) cleanSecrets(e agent.Execution, p dockerengine.Plan) {
 	// Host tmpfs holds only this execution's bootstrap/registration files. Never
 	// recursively remove a caller-provided path or any shared runtime resource.
 	dir := filepath.Join(c.Profile.BootstrapRoot, p.Name)
-	root, err := hostfs.OpenState(dir)
+	var root *os.Root
+	var err error
+	if c.cache != nil {
+		root, err = hostfs.OpenGuestDirectory(dir, c.Profile.RunnerUID, false)
+	} else {
+		root, err = hostfs.OpenState(dir)
+	}
 	if err == nil {
 		_ = root.Remove("bootstrap.json")
+		if c.cache != nil {
+			_ = root.Remove("bootstrap.pending")
+		}
 		_ = root.Remove("registered.json")
 		_ = root.Close()
 		// rmdir only: unexpected files are preserved, never recursively pruned.
 		_ = os.Remove(dir)
+	}
+	if c.Kata != nil {
+		c.Kata.CleanHealth(p)
 	}
 	keys, err := hostfs.OpenState(c.KeysDirectory)
 	if err == nil {
@@ -947,6 +1168,9 @@ func (c *Controller) retiredSecrets(ctx context.Context) error {
 		for _, e := range rows {
 			if e.State == "cleaned" && !e.CleanupPending {
 				p, err := c.plan(e)
+				if e.AckSequence == e.LastSequence {
+					p, err = c.retiredPrivatePlan(e)
+				}
 				if err != nil {
 					return err
 				}
@@ -973,24 +1197,45 @@ func (c *Controller) reportLoop(ctx context.Context) {
 				continue
 			}
 			for _, e := range rows {
-				events, err := c.Store.PendingEvents(ctx, agent.EventPage{ExecutionID: e.Identity.ExecutionID, Generation: e.Identity.Generation, AfterSequence: e.AckSequence, Limit: 100})
-				if err != nil || len(events) == 0 {
-					continue
-				}
-				message, err := protocol.EncodeValidated("EventBatch", map[string]any{"events": events})
-				if err != nil {
-					continue
-				}
-				acks, err := c.Remote.Events(ctx, message)
-				if err != nil {
-					continue
-				}
-				for _, ack := range acks {
-					if ack.ExecutionId == e.Identity.ExecutionID && ack.Generation == e.Identity.Generation {
-						_ = c.Store.AckEvents(ctx, c.Scope, agent.Watermark{ExecutionID: ack.ExecutionId, Generation: ack.Generation, ContiguousSequence: ack.ContiguousSequence})
-					}
-				}
+				_ = c.flushExecutionEvents(ctx, e.Identity.ExecutionID, e.Identity.Generation)
 			}
+		}
+	}
+}
+
+func (c *Controller) flushExecutionEvents(ctx context.Context, id, generation string) error {
+	c.reportMu.Lock()
+	defer c.reportMu.Unlock()
+	for {
+		e, err := c.Store.PeerRecoveryExecution(ctx, id, generation)
+		if err != nil {
+			return err
+		}
+		events, err := c.Store.PendingEvents(ctx, agent.EventPage{ExecutionID: id, Generation: generation, AfterSequence: e.AckSequence, Limit: 100})
+		if err != nil || len(events) == 0 {
+			return err
+		}
+		message, err := protocol.EncodeValidated("EventBatch", map[string]any{"events": events})
+		if err != nil {
+			return err
+		}
+		acks, err := c.Remote.Events(ctx, message)
+		if err != nil {
+			return err
+		}
+		advanced := false
+		for _, ack := range acks {
+			if ack.ExecutionId == id && ack.Generation == generation {
+				if err = c.Store.AckEvents(ctx, c.Scope, agent.Watermark{ExecutionID: id, Generation: generation, ContiguousSequence: ack.ContiguousSequence}); err != nil {
+					return err
+				}
+				before, _ := strconv.ParseUint(e.AckSequence, 10, 64)
+				after, _ := strconv.ParseUint(ack.ContiguousSequence, 10, 64)
+				advanced = advanced || after > before
+			}
+		}
+		if !advanced {
+			return ErrReconcile
 		}
 	}
 }

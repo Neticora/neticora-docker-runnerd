@@ -10,7 +10,7 @@
         "sessionEpoch": "1"
       },
       "agentVersion": "0.1.0",
-      "protocolVersion": "1.0.0",
+      "protocolVersion": "2.0.0",
       "inventoryGeneration": "1",
       "effectivePolicyGeneration": "1",
       "capabilities": {
@@ -59,7 +59,7 @@
         "sessionEpoch": "1"
       },
       "agentVersion": "0.1.0",
-      "protocolVersion": "1.0.0",
+      "protocolVersion": "2.0.0",
       "inventoryGeneration": "1",
       "effectivePolicyGeneration": "1",
       "capabilities": {
@@ -103,7 +103,7 @@
     "schema": "HostHeartbeat",
     "value": {
       "agentVersion": "0.1.0",
-      "protocolVersion": "1.0.0",
+      "protocolVersion": "2.0.0",
       "inventoryGeneration": "1",
       "effectivePolicyGeneration": "1",
       "capabilities": {
@@ -147,7 +147,7 @@
     "value": {
       "identity": null,
       "agentVersion": "0.1.0",
-      "protocolVersion": "1.0.0",
+      "protocolVersion": "2.0.0",
       "inventoryGeneration": "1",
       "effectivePolicyGeneration": "1",
       "capabilities": {

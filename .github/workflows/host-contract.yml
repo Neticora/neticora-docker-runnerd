@@ -15,6 +15,10 @@ env:
   TMPDIR: /var/tmp
 
 jobs:
+  kata-native:
+    name: Required Kata native qualification
+    uses: ./.github/workflows/runnerd-kata-qualification.yml
+
   # Public PR code runs on disposable GitHub-hosted workers, without private
   # platform credentials, Docker management access or customer network access.
   lint:

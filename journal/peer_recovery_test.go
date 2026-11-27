@@ -564,7 +564,7 @@ func TestSchemaV2RecoveryUpgradePreservesApprovalAndObligations(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err = db.Exec("DROP TABLE peer_recovery_completion_intents"); err != nil {
+			if _, err = db.Exec("DROP TABLE peer_recovery_completion_intents; DROP TABLE kata_cache_heads; DROP TABLE kata_cache_volumes"); err != nil {
 				t.Fatal(err)
 			}
 			if _, err = db.Exec("PRAGMA user_version=2"); err != nil {
@@ -581,7 +581,7 @@ func TestSchemaV2RecoveryUpgradePreservesApprovalAndObligations(t *testing.T) {
 			var version, tableCount int
 			var approvalAfter []byte
 			var releasedAfter, pendingAfter bool
-			if err = reopened.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 3 {
+			if err = reopened.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != schemaVersion {
 				t.Fatal("schema version not upgraded", version, err)
 			}
 			if err = reopened.db.QueryRow("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='peer_recovery_completion_intents'").Scan(&tableCount); err != nil || tableCount != 1 {

@@ -37,7 +37,7 @@ func TestEnrollmentRecoveryAndBinding(t *testing.T) {
 		t.Fatal("token not bound")
 	}
 	_, fingerprint, _ := public(private)
-	object := map[string]any{"purpose": "neticora-host-enroll-v1", "requestId": "request-1", "tokenHash": tokenDigest("secret-token"), "publicKeyFingerprint": fingerprint}
+	object := map[string]any{"purpose": "neticora-host-enroll-v2", "requestId": "request-1", "tokenHash": tokenDigest("secret-token"), "publicKeyFingerprint": fingerprint}
 	raw, _ := json.Marshal(object)
 	canonical, _ := protocol.CanonicalizeJSON(raw)
 	signature, _ := base64.RawURLEncoding.DecodeString(request.Proof)
@@ -65,7 +65,7 @@ func TestAssertionIdentityAndExpiry(t *testing.T) {
 	raw, _ := base64.RawURLEncoding.DecodeString(parts[1])
 	var claims map[string]any
 	_ = json.Unmarshal(raw, &claims)
-	if claims["aud"] != "neticora-runner-hosts" || claims["sessionEpoch"] != "2" || claims["exp"].(float64)-claims["iat"].(float64) != 60 {
+	if claims["aud"] != "neticora-runner-hosts-v2" || claims["sessionEpoch"] != "2" || claims["exp"].(float64)-claims["iat"].(float64) != 60 {
 		t.Fatal("invalid authority claims")
 	}
 	if _, err := Assertion(nil, host, "boot_0123456789abcdef", "nonce_0123456789abcdef", now); err == nil {

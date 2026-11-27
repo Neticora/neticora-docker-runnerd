@@ -19,11 +19,38 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/internal/config"
 	"github.com/Neticora/neticora-docker-runnerd/internal/dockerengine"
 	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
+	"github.com/Neticora/neticora-docker-runnerd/internal/katalinux"
 	"github.com/Neticora/neticora-docker-runnerd/internal/peerrecovery"
 	"github.com/Neticora/neticora-docker-runnerd/internal/standardlinux"
 	"github.com/Neticora/neticora-docker-runnerd/journal"
 	"github.com/Neticora/neticora-docker-runnerd/transport"
 )
+
+func loadStandalonePeerRecovery(c config.Config, original Credentials) (*katalinux.Profile, *kataCache, error) {
+	if !c.StandaloneExecution() {
+		return nil, nil, ErrKataOnly
+	}
+	x, q := c.Execution, c.Execution.Kata
+	if q.QualificationBindingFile != "" || q.QualificationAuthorityPin != "" {
+		return loadLabStandalonePeerRecovery(c, original)
+	}
+	policy, err := NewPolicyFile(x.PolicyFile)
+	if err != nil {
+		return nil, nil, err
+	}
+	base := standardlinux.Settings{ImageRepository: x.ImageRepository, NetworkID: x.NetworkID,
+		BootstrapRoot: x.BootstrapRoot, RunnerUID: policy.Get().UID(), PidsLimit: x.PidsLimit}
+	profile, err := katalinux.Load(q.ProfileFile, q.PublicKeyFile, q.EvidenceDirectory, c.StateDir, base)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !profile.Manifest.Standalone || profile.Manifest.EndpointIdentity != original.EndpointIdentity {
+		return nil, nil, ErrReconcile
+	}
+	profile.BindStandaloneStorage(original.InstallationID, original.Identity.HostId, true)
+	cache := newKataCache(*q.StickyCache, original.InstallationID, original.TenantID, x.Repository, profile.Manifest.ImageDigest)
+	return profile, cache, nil
+}
 
 func actualBootID() (string, error) {
 	raw, err := os.ReadFile("/proc/sys/kernel/random/boot_id")
@@ -41,11 +68,14 @@ func actualBootID() (string, error) {
 // owner with the normal daemon stopped. Inspection opens Docker read-only;
 // apply accepts only committed independent approval. No signer key is loaded.
 func AdministrativePeerRecovery(ctx context.Context, c config.Config, operation, inputPath, publicKeyPath string) ([]byte, error) {
+	if !c.StandaloneExecution() || os.Geteuid() != 0 {
+		return nil, ErrKataOnly
+	}
 	if operation == "diagnose" {
 		return diagnosePeerRecovery(ctx, c)
 	}
 	x := c.Execution
-	if x == nil || !x.Enabled || os.Geteuid() == 0 || (operation != "inspect" && operation != "apply") {
+	if operation != "inspect" && operation != "apply" {
 		return nil, ErrReconcile
 	}
 	credentials, key, err := ReadCredentials(c.CredentialFile)
@@ -80,6 +110,7 @@ func AdministrativePeerRecovery(ctx context.Context, c config.Config, operation,
 	// The supplied epoch is never written here or authenticated implicitly. The
 	// platform must already have accepted administrator resynchronization; its
 	// normal assertion verifier decides whether these current credentials work.
+	originalCredentials := credentials
 	credentials.Identity = challenge.Identity
 	credentials.BootID = actualBoot
 	if err = persistRecoveryDrain(c.StateDir); err != nil {
@@ -90,7 +121,7 @@ func AdministrativePeerRecovery(ctx context.Context, c config.Config, operation,
 		return nil, err
 	}
 	defer store.Close()
-	runtime, err := dockerengine.OpenReadOnly(c.RuntimeEndpoint, credentials.InstallationID, nil)
+	runtime, err := dockerengine.OpenStandalone(c.RuntimeEndpoint, credentials.InstallationID, nil, true)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +139,46 @@ func AdministrativePeerRecovery(ctx context.Context, c config.Config, operation,
 	}
 	defer client.Close()
 	remote := &HostRemote{Client: client, Credentials: credentials, Key: key, Version: Version()}
-	coordinator := &PeerRecoveryCoordinator{Store: store, Runtime: runtime, Remote: remote, Profile: standardlinux.Settings{ImageRepository: x.ImageRepository, NetworkID: x.NetworkID, BootstrapRoot: x.BootstrapRoot, RunnerUID: os.Geteuid(), PidsLimit: x.PidsLimit}, Identity: credentials.Identity, TenantID: credentials.TenantID, InstallationID: credentials.InstallationID, BootID: actualBoot, AgentVersion: Version()}
+	coordinator := &PeerRecoveryCoordinator{signingKey: key, Store: store, Runtime: runtime, Remote: remote, Profile: standardlinux.Settings{ImageRepository: x.ImageRepository, NetworkID: x.NetworkID, BootstrapRoot: x.BootstrapRoot, RunnerUID: os.Geteuid(), PidsLimit: x.PidsLimit}, Identity: credentials.Identity, TenantID: credentials.TenantID, InstallationID: credentials.InstallationID, BootID: actualBoot, AgentVersion: Version()}
+	if operation == "apply" {
+		coordinator.PublicKey, err = hostfs.ReadPrivate(publicKeyPath, 16384)
+		if err != nil {
+			return nil, err
+		}
+		checked, err := peerrecovery.VerifyRecordedApproval(input, coordinator.PublicKey, approved.Manifest.Plan, time.Now())
+		if err != nil {
+			return nil, err
+		}
+		completed, err := store.CompletedPeerRecovery(ctx, checked)
+		if err != nil {
+			return nil, err
+		}
+		if completed {
+			// Native completion was committed only after verifying the signed
+			// platform receipt. A retry can acknowledge that same terminal
+			// result without reopening the old Kata launch profile.
+			plan := approved.Manifest.Plan
+			endpoint, err := runtime.Probe(ctx)
+			if err != nil || endpoint != plan.TargetEndpointIdentity || plan.BootId != actualBoot ||
+				plan.InstallationId != credentials.InstallationID {
+				return nil, ErrReconcile
+			}
+			if originalCredentials.Identity != credentials.Identity || originalCredentials.BootID != actualBoot || originalCredentials.EndpointIdentity != endpoint {
+				if err := commitRecoveredCredentials(c.CredentialFile, credentials, endpoint); err != nil {
+					return nil, err
+				}
+			}
+			return recoveredPeerStatus(approved.Manifest.ApprovalId)
+		}
+	}
+	coordinator.Kata, coordinator.cache, err = loadStandalonePeerRecovery(c, originalCredentials)
+	if err != nil {
+		return nil, err
+	}
+	coordinator.Profile = coordinator.Kata.Base
+	if err = coordinator.Kata.ProtectPaths(c.CredentialFile, x.KeysDirectory, x.PolicyFile, x.CapabilitiesFile, x.TrustRoots, x.ImageBundles, x.CustomCAFile); err != nil {
+		return nil, err
+	}
 	if operation == "inspect" {
 		plan, err := coordinator.Propose(ctx, challenge, key)
 		if err != nil {
@@ -116,20 +186,24 @@ func AdministrativePeerRecovery(ctx context.Context, c config.Config, operation,
 		}
 		return peerrecovery.Canonical(plan)
 	}
-	coordinator.PublicKey, err = hostfs.ReadPrivate(publicKeyPath, 16384)
-	if err != nil {
-		return nil, err
-	}
-	if err = coordinator.Apply(ctx, approved); err != nil {
+	return applyPeerRecovery(ctx, coordinator, c.CredentialFile, credentials, approved)
+}
+
+func applyPeerRecovery(ctx context.Context, coordinator *PeerRecoveryCoordinator, credentialPath string, credentials Credentials, approved protocol.SignedPeerRecoveryApproval) ([]byte, error) {
+	if err := coordinator.Apply(ctx, approved); err != nil {
 		return nil, err
 	}
 	// Only after verified cleanup, final native ACKs and platform completion may
 	// credentials follow the approved peer. The local drain remains in force;
 	// new qualification and an explicit resume remain separate operator steps.
-	if err = commitRecoveredCredentials(c.CredentialFile, credentials, approved.Manifest.Plan.TargetEndpointIdentity); err != nil {
+	if err := commitRecoveredCredentials(credentialPath, credentials, approved.Manifest.Plan.TargetEndpointIdentity); err != nil {
 		return nil, err
 	}
-	return peerrecovery.Canonical(map[string]string{"approvalId": approved.Manifest.ApprovalId, "state": "completed-drained"})
+	return recoveredPeerStatus(approved.Manifest.ApprovalId)
+}
+
+func recoveredPeerStatus(approvalID string) ([]byte, error) {
+	return peerrecovery.Canonical(map[string]string{"approvalId": approvalID, "state": "completed-drained"})
 }
 
 func persistRecoveryDrain(dir string) error {
@@ -219,7 +293,7 @@ func commitRecoveredCredentials(path string, current Credentials, endpoint strin
 // diagnosePeerRecovery intentionally requires neither host credentials nor a
 // live platform. Its unsigned, distinct-purpose report cannot become approval.
 func diagnosePeerRecovery(ctx context.Context, c config.Config) ([]byte, error) {
-	if os.Geteuid() == 0 {
+	if os.Geteuid() == 0 && !c.StandaloneExecution() {
 		return nil, ErrReconcile
 	}
 	if err := persistRecoveryDrain(c.StateDir); err != nil {
@@ -234,7 +308,12 @@ func diagnosePeerRecovery(ctx context.Context, c config.Config) ([]byte, error) 
 	if err != nil {
 		return nil, err
 	}
-	runtime, err := dockerengine.OpenReadOnly(c.RuntimeEndpoint, scope.InstallationID, nil)
+	var runtime *dockerengine.Engine
+	if c.StandaloneExecution() {
+		runtime, err = dockerengine.OpenStandalone(c.RuntimeEndpoint, scope.InstallationID, nil, true)
+	} else {
+		runtime, err = dockerengine.OpenReadOnly(c.RuntimeEndpoint, scope.InstallationID, nil)
+	}
 	if err != nil {
 		return nil, err
 	}

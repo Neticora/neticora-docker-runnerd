@@ -683,6 +683,10 @@ func TestStateEventAndCleanupRollbackAtomically(t *testing.T) {
 			start := accepted(t, s)
 			ctx := context.Background()
 			if operation == "cleaned" {
+				cold := agent.ExecutionCursor{ExecutionID: "exec-a", Generation: "1"}
+				if err := s.BeginKataCache(ctx, storetest.Scope, cold, "repository-key", "lv-cold", true); err != nil {
+					t.Fatal(err)
+				}
 				if err := s.RequireCleanup(ctx, storetest.Scope, storetest.Event(t, start, 1, "cleanup-pending")); err != nil {
 					t.Fatal(err)
 				}
@@ -721,6 +725,9 @@ func TestStateEventAndCleanupRollbackAtomically(t *testing.T) {
 				var complete bool
 				if err = s.db.QueryRow("SELECT complete FROM cleanup_tasks").Scan(&complete); err != nil || complete {
 					t.Fatal("cleanup completion partially committed")
+				}
+				if count(t, s, "kata_cache_volumes") != 1 {
+					t.Fatal("cold cache record removed before atomic cleanup")
 				}
 			}
 			if s.Health(ctx).Ready {
@@ -1147,7 +1154,7 @@ func TestRestoredSnapshotCannotInventNeverStartedEvidence(t *testing.T) {
 }
 
 func TestMissingCorruptFutureOrStaleDatabaseFailsClosed(t *testing.T) {
-	for _, damage := range []string{"missing", "corrupt", "future-schema", "future-schema-rollback-mode", "stale", "unsafe-mode", "symlink", "hardlink", "sidecar-symlink"} {
+	for _, damage := range []string{"missing", "corrupt", "future-schema", "future-schema-rollback-mode", "foreign-version-4", "stale", "unsafe-mode", "symlink", "hardlink", "sidecar-symlink"} {
 		t.Run(damage, func(t *testing.T) {
 			dir := privateDir(t)
 			s := recovery(t, dir, Options{})
@@ -1167,13 +1174,18 @@ func TestMissingCorruptFutureOrStaleDatabaseFailsClosed(t *testing.T) {
 				t.Fatal(err)
 			}
 			path := filepath.Join(dir, databaseName)
-			if damage == "future-schema-rollback-mode" {
+			if damage == "future-schema-rollback-mode" || damage == "foreign-version-4" {
 				db, err := sql.Open("sqlite", path)
 				if err != nil {
 					t.Fatal(err)
 				}
 				if _, err = db.Exec("PRAGMA journal_mode=DELETE"); err != nil {
 					t.Fatal(err)
+				}
+				if damage == "foreign-version-4" {
+					if _, err = db.Exec("DROP TABLE kata_cache_heads; DROP TABLE kata_cache_volumes; CREATE TABLE execution_storage (record BLOB NOT NULL)"); err != nil {
+						t.Fatal(err)
+					}
 				}
 				if err = db.Close(); err != nil {
 					t.Fatal(err)
@@ -1436,5 +1448,31 @@ func TestAbruptProcessCrashAtDurabilityBoundaries(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestStorageJournalIdentityRejectsDatabaseReplacement(t *testing.T) {
+	ctx := context.Background()
+	dir := privateDir(t)
+	store, err := OpenRecovery(ctx, dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if id, err := store.StorageJournalID(ctx); err != nil || len(id) != 64 {
+		t.Fatal("journal identity unavailable", err)
+	}
+	path := filepath.Join(dir, databaseName)
+	if err := os.Rename(path, path+".original"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.StorageJournalID(ctx); !errors.Is(err, agent.ErrRecoveryRequired) {
+		t.Fatal("replacement database inherited the opened journal identity", err)
+	}
+	if err := os.Rename(path+".original", path); err != nil {
+		t.Fatal(err)
 	}
 }
