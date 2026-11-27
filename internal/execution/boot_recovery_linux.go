@@ -18,7 +18,10 @@ import (
 // boot before the service opens the journal for normal execution. It leaves the
 // old binding drained until an operator installs a new launch qualification.
 func RecoverOnBoot(ctx context.Context, c config.Config, approvalPath, publicKeyPath string) error {
-	if !c.StandaloneExecution() || approvalPath == "" || publicKeyPath == "" || c.Execution.Kata.QualificationBindingFile != "" || c.Execution.Kata.QualificationAuthorityPin != "" {
+	if !c.StandaloneExecution() || approvalPath == "" || publicKeyPath == "" {
+		return ErrKataOnly
+	}
+	if !labBootRecovery && (c.Execution.Kata.QualificationBindingFile != "" || c.Execution.Kata.QualificationAuthorityPin != "") {
 		return ErrKataOnly
 	}
 	credentials, key, err := ReadCredentials(c.CredentialFile)

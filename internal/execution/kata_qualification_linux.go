@@ -15,6 +15,8 @@ import (
 	"time"
 )
 
+const labBootRecovery = true
+
 // Explicit campaign configuration enters the normal service/controller lifecycle
 // only in qualification builds. Neither ordinary builds nor Load accept it.
 func openConfiguredQualification(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drained func() bool) (*Controller, func(), error) {

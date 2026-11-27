@@ -175,6 +175,11 @@ func (p *Profile) Check(now time.Time) error {
 	if p.layout() != nil || p.launchStorageSession() != nil {
 		return ErrQualification
 	}
+	if p.Manifest.Standalone {
+		if err := p.checkStandaloneRuntimeRoots("/run", p.Manifest.Storage.Runtime.Device); err != nil {
+			return err
+		}
+	}
 	for _, root := range []string{p.JournalDirectory, p.Manifest.Storage.DockerRoot} {
 		var s syscall.Statfs_t
 		if syscall.Statfs(root, &s) != nil || uint64(s.Bavail)*uint64(s.Bsize) < p.Manifest.Storage.ManagementFreeBytes {

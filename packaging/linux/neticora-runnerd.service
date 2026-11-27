@@ -1,9 +1,9 @@
 [Unit]
 Description=Neticora standalone Docker/Kata Runnerd
-Requires=docker.service
-After=docker.service network-online.target
+Requires=docker.service run-kata.mount run-kata\x2dcontainers.mount
+After=docker.service run-kata.mount run-kata\x2dcontainers.mount network-online.target
 Wants=network-online.target
-RequiresMountsFor=/var/lib/neticora-runnerd-kata
+RequiresMountsFor=/var/lib/neticora-runnerd-kata/blocks /var/lib/neticora-runnerd-kata/runtime
 
 [Service]
 Type=simple

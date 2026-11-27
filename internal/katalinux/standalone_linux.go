@@ -6,14 +6,45 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 
 	"github.com/Neticora/neticora-docker-runnerd/internal/dockerengine"
 	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
 )
+
+// Kata uses the restore record in /run/kata to dispose of the share under
+// /run/kata-containers. Keep both on the same qualified filesystem so a reboot
+// cannot preserve the share while discarding the state needed to remove it.
+func (p *Profile) checkStandaloneRuntimeRoots(run string, device uint64) error {
+	runtime := p.Manifest.Storage.Runtime
+	for _, root := range []string{"kata", "kata-containers/shared/sandboxes"} {
+		if !slices.Contains(p.Manifest.SandboxRoots, filepath.Join(runtime.Root, root)) {
+			return fmt.Errorf("missing Kata metadata root %s: %w", root, ErrQualification)
+		}
+	}
+	for _, name := range []string{"kata", "kata-containers"} {
+		original := filepath.Join(runtime.Root, name)
+		mounted := filepath.Join(run, name)
+		if hostfs.CheckAncestors(original) != nil || hostfs.CheckAncestors(mounted) != nil {
+			return fmt.Errorf("unsafe Kata runtime directory %s: %w", mounted, ErrQualification)
+		}
+		backing, backingErr := os.Lstat(original)
+		bind, bindErr := os.Lstat(mounted)
+		if backingErr != nil || bindErr != nil || !os.SameFile(backing, bind) {
+			return fmt.Errorf("Kata runtime directory %s is outside the signed runtime volume: %w", mounted, ErrQualification)
+		}
+		stat, ok := backing.Sys().(*syscall.Stat_t)
+		if !ok || stat.Uid != 0 || uint64(stat.Dev) != device {
+			return fmt.Errorf("Kata runtime directory %s has unqualified ownership: %w", mounted, ErrQualification)
+		}
+	}
+	return nil
+}
 
 // VerifyStandaloneRuntimeAbsent checks the runtime-owned state without changing
 // it. Docker and the pinned Kata runtime own teardown of their metadata.
@@ -26,14 +57,20 @@ func (p *Profile) VerifyStandaloneRuntimeAbsent(ctx context.Context, id string) 
 	}
 	device, err := p.storageDevice(p.Manifest.Storage.Runtime)
 	if err != nil {
+		return fmt.Errorf("verify Kata runtime filesystem identity: %w", err)
+	}
+	if err := p.checkStandaloneRuntimeRoots("/run", device); err != nil {
 		return err
 	}
 	if err := verifyNativeSandboxAbsence(p.Manifest.Storage.Runtime.Root, p.Manifest.SandboxRoots, id, device); err != nil {
 		return err
 	}
 	processes, err := p.processes(ctx, id)
-	if err != nil || len(processes) != 0 {
-		return ErrQualification
+	if err != nil {
+		return fmt.Errorf("inspect Kata processes: %w", err)
+	}
+	if len(processes) != 0 {
+		return fmt.Errorf("Kata sandbox %s still has runtime processes: %w", id, ErrQualification)
 	}
 	return nil
 }
@@ -48,9 +85,13 @@ func verifyNativeSandboxAbsence(anchor string, paths []string, id string, device
 			return err
 		}
 		_, lookupErr := parent.Lstat(id)
+		if lookupErr == nil {
+			parent.Close()
+			return fmt.Errorf("Kata sandbox %s still has metadata in %s: %w", id, path, ErrQualification)
+		}
 		if !errors.Is(lookupErr, os.ErrNotExist) {
 			parent.Close()
-			return ErrQualification
+			return lookupErr
 		}
 		err = syncSandboxParent(parent, id, device)
 		_, lookupErr = parent.Lstat(id)

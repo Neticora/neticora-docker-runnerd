@@ -15,6 +15,34 @@ Runnerd. Place the mounts beneath `/var/lib/neticora-runnerd-kata` so the
 packaged unit orders startup after them. Use a separate thin pool with adequate
 data and metadata capacity for cache generations.
 
+Provision root-owned `kata` and `kata-containers` directories on the dedicated
+runtime ext4 volume. Bind them to `/run/kata` and `/run/kata-containers` before
+containerd and Docker start. Include `kata` and
+`kata-containers/shared/sandboxes` beneath the runtime volume in the signed
+sandbox roots. Kata uses `/run/kata/<id>/state.json` to restore the sandbox and
+remove its share. Persist both directories on the same qualified volume.
+
+After adding the dedicated ext4 runtime volume to `/etc/fstab`, add its bind
+mounts with a dependency on the backing volume.
+
+```fstab
+/var/lib/neticora-runnerd-kata/runtime/kata /run/kata none bind,x-systemd.requires-mounts-for=/var/lib/neticora-runnerd-kata/runtime 0 0
+/var/lib/neticora-runnerd-kata/runtime/kata-containers /run/kata-containers none bind,x-systemd.requires-mounts-for=/var/lib/neticora-runnerd-kata/runtime 0 0
+```
+
+Add the following systemd drop-in to `docker.service` and, if installed
+separately, `containerd.service`. The Runnerd unit requires the same mounts.
+
+```ini
+[Unit]
+Requires=run-kata.mount run-kata\x2dcontainers.mount
+After=run-kata.mount run-kata\x2dcontainers.mount
+```
+
+Run `systemctl daemon-reload` after provisioning the mount and service units.
+Configure the dedicated cache thin pool for LVM autoactivation before starting
+Runnerd and verify the expected pool UUID and active state after boot.
+
 Keep the durable journal, enrollment identity, signing trust and execution
 evidence on persistent host storage outside guest-visible mounts. Start the
 control plane on an empty PostgreSQL database, then provision a fresh
@@ -63,6 +91,12 @@ proposal and approval flow. Atomically deliver the signed input to
 `/var/lib/neticora-runnerd-kata/recovery/approval.json` with mode 0600. The
 running unit applies it without a manual recovery invocation. The host remains
 drained until a new signed launch qualification is installed and resumed.
+
+If cleanup reports remaining Kata metadata, preserve the original runtime
+volume and sandbox state. Retry through the original Docker and containerd
+lifecycle. A successful shim delete response alone does not prove physical
+disposal. Runnerd keeps the reservation until the signed recovery verifies
+the original sandbox and storage are absent and records the final ACK.
 
 Drain and stop the service before any replacement or removal. The maintainer
 scripts refuse to replace a running service. Removing the package preserves

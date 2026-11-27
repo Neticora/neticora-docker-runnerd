@@ -8,6 +8,7 @@ REQUIRED = frozenset({
     "TestStandaloneNativeSandboxAbsence/retains-runtime-residue",
     "TestStandaloneNativeSandboxAbsence/rejects-replaced-parent",
     "TestStandaloneNativeSandboxAbsence/accepts-exact-absence",
+    "TestStandaloneNativeSandboxAbsence/requires-Kata-restore-state-and-share-on-one-volume",
     "TestStandalonePreflightPinsJournalAndRejectsDrift",
     "TestBlockReleaseIntentPreservesAmbiguity",
     "TestBlockDurableOwnershipSurvivesReopenAndRejectsCorruption",

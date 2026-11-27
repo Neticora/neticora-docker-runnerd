@@ -72,4 +72,36 @@ func TestStandaloneNativeSandboxAbsence(t *testing.T) {
 			t.Fatal("changed another execution's metadata", err)
 		}
 	})
+	t.Run("requires-Kata-restore-state-and-share-on-one-volume", func(t *testing.T) {
+		p := Profile{}
+		p.Manifest.Storage.Runtime = Filesystem{Root: anchor, Device: uint64(info.Dev)}
+		share := filepath.Join(anchor, "kata-containers", "shared", "sandboxes")
+		state := filepath.Join(anchor, "kata")
+		if err := os.MkdirAll(share, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Mkdir(state, 0700); err != nil {
+			t.Fatal(err)
+		}
+		p.Manifest.SandboxRoots = []string{share}
+		if err := p.checkStandaloneRuntimeRoots(anchor, uint64(info.Dev)); err == nil {
+			t.Fatal("accepted a profile missing the Kata restore state root")
+		}
+		p.Manifest.SandboxRoots = append(p.Manifest.SandboxRoots, state)
+		if err := p.checkStandaloneRuntimeRoots(anchor, uint64(info.Dev)); err != nil {
+			t.Fatal("rejected the signed restore state and share", err)
+		}
+		if err := p.checkStandaloneRuntimeRoots(anchor, uint64(info.Dev)^1); err == nil {
+			t.Fatal("accepted a device without valid storage reconciliation")
+		}
+		other := t.TempDir()
+		for _, dir := range []string{"kata", "kata-containers"} {
+			if err := os.Mkdir(filepath.Join(other, dir), 0700); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := p.checkStandaloneRuntimeRoots(other, uint64(info.Dev)); err == nil {
+			t.Fatal("accepted live Kata roots with different backing inodes")
+		}
+	})
 }
