@@ -106,7 +106,7 @@ func TestRunnerd09LiveHostCgroupLifecycle(t *testing.T) {
 		if _, err := p.cgroupRecord(plan); err != nil {
 			t.Fatal("existing scoped cleanup intent required", err)
 		}
-		settleSandboxTest(t, func() error {
+		settleCgroupTest(t, func() error {
 			released, err := p.releaseHostCgroup(ctx, plan)
 			if err != nil {
 				return err
@@ -129,7 +129,7 @@ func TestRunnerd09LiveHostCgroupLifecycle(t *testing.T) {
 		// necessarily exists. Observe that exact unit becoming ready before
 		// testing retry identity; never issue another create to satisfy the wait.
 		var before syscall.Stat_t
-		settleSandboxTest(t, func() error {
+		settleCgroupTest(t, func() error {
 			status, e := p.cgroupUnitStatus(ctx, plan.Name)
 			if e != nil {
 				return e
@@ -187,4 +187,19 @@ func TestRunnerd09LiveHostCgroupLifecycle(t *testing.T) {
 		t.Fatal("released same attempt recreated")
 	}
 	t.Log("Pinned systemd transient slice: exact hard CPU/memory/swap/PID limits, stable ownership and verified empty cleanup; unqualified lab only")
+}
+
+func settleCgroupTest(t *testing.T, operation func() error) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		err := operation()
+		if err == nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("owned cgroup did not converge:", err)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }
