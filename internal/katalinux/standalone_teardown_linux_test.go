@@ -18,6 +18,9 @@ func TestStandaloneNativeSandboxAbsence(t *testing.T) {
 		t.Skip("requires root ownership of the native runtime tree")
 	}
 	anchor := t.TempDir()
+	if err := os.Chmod(anchor, 0700); err != nil {
+		t.Fatal(err)
+	}
 	sandboxes := filepath.Join(anchor, "sandboxes")
 	if err := os.Mkdir(sandboxes, 0700); err != nil {
 		t.Fatal(err)
