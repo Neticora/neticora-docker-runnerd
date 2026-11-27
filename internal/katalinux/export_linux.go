@@ -54,13 +54,6 @@ func (p *Profile) PhysicalEvidence(ctx context.Context, id string, plan dockeren
 			return record, ErrQualification
 		}
 	}
-	if p.Manifest.RetirementPolicy != "" && p.ObserverSocket == "" {
-		retirement, err := p.RetirementEvidence(ctx, id, plan)
-		record.Retirement = retirement
-		if err != nil {
-			return record, err
-		}
-	}
 	return record, nil
 }
 

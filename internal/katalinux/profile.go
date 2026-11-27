@@ -101,7 +101,6 @@ type Manifest struct {
 	GuestCapabilities []string          `json:"guestCapabilities"`
 	GuestDNSServers   []string          `json:"guestDnsServers,omitempty"`
 	HostCgroup        *HostCgroup       `json:"hostCgroup,omitempty"`
-	RetirementPolicy  string            `json:"retirementPolicy,omitempty"`
 	SecurityReview    string            `json:"securityReview"`
 	Budget            Budget            `json:"budget"`
 	Storage           Storage           `json:"storage"`
@@ -127,7 +126,6 @@ type Profile struct {
 	storageAuthority      string
 	storageInstallationID string
 	storageHostID         string
-	brokerOwned           bool
 	cleanupOnly           bool
 	storageAuthorityPEM   []byte
 	ObserverSocket        string
@@ -224,10 +222,7 @@ var standaloneAcceptance = []string{
 
 func (p *Profile) validate() error {
 	m := p.Manifest
-	if m.Standalone && (m.Version != MultiBlockVersion || m.RetirementPolicy != "" || m.ObserverConfig != "") {
-		return ErrQualification
-	}
-	if m.RetirementPolicy != "" && (m.RetirementPolicy != RetirementPolicy || m.Version != MultiBlockVersion) {
+	if m.Standalone && (m.Version != MultiBlockVersion || m.ObserverConfig != "") {
 		return ErrQualification
 	}
 	block := isBlockVersion(m.Version)

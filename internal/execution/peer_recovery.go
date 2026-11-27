@@ -637,6 +637,9 @@ func (c *PeerRecoveryCoordinator) Apply(ctx context.Context, approved protocol.S
 			if err = engine.VerifyStandaloneRecoveryNetworkDetached(ctx, id, string(p.HostConfig.NetworkMode)); err != nil {
 				return fmt.Errorf("verify recovered Docker network detachment: %w", err)
 			}
+			if err = c.Kata.VerifyStandaloneRuntimeAbsent(ctx, id); err != nil {
+				return fmt.Errorf("verify recovered Kata runtime teardown: %w", err)
+			}
 			a, err := authorize(ctx)
 			if err != nil {
 				return err

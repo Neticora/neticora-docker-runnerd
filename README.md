@@ -13,19 +13,13 @@ and a hidden-prompt wrapper; enrollment does not grant execution admission.
 
 ## Project status
 
-Runnerd is under active development. This repository currently contains the
-versioned host protocol, Go SDK, a SQLite recovery store with a durable event
-outbox, and an experimental opt-in Linux Standard GitHub controller.
-Existing configurations remain drained. Execution requires explicit local
-configuration, independent image trust and authenticated platform authorization.
-An offline verification foundation checks signed update artifacts against
-independently provisioned trust. Production installation and runner execution are
-not yet supported.
-
-Runnerd07 separates Docker mechanics, a trusted process-only profile, and durable
-reconciliation. See Alpha's `docs/runnerd/RUNNERD07-LINUX-GITHUB.md` for the exact
-configuration, protected JIT handoff, cleanup contract and remaining live gates.
-No production tuple or Docker live-restore guarantee is implied.
+Runnerd 09 runs GitHub jobs in individual Kata VMs on Linux AMD64. The
+trusted host service uses the local Docker socket directly. The guest runs
+its own Docker and BuildKit, with execution storage and sticky cache managed
+by the host. Host protocol 2.0.0 requires a fresh enrollment and journal.
+Execution requires a signed qualification, local policy and authenticated
+platform authorization. See [Standalone installation](docs/STANDALONE-INSTALL.md)
+and [Sandbox cleanup](docs/SANDBOX-CLEANUP.md).
 
 Runnerd08 keeps each Docker adapter bound to its first verified endpoint and
 checks continuity again after inspections and before mutation. A replacement
@@ -57,28 +51,6 @@ pre-start cancellation cannot race past the last launch check.
 
 The presence of protocol definitions does not imply support for a particular
 operating system, container runtime or isolation profile.
-
-The execution broker separates the unprivileged controller from privileged Docker
-operations. It independently verifies platform-signed, operation-scoped authority,
-retains original resource ownership, and requires fresh disposal evidence before
-the platform can complete cleanup. Supported boot recovery is cleanup-only and
-requires pre-recorded storage continuity; older unanchored records remain held.
-
-The broker runtime is restricted to disposable qualification builds. Shipping
-builds refuse runtime configuration; production admission remains disabled.
-Broker-managed block-backed Kata retains original storage ownership and native
-journal semantics. Full lifecycle and installed-product qualification remain open.
-Configuration, authorization and
-recovery behavior are documented in Alpha's
-[execution broker reference](https://github.com/Neticora/neticora-alpha/blob/main/docs/runnerd/EXECUTION-BROKER.md).
-
-Broker-managed block-backed Kata uses the existing signed profile, allocation
-ledger, VM/process witnesses and native controller journal. Configure the root
-broker's `runtime.kata` paths and the controller's matching `execution.kata`
-profile with an empty `observerSocket`; privileged operations run in the broker.
-The broker holds the original observer lifecycle lock and retains original pool
-ownership. Production activation and Kata cross-boot recovery remain disabled
-pending qualification. Docker-only recovery authority cannot dispose Kata state.
 
 ## Feedback and contributions
 

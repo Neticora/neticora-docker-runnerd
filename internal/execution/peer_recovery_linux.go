@@ -68,20 +68,14 @@ func actualBootID() (string, error) {
 // owner with the normal daemon stopped. Inspection opens Docker read-only;
 // apply accepts only committed independent approval. No signer key is loaded.
 func AdministrativePeerRecovery(ctx context.Context, c config.Config, operation, inputPath, publicKeyPath string) ([]byte, error) {
-	if operation == "broker-finalize" {
-		if inputPath != "" || publicKeyPath != "" {
-			return nil, ErrReconcile
-		}
-		return FinalizeBrokerRecovery(ctx, c)
-	}
-	if c.Execution != nil && c.Execution.BrokerSocket != "" {
-		return nil, ErrReconcile
+	if !c.StandaloneExecution() || os.Geteuid() != 0 {
+		return nil, ErrKataOnly
 	}
 	if operation == "diagnose" {
 		return diagnosePeerRecovery(ctx, c)
 	}
 	x := c.Execution
-	if x == nil || !x.Enabled || (os.Geteuid() == 0 && (x.Kata == nil || x.Kata.StickyCache == nil)) || (operation != "inspect" && operation != "apply") {
+	if operation != "inspect" && operation != "apply" {
 		return nil, ErrReconcile
 	}
 	credentials, key, err := ReadCredentials(c.CredentialFile)
@@ -127,12 +121,7 @@ func AdministrativePeerRecovery(ctx context.Context, c config.Config, operation,
 		return nil, err
 	}
 	defer store.Close()
-	var runtime *dockerengine.Engine
-	if x.Kata != nil && x.Kata.StickyCache != nil {
-		runtime, err = dockerengine.OpenStandalone(c.RuntimeEndpoint, credentials.InstallationID, nil, true)
-	} else {
-		runtime, err = dockerengine.OpenReadOnly(c.RuntimeEndpoint, credentials.InstallationID, nil)
-	}
+	runtime, err := dockerengine.OpenStandalone(c.RuntimeEndpoint, credentials.InstallationID, nil, true)
 	if err != nil {
 		return nil, err
 	}
@@ -182,22 +171,13 @@ func AdministrativePeerRecovery(ctx context.Context, c config.Config, operation,
 			return recoveredPeerStatus(approved.Manifest.ApprovalId)
 		}
 	}
-	if x.Kata != nil {
-		if x.Kata.StickyCache != nil {
-			coordinator.Kata, coordinator.cache, err = loadStandalonePeerRecovery(c, originalCredentials)
-			if err == nil {
-				coordinator.Profile = coordinator.Kata.Base
-			}
-		} else {
-			coordinator.Kata, err = katalinux.Load(x.Kata.ProfileFile, x.Kata.PublicKeyFile, x.Kata.EvidenceDirectory, c.StateDir, coordinator.Profile)
-		}
-		if err != nil {
-			return nil, err
-		}
-		coordinator.Kata.ObserverSocket = x.Kata.ObserverSocket
-		if err = coordinator.Kata.ProtectPaths(c.CredentialFile, x.KeysDirectory, x.PolicyFile, x.CapabilitiesFile, x.TrustRoots, x.ImageBundles, x.CustomCAFile, x.Kata.ObserverSocket); err != nil {
-			return nil, err
-		}
+	coordinator.Kata, coordinator.cache, err = loadStandalonePeerRecovery(c, originalCredentials)
+	if err != nil {
+		return nil, err
+	}
+	coordinator.Profile = coordinator.Kata.Base
+	if err = coordinator.Kata.ProtectPaths(c.CredentialFile, x.KeysDirectory, x.PolicyFile, x.CapabilitiesFile, x.TrustRoots, x.ImageBundles, x.CustomCAFile); err != nil {
+		return nil, err
 	}
 	if operation == "inspect" {
 		plan, err := coordinator.Propose(ctx, challenge, key)
@@ -313,10 +293,7 @@ func commitRecoveredCredentials(path string, current Credentials, endpoint strin
 // diagnosePeerRecovery intentionally requires neither host credentials nor a
 // live platform. Its unsigned, distinct-purpose report cannot become approval.
 func diagnosePeerRecovery(ctx context.Context, c config.Config) ([]byte, error) {
-	if c.Execution != nil && c.Execution.BrokerSocket != "" {
-		return nil, ErrReconcile
-	}
-	if os.Geteuid() == 0 {
+	if os.Geteuid() == 0 && !c.StandaloneExecution() {
 		return nil, ErrReconcile
 	}
 	if err := persistRecoveryDrain(c.StateDir); err != nil {
@@ -331,7 +308,12 @@ func diagnosePeerRecovery(ctx context.Context, c config.Config) ([]byte, error) 
 	if err != nil {
 		return nil, err
 	}
-	runtime, err := dockerengine.OpenReadOnly(c.RuntimeEndpoint, scope.InstallationID, nil)
+	var runtime *dockerengine.Engine
+	if c.StandaloneExecution() {
+		runtime, err = dockerengine.OpenStandalone(c.RuntimeEndpoint, scope.InstallationID, nil, true)
+	} else {
+		runtime, err = dockerengine.OpenReadOnly(c.RuntimeEndpoint, scope.InstallationID, nil)
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -29,21 +29,6 @@ func (c *Controller) resolvePlan(scope agent.StoreScope, s protocol.ExecutionSpe
 // Recovery reconstruction is used only for commands already in the store. A
 // fresh launch must separately obtain a launch plan after current admission.
 func (c *Controller) resolveRecoveryPlan(scope agent.StoreScope, s protocol.ExecutionSpec) (dockerengine.Plan, error) {
-	if c.recoveryOnly {
-		// Lookup hints only. The broker reconstructs its independently protected
-		// original profile/plan; no executable Docker payload leaves this adapter.
-		p, err := c.Profile.Plan(scope, s)
-		if err != nil {
-			return p, err
-		}
-		p.RecoveryOnly = true
-		p.HostConfig = nil
-		p.Config.Image = ""
-		p.Config.Entrypoint = nil
-		p.Config.Labels[dockerengine.LabelPrefix+"template"] = s.TemplateVersion
-		p.Config.Labels[dockerengine.LabelPrefix+"profile"] = s.ProfileVersion
-		return p, nil
-	}
 	if s.IsolationProfile == "isolated" {
 		if c.Kata == nil {
 			return dockerengine.Plan{}, katalinux.ErrQualification
@@ -60,17 +45,6 @@ func (c *Controller) admit(s protocol.ExecutionSpec, now time.Time) error {
 		return ErrReconcile
 	}
 	if c.Kata != nil {
-		if c.brokerKata() {
-			if s.IsolationProfile != "isolated" || s.ProfileVersion != c.Kata.ID {
-				return katalinux.ErrQualification
-			}
-			if err := c.Policy().AdmitIsolated(c.Scope, s, now); err != nil {
-				return err
-			}
-			// Root repeats signed tuple, storage, image and runtime admission
-			// under the exact committed operation. Controller has no engine.
-			return nil
-		}
 		if err := c.Kata.Admit(c.Scope, s, c.Policy(), now); err != nil {
 			return err
 		}
@@ -106,4 +80,12 @@ func verifyKataAbsence(ctx context.Context, profile *katalinux.Profile, runtime 
 		return err
 	}
 	return profile.VerifyAbsent(ctx, id, p)
+}
+
+func (c *Controller) kataHealthy(_ context.Context, p dockerengine.Plan, o dockerengine.Object) bool {
+	return c.Kata.Healthy(p, o.StartedAt, time.Now())
+}
+
+func (c *Controller) verifyKataAbsence(ctx context.Context, id string, p dockerengine.Plan) error {
+	return verifyKataAbsence(ctx, c.Kata, c.Runtime, id, p)
 }

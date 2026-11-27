@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/Neticora/neticora-docker-runnerd/internal/stickycache"
 )
 
 const valid = `{"controlPlaneUrl":"https://example.invalid/hosts","stateDir":"/var/lib/neticora-runnerd","runtimeEndpoint":"unix:///run/docker.sock","credentialFile":"/etc/neticora-runnerd/identity.json","requestTimeoutSeconds":15}`
@@ -21,6 +23,7 @@ func TestStrictConfiguration(t *testing.T) {
 		strings.Replace(valid, "\"requestTimeoutSeconds\":15", "\"requestTimeoutSeconds\":999", 1),
 		strings.Replace(valid, "{", "{\"secret\":\"do-not-print-me\",", 1),
 		strings.Replace(valid, "{", "{\"stateDir\":\"duplicate\",", 1),
+		strings.Replace(valid, "{", "{\"execution\":{\"enabled\":true,\"brokerSocket\":\"/run/retired.sock\"},", 1),
 	} {
 		if _, err := Parse([]byte(raw)); err == nil || strings.Contains(err.Error(), "do-not-print-me") {
 			t.Fatalf("unsafe configuration handling: %v", err)
@@ -48,46 +51,18 @@ func TestRuntimeHeadroomConfigurationCannotDisableProtectedMargin(t *testing.T) 
 	}
 }
 
-func TestBrokerKataRequiresExclusivePrivilegedEndpoint(t *testing.T) {
-	c, err := Parse([]byte(valid))
-	if err != nil {
-		t.Fatal(err)
-	}
-	c.Execution = &Execution{Enabled: true, BrokerSocket: "/run/neticora/broker.sock", Kata: &Kata{ProfileFile: "/etc/runnerd/kata/profile.json", PublicKeyFile: "/etc/runnerd/kata/public.pem", EvidenceDirectory: "/var/lib/runnerd-evidence"}, Repository: "org/repo", Organization: "org", Pool: "pool", PolicyFile: "/etc/runnerd/policy.json", CapabilitiesFile: "/etc/runnerd/capabilities.json", TrustRoots: "/etc/runnerd/roots", ImageBundles: "/etc/runnerd/bundles", ImageRepository: "registry/runner", NetworkID: "customer-network", BootstrapRoot: "/run/runnerd-bootstrap", KeysDirectory: "/var/lib/runnerd-keys", TrustProvisionedAt: "2026-11-05T00:00:00Z", PidsLimit: 128}
-	check := func(want bool) {
-		t.Helper()
-		raw, _ := json.Marshal(c)
-		_, err := Parse(raw)
-		if (err == nil) != want {
-			t.Fatalf("broker/Kata mode accepted=%v, want=%v: %v", err == nil, want, err)
-		}
-	}
-	check(true)
-	c.Execution.Kata.ObserverSocket = "/run/legacy-observer.sock"
-	check(false)
-	c.Execution.BrokerSocket = ""
-	check(true)
-	c.Execution.Kata.ObserverSocket = ""
-	check(false)
-	c.Execution.BrokerSocket = "relative.sock"
-	check(false)
-	c.Execution.BrokerSocket = "/run/neticora/broker.sock"
-	c.Execution.Kata.EvidenceDirectory = c.Execution.BootstrapRoot + "/evidence"
-	check(false)
-}
-
-func TestQualificationCampaignRequiresProtectedBrokerConfiguration(t *testing.T) {
+func TestQualificationCampaignRequiresProtectedStandaloneConfiguration(t *testing.T) {
 	c, _ := Parse([]byte(valid))
-	c.Execution = &Execution{Enabled: true, BrokerSocket: "/run/broker.sock", Kata: &Kata{ProfileFile: "/etc/runnerd/profile.json", PublicKeyFile: "/etc/runnerd/public.pem", EvidenceDirectory: "/var/lib/evidence", QualificationBindingFile: "/etc/runnerd/binding.json", QualificationAuthorityPin: strings.Repeat("a", 64)}, Repository: "org/repo", Organization: "org", Pool: "pool", PolicyFile: "/etc/runnerd/policy.json", CapabilitiesFile: "/etc/runnerd/capabilities.json", TrustRoots: "/etc/runnerd/roots", ImageBundles: "/etc/runnerd/bundles", ImageRepository: "registry/runner", NetworkID: "network", BootstrapRoot: "/run/bootstrap", KeysDirectory: "/var/lib/keys", TrustProvisionedAt: "2026-11-05T00:00:00Z", PidsLimit: 128}
-	for _, name := range []string{"valid", "no broker", "no pin", "invalid pin", "journal binding", "guest binding", "guest health binding", "relative binding"} {
+	c.Execution = &Execution{Enabled: true, Kata: &Kata{ProfileFile: "/etc/runnerd/profile.json", PublicKeyFile: "/etc/runnerd/public.pem", EvidenceDirectory: "/var/lib/evidence", StickyCache: &stickycache.Policy{VolumeGroup: "vg", ThinPool: "cache", PoolUUID: "pool-uuid", VolumeBytes: 8 << 30, Retain: 2, MaxDataPercent: 60, MaxMetaPercent: 60}, QualificationBindingFile: "/etc/runnerd/binding.json", QualificationAuthorityPin: strings.Repeat("a", 64)}, Repository: "org/repo", Organization: "org", Pool: "pool", PolicyFile: "/etc/runnerd/policy.json", CapabilitiesFile: "/etc/runnerd/capabilities.json", TrustRoots: "/etc/runnerd/roots", ImageBundles: "/etc/runnerd/bundles", ImageRepository: "registry/runner", NetworkID: "network", BootstrapRoot: "/run/bootstrap", KeysDirectory: "/var/lib/keys", TrustProvisionedAt: "2026-11-05T00:00:00Z", PidsLimit: 128}
+	for _, name := range []string{"valid", "no cache", "no pin", "invalid pin", "journal binding", "guest binding", "guest health binding", "relative binding"} {
 		t.Run(name, func(t *testing.T) {
 			raw, _ := json.Marshal(c)
 			var next Config
 			json.Unmarshal(raw, &next)
 			q := next.Execution.Kata
 			switch name {
-			case "no broker":
-				next.Execution.BrokerSocket = ""
+			case "no cache":
+				next.Execution.Kata.StickyCache = nil
 			case "no pin":
 				q.QualificationAuthorityPin = ""
 			case "invalid pin":

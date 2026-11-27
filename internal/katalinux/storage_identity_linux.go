@@ -328,3 +328,27 @@ func InstallStorageReconciliation(config, profileID, artifact string) error {
 	}
 	return persistStorageGrant(root, volumeGrantName(*selected), raw)
 }
+
+// Cross-boot device-directory absence is meaningful only on the new private tmpfs.
+func verifyBootTmpfsAbsence(path, originalBoot string) error {
+	boot, err := os.ReadFile("/proc/sys/kernel/random/boot_id")
+	if err != nil || originalBoot == "" || strings.TrimSpace(string(boot)) == originalBoot || !strings.HasPrefix(path, "/run/") || filepath.Clean(path) != path {
+		return ErrQualification
+	}
+	current := path
+	for {
+		info, err := os.Lstat(current)
+		if err == nil {
+			st, ok := info.Sys().(*syscall.Stat_t)
+			var fs syscall.Statfs_t
+			if !ok || st.Uid != 0 || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || hostfs.CheckAncestors(current) != nil || syscall.Statfs(current, &fs) != nil || uint64(fs.Type) != 0x01021994 {
+				return ErrQualification
+			}
+			return nil
+		}
+		if !errors.Is(err, os.ErrNotExist) || current == "/run" {
+			return ErrQualification
+		}
+		current = filepath.Dir(current)
+	}
+}

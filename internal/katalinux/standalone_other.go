@@ -8,7 +8,8 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/internal/dockerengine"
 )
 
-func (*Profile) ReleaseStandalone(context.Context, dockerengine.Plan) error { return ErrQualification }
+func (*Profile) ReleaseStandalone(context.Context, dockerengine.Plan) error  { return ErrQualification }
+func (*Profile) VerifyStandaloneRuntimeAbsent(context.Context, string) error { return ErrQualification }
 
 func (*Profile) StoragePreflight() error { return ErrQualification }
 

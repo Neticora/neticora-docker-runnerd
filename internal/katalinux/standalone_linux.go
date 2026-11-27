@@ -4,6 +4,7 @@ package katalinux
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
@@ -13,6 +14,56 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/internal/dockerengine"
 	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
 )
+
+// VerifyStandaloneRuntimeAbsent checks the runtime-owned state without changing
+// it. Docker and the pinned Kata runtime own teardown of their metadata.
+func (p *Profile) VerifyStandaloneRuntimeAbsent(ctx context.Context, id string) error {
+	if !p.Manifest.Standalone || len(id) != 64 || len(p.Manifest.SandboxRoots) == 0 {
+		return ErrQualification
+	}
+	if _, err := hex.DecodeString(id); err != nil {
+		return ErrQualification
+	}
+	device, err := p.storageDevice(p.Manifest.Storage.Runtime)
+	if err != nil {
+		return err
+	}
+	if err := verifyNativeSandboxAbsence(p.Manifest.Storage.Runtime.Root, p.Manifest.SandboxRoots, id, device); err != nil {
+		return err
+	}
+	processes, err := p.processes(ctx, id)
+	if err != nil || len(processes) != 0 {
+		return ErrQualification
+	}
+	return nil
+}
+
+func verifyNativeSandboxAbsence(anchor string, paths []string, id string, device uint64) error {
+	for _, path := range paths {
+		parent, err := openSandboxParent(anchor, path)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		_, lookupErr := parent.Lstat(id)
+		if !errors.Is(lookupErr, os.ErrNotExist) {
+			parent.Close()
+			return ErrQualification
+		}
+		err = syncSandboxParent(parent, id, device)
+		_, lookupErr = parent.Lstat(id)
+		parent.Close()
+		if err != nil {
+			return err
+		}
+		if !errors.Is(lookupErr, os.ErrNotExist) {
+			return ErrQualification
+		}
+	}
+	return nil
+}
 
 // ReleaseStandalone releases the journal-owned raw disk and cgroup after the
 // direct engine has removed the exact container. Loop and device claims are
@@ -45,7 +96,7 @@ func (p *Profile) ReleaseStandalone(ctx context.Context, plan dockerengine.Plan)
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	return nil
+	return p.VerifyExecutionDevicesAbsent(ctx, plan)
 }
 
 // StoragePreflight checks the signed filesystems and the journal's allocation

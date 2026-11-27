@@ -24,7 +24,7 @@ func run() error {
 	version := flag.Bool("version", false, "print actual executable version")
 	file := flag.String("config", "/etc/neticora-runnerd-kata/config.json", "protected configuration file")
 	kataCheck := flag.Bool("kata-check", false, "read-only check of an independently qualified Kata tuple; never grants admission")
-	recovery := flag.String("recovery", "", "operator recovery: diagnose, inspect, apply or broker-finalize; daemon must be stopped")
+	recovery := flag.String("recovery", "", "operator recovery: diagnose, inspect or apply; daemon must be stopped")
 	recoveryInput := flag.String("recovery-input", "", "protected challenge or signed approval JSON; normal service consumes a current-boot approval")
 	recoveryPublicKey := flag.String("recovery-public-key", "", "protected independent operator public key PEM")
 	socket := flag.String("socket", "/run/neticora-runnerd-kata/control.sock", "local control socket")
@@ -43,11 +43,6 @@ func run() error {
 	c, err := config.Parse(raw)
 	if err != nil {
 		return err
-	}
-	if c.Execution != nil && c.Execution.BrokerSocket != "" {
-		if err = execution.CheckBrokerEntryDescriptors(); err != nil {
-			return err
-		}
 	}
 	c.SourceFile = *file
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

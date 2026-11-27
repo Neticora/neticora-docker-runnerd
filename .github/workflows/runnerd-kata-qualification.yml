@@ -35,7 +35,7 @@ jobs:
             --working-directory="$GITHUB_WORKSPACE" \
             /usr/bin/env "PATH=$PATH" "GOMODCACHE=$(go env GOMODCACHE)" \
             "GOCACHE=$RUNNER_TEMP/runnerd09-go-cache" GOTOOLCHAIN=local \
-            RUNNERD09_SANDBOX_STRESS=1 TMPDIR=/var/tmp \
+            TMPDIR=/var/tmp \
             unshare --fork --pid --mount-proc \
             bash .github/scripts/qualify-kata-native.sh "$output"
       - name: Preserve complete native test output
@@ -49,4 +49,4 @@ jobs:
       - name: Scope of this qualification
         if: always()
         run: |
-          echo 'Native Linux regressions only. Live Kata/QEMU attachment, signed host qualification and all 48 acceptance cases remain independent gates.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Native Linux regressions only. Live Kata/QEMU attachment, signed host qualification and the installed standalone lifecycle remain independent gates.' >> "$GITHUB_STEP_SUMMARY"

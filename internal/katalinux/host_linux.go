@@ -184,9 +184,6 @@ func (p *Profile) Check(now time.Time) error {
 	return nil
 }
 func (p *Profile) Prepare(plan dockerengine.Plan) error {
-	if p.Manifest.RetirementPolicy != "" && p.RequireAcquisition(plan) != nil {
-		return ErrQualification
-	}
 	if p.ObserverSocket != "" {
 		return p.remote(context.Background(), "prepare", "", plan)
 	}
@@ -260,9 +257,7 @@ func (p *Profile) Healthy(plan dockerengine.Plan, startedAt string, now time.Tim
 		return false
 	}
 	var raw []byte
-	if p.brokerOwned {
-		raw, e = p.brokerHealthRead(plan)
-	} else if p.Manifest.Standalone {
+	if p.Manifest.Standalone {
 		raw, e = hostfs.ReadGuestFile(filepath.Join(p.HealthRoot(), plan.Name, "supervisor-health.json"), 1024, p.Base.RunnerUID)
 	} else {
 		raw, e = hostfs.ReadPrivate(filepath.Join(p.HealthRoot(), plan.Name, "supervisor-health.json"), 1024)
@@ -307,13 +302,6 @@ func (p *Profile) PrepareHealth(plan dockerengine.Plan) error {
 		}
 		return root.Close()
 	}
-	if p.brokerOwned {
-		root, err := p.brokerHealthDirectory(plan, true)
-		if err != nil {
-			return err
-		}
-		return root.Close()
-	}
 	if !ownedName(plan.Name) {
 		return ErrQualification
 	}
@@ -344,16 +332,6 @@ func (p *Profile) CleanHealth(plan dockerengine.Plan) {
 		return
 	}
 
-	if p.brokerOwned {
-		root, err := p.brokerHealthDirectory(plan, false)
-		if err != nil {
-			return
-		}
-		_ = root.Remove("supervisor-health.json")
-		root.Close()
-		_ = os.Remove(filepath.Join(p.HealthRoot(), plan.Name))
-		return
-	}
 	if !ownedName(plan.Name) {
 		return
 	}
@@ -473,9 +451,6 @@ func (p *Profile) processes(ctx context.Context, id string) ([]Process, error) {
 	return out, nil
 }
 func (p *Profile) Capture(ctx context.Context, id string, plan dockerengine.Plan) error {
-	if p.Manifest.RetirementPolicy != "" && p.RequireAcquisition(plan) != nil {
-		return ErrQualification
-	}
 	if p.ObserverSocket != "" {
 		return p.remote(ctx, "capture", id, plan)
 	}
@@ -585,9 +560,6 @@ func persist(root *os.Root, file string, record Evidence) error {
 	return d.Sync()
 }
 func (p *Profile) CapturePrepared(id string, plan dockerengine.Plan) error {
-	if p.Manifest.RetirementPolicy != "" && p.RequireAcquisition(plan) != nil {
-		return ErrQualification
-	}
 	if p.ObserverSocket != "" {
 		return p.remote(context.Background(), "prepared", id, plan)
 	}
@@ -695,12 +667,6 @@ func (p *Profile) cleanupSandboxGuard(ctx context.Context, plan dockerengine.Pla
 }
 
 func (p *Profile) VerifyAbsent(ctx context.Context, id string, plan dockerengine.Plan, guards ...func() error) error {
-	if p.Manifest.RetirementPolicy != "" {
-		f, ok := ctx.Value(retirementFenceKey{}).(*retirementFence)
-		if !ok || f.profile != p || f.record.Container != id || f.plan.Name != plan.Name || f.reclaim(ctx) != nil {
-			return ErrQualification
-		}
-	}
 	if p.ObserverSocket != "" {
 		return p.remote(ctx, "absent", id, plan)
 	}
@@ -730,7 +696,7 @@ func (p *Profile) VerifyAbsent(ctx context.Context, id string, plan dockerengine
 	}
 	if p.Manifest.Version == MultiBlockVersion && len(record.Sandboxes) > 0 {
 		guard := p.cleanupSandboxGuard(ctx, plan, record, verifyProcesses)
-		if err := p.reconcileSandboxResidue(ctx, id, record.Sandboxes, guard, false); err != nil {
+		if err := p.reconcileSandboxResidue(ctx, id, record.Sandboxes, guard); err != nil {
 			return err
 		}
 	}
@@ -788,16 +754,6 @@ func (p *Profile) VerifyAbsent(ctx context.Context, id string, plan dockerengine
 				return ErrQualification
 			}
 		}
-	}
-
-	if p.Manifest.RetirementPolicy != "" {
-		f := ctx.Value(retirementFenceKey{}).(*retirementFence)
-		if e = f.seal(ctx); e != nil {
-			return e
-		}
-		// The outer broker guard remains necessary after sealing; f.reclaim is
-		// deliberately revoked now, so recheck the original runtime directly.
-		return p.finishRetired(ctx, id, plan, f.runtimeGuard)
 	}
 
 	record.Cgroup, e = p.releaseHostCgroup(ctx, plan)

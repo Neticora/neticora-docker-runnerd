@@ -14,7 +14,7 @@ export GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local
 # missing/skipped cases even if the package exits successfully.
 runnerd_native_test_status=0
 go test -mod=readonly -race -count=1 -json \
-  -run '^(TestNativeSandbox.*|TestProc.*|TestSandboxMountDecoderPreservesEscapes|TestBothScannersFenceObservableGroupWithoutTasks|TestBothScannersHonorCanceledContext|TestSurvivingWorkerRetainsMmapAfterFDClosure|TestSurvivingWorkerRetainsIndependentMountNamespace)$' \
+  -run '^(TestStandaloneNativeSandboxAbsence|TestStandalonePreflightPinsJournalAndRejectsDrift|TestBlockReleaseIntentPreservesAmbiguity|TestBlockDurableOwnershipSurvivesReopenAndRejectsCorruption|TestMultiBlockReleaseNeedsOwnDurableTombstoneAndKeepsPeerReservation|TestCorruptIndexCannotBeHiddenByReleasedExecutionTombstone|TestHostCgroupReadinessFencesConflictsAndInvalidLimits|TestConfiguredOrActiveSliceIsNeverEmptyCapacity|TestProc.*|TestSandboxMountDecoderPreservesEscapes|TestBothScannersFenceObservableGroupWithoutTasks|TestBothScannersHonorCanceledContext|TestSurvivingWorkerRetainsMmapAfterFDClosure|TestSurvivingWorkerRetainsIndependentMountNamespace)$' \
   ./internal/katalinux 2> "$runnerd_native_output/native-tests.stderr" \
   | tee "$runnerd_native_output/native-tests.jsonl" || runnerd_native_test_status=$?
 # Preserve the independent gate's refusal even when the test pipeline failed.

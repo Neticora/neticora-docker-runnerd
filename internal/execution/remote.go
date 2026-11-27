@@ -14,7 +14,6 @@ import (
 	"github.com/Neticora/neticora-docker-runnerd/agent"
 	"github.com/Neticora/neticora-docker-runnerd/api/protocol"
 	"github.com/Neticora/neticora-docker-runnerd/identity"
-	"github.com/Neticora/neticora-docker-runnerd/internal/broker"
 	"github.com/Neticora/neticora-docker-runnerd/internal/hostfs"
 	"github.com/Neticora/neticora-docker-runnerd/transport"
 )
@@ -83,68 +82,6 @@ type HostRemote struct {
 	mu               sync.Mutex
 	token            string
 	expires          time.Time
-	brokerCall       func(context.Context, string, broker.Request) (broker.Response, error)
-}
-
-// executeBrokerOperation relays one committed authority directly to the physical
-// executor. It deliberately does not call the foundation intent-only endpoint.
-func (r *HostRemote) executeBrokerOperation(ctx context.Context, socket string, request broker.ExecutionGrantRequest) error {
-	call := r.brokerCall
-	if call == nil {
-		call = broker.Call
-	}
-	challenge, err := call(ctx, socket, broker.Request{Version: broker.Version, Operation: "IssueExecutionChallenge", ExecutionRequest: &request})
-	if err != nil || challenge.Challenge == nil || challenge.Code != "challenge_issued" || challenge.Challenge.Request.OperationID != request.OperationID {
-		return ErrReconcile
-	}
-	request = challenge.Challenge.Request
-	token, err := r.credential(ctx)
-	if err != nil {
-		return err
-	}
-	grant, err := r.Client.BrokerGrant(ctx, token, request)
-	if err != nil {
-		return err
-	}
-	commit, err := r.Client.BrokerCommit(ctx, token, request, grant)
-	if err != nil {
-		return err
-	}
-	response, err := call(ctx, socket, broker.Request{Version: broker.Version, Operation: "ExecuteOperation", ExecutionRequest: &request, ExecutionGrant: &grant, ExecutionCommit: &commit})
-	if err != nil || response.Code != "operation_completed" || response.Runtime == nil {
-		return ErrReconcile
-	}
-	return nil
-}
-
-// AuthorizeBrokerOperation transports platform grants without becoming their
-// issuer. This accepts a durable broker intent only; it cannot run a container.
-func (r *HostRemote) AuthorizeBrokerOperation(ctx context.Context, socket string, request broker.ExecutionGrantRequest) (broker.Receipt, error) {
-	if request.Challenge != "" {
-		return broker.Receipt{}, broker.ErrRejected
-	}
-	challenge, err := broker.Call(ctx, socket, broker.Request{Version: broker.Version, Operation: "IssueExecutionChallenge", ExecutionRequest: &request})
-	if err != nil || challenge.Challenge == nil || challenge.Code != "challenge_issued" || challenge.Challenge.Request.OperationID != request.OperationID {
-		return broker.Receipt{}, ErrReconcile
-	}
-	request = challenge.Challenge.Request
-	token, err := r.credential(ctx)
-	if err != nil {
-		return broker.Receipt{}, err
-	}
-	grant, err := r.Client.BrokerGrant(ctx, token, request)
-	if err != nil {
-		return broker.Receipt{}, err
-	}
-	commit, err := r.Client.BrokerCommit(ctx, token, request, grant)
-	if err != nil {
-		return broker.Receipt{}, err
-	}
-	response, err := broker.Call(ctx, socket, broker.Request{Version: broker.Version, Operation: "AuthorizeExecution", ExecutionRequest: &request, ExecutionGrant: &grant, ExecutionCommit: &commit})
-	if err != nil || response.Ready || response.Code != "authorized_intent_only" || response.Receipt == nil || response.Receipt.OperationID != request.OperationID {
-		return broker.Receipt{}, ErrReconcile
-	}
-	return *response.Receipt, nil
 }
 
 func (r *HostRemote) credential(ctx context.Context) (string, error) {

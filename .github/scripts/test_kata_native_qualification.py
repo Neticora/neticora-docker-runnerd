@@ -43,16 +43,16 @@ class NativeCoverageGateTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             gate.require_native(events)
 
-    def test_previous_coverage_without_late_acquisition_refused(self):
+    def test_previous_coverage_without_residue_fence_refused(self):
         events = [event for event in self.events()
-                  if event.get("Test") != "TestNativeSandboxLateReferenceAtUnlink"]
+                  if event.get("Test") != "TestStandaloneNativeSandboxAbsence/retains-runtime-residue"]
         with self.assertRaises(ValueError):
             gate.require_native(events)
 
-    def test_late_acquisition_skip_refused(self):
+    def test_residue_fence_skip_refused(self):
         events = self.events()
         for event in events:
-            if event.get("Test") == "TestNativeSandboxLateReferenceAtUnlink":
+            if event.get("Test") == "TestStandaloneNativeSandboxAbsence/retains-runtime-residue":
                 event["Action"] = "skip"
         with self.assertRaises(ValueError):
             gate.require_native(events)
@@ -62,12 +62,12 @@ class NativeCoverageGateTests(unittest.TestCase):
         # this checks gate failure handling, never native qualification itself.
         script = Path(__file__).with_name("qualify-kata-native.sh").resolve()
         missing = [event for event in self.events()
-                   if event.get("Test") != "TestNativeSandboxLateReferenceAtUnlink"]
+                   if event.get("Test") != "TestStandaloneNativeSandboxAbsence/retains-runtime-residue"]
         failed = self.events() + [{"Package": gate.PACKAGE, "Action": "fail"}]
         for name, events, test_exit, expected_exit, refused in [
             ("complete", self.events(), 0, 0, False),
             ("test_failure", failed, 1, 1, True),
-            ("missing_late_case", missing, 0, 1, True),
+            ("missing_residue_case", missing, 0, 1, True),
             ("failed_pipeline", self.events(), 17, 17, False),
         ]:
             with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:

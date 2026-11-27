@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -17,11 +16,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// A request budget, not a lifetime size limit. Durable filesystem progress and
-// the original captured directory identity allow the next cleanup-only retry.
-var errSandboxCleanupPending = errors.New("sandbox cleanup request budget exhausted; retain allocation and retry")
 var errSandboxReferenceHeld = errors.New("sandbox inode or device still referenced")
-var errSandboxReclamationUnfenced = errors.New("sandbox metadata reclamation requires a retirement fence")
 
 func sandboxReferenceHeld() error { return errors.Join(ErrQualification, errSandboxReferenceHeld) }
 
@@ -105,17 +100,8 @@ func (p *Profile) captureSandboxDirectories(id string) ([]SandboxDirectory, erro
 // Reconcile only pre-crash captured sandbox identities. An unfenced
 // historical recovery may verify absence after the original runtime removed
 // its metadata. A negative reference scan cannot authorize an unlink.
-func (p *Profile) reconcileSandboxResidue(ctx context.Context, id string, directories []SandboxDirectory, guard func() error, diagnosticReclamation bool) error {
+func (p *Profile) reconcileSandboxResidue(ctx context.Context, id string, directories []SandboxDirectory, guard func() error) error {
 	ctx = context.WithValue(ctx, procDecodeKey{}, &procDecoder{})
-	f, fenced := ctx.Value(retirementFenceKey{}).(*retirementFence)
-	if fenced {
-		if f.profile != p || f.record.Container != id || f.reclaim(ctx) != nil {
-			return ErrQualification
-		}
-	}
-	if p.Manifest.RetirementPolicy != "" && !fenced {
-		return ErrQualification
-	}
 	allowed := map[string]bool{}
 	for _, root := range p.Manifest.SandboxRoots {
 		allowed[root] = true
@@ -129,16 +115,10 @@ func (p *Profile) reconcileSandboxResidue(ctx context.Context, id string, direct
 		if err := sandboxTimed(ctx, "guard", guard); err != nil {
 			return err
 		}
-		actual, err := sandboxStamp(p.Manifest.Storage.Runtime.Root, expected.Root, id)
+		_, err := sandboxStamp(p.Manifest.Storage.Runtime.Root, expected.Root, id)
 		if errors.Is(err, os.ErrNotExist) {
 			filesystemPath, e := sandboxFilesystemPath(filepath.Join(expected.Root, id), expected.Device)
-			var references error
-			if fenced {
-				references = f.verify(ctx)
-			} else if noBlockUsers(ctx, BlockRecord{FileDevice: expected.Device, FileInode: expected.Inode}) != nil || noSandboxNamespaceReferences(ctx, expected.Device, expected.Inode, filesystemPath) != nil {
-				references = ErrQualification
-			}
-			if e != nil || references != nil {
+			if e != nil || noBlockUsers(ctx, BlockRecord{FileDevice: expected.Device, FileInode: expected.Inode}) != nil || noSandboxNamespaceReferences(ctx, expected.Device, expected.Inode, filesystemPath) != nil {
 				return ErrQualification
 			}
 			// Retry after a lost removal response must also make directory
@@ -154,124 +134,10 @@ func (p *Profile) reconcileSandboxResidue(ctx context.Context, id string, direct
 			}
 			continue
 		}
-		if err != nil || actual != expected {
-			return ErrQualification
-		}
-		if !fenced && !diagnosticReclamation {
-			return errors.Join(ErrQualification, errSandboxReclamationUnfenced)
-		}
-		root, err := openSandboxParent(p.Manifest.Storage.Runtime.Root, expected.Root)
-		if err != nil {
-			return ErrQualification
-		}
-		left := 4096
-		err = removeSandboxTree(ctx, root, id, expected.Device, expected.Inode, 0, &left, guard)
-		root.Close()
-		if err != nil {
-			return err
-		}
+		// The original runtime must remove its own metadata.
+		return ErrQualification
 	}
 	return nil
-}
-
-func removeSandboxTree(ctx context.Context, root *os.Root, name string, device, inode uint64, depth int, left *int, guard func() error) error {
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-	sandboxVisit(ctx, depth)
-	if depth > 32 {
-		return ErrQualification
-	}
-	if *left <= 0 {
-		return errors.Join(ErrQualification, errSandboxCleanupPending)
-	}
-	*left--
-	metadataDone := sandboxMetadata(ctx)
-	info, err := root.Lstat(name)
-	metadataDone()
-	if err != nil {
-		return ErrQualification
-	}
-	st, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || uint64(st.Dev) != device || inode != 0 && st.Ino != inode || st.Uid != 0 || (!info.IsDir() && info.Mode().Perm()&0022 != 0) || info.Mode()&os.ModeSymlink != 0 || (!info.IsDir() && !info.Mode().IsRegular()) {
-		return ErrQualification
-	}
-	if info.IsDir() {
-		metadataDone = sandboxMetadata(ctx)
-		f, err := root.Open(name)
-		metadataDone()
-		if err != nil {
-			return ErrQualification
-		}
-		defer f.Close()
-		for {
-			metadataDone = sandboxMetadata(ctx)
-			children, readErr := f.Readdirnames(64)
-			metadataDone()
-			if readErr != nil && !errors.Is(readErr, io.EOF) {
-				return ErrQualification
-			}
-			for _, child := range children {
-				if err := removeSandboxTree(ctx, root, filepath.Join(name, child), device, 0, depth+1, left, guard); err != nil {
-					return err
-				}
-			}
-			if errors.Is(readErr, io.EOF) {
-				break
-			}
-		}
-		// Our own directory enumeration descriptor must not manufacture a held
-		// reference when this directory's fresh reference checks run below.
-		if err := f.Close(); err != nil {
-			return err
-		}
-	}
-	if err := sandboxTimed(ctx, "guard", guard); err != nil {
-		return err
-	}
-	path := filepath.Join(root.Name(), name)
-	var filesystemPath string
-	err = sandboxTimed(ctx, "filesystemPath", func() error {
-		var e error
-		filesystemPath, e = sandboxFilesystemPath(path, device)
-		return e
-	})
-	if err != nil {
-		return err
-	}
-	for _, check := range []struct {
-		name string
-		run  func() error
-	}{
-		{"nestedMounts", func() error { return noNestedMounts(path) }},
-		{"blockUsers", func() error { return noBlockUsers(ctx, BlockRecord{FileDevice: device, FileInode: st.Ino}) }},
-		{"namespaceReferences", func() error { return noSandboxNamespaceReferences(ctx, device, st.Ino, filesystemPath) }},
-	} {
-		if check.name != "nestedMounts" {
-			if f, ok := ctx.Value(retirementFenceKey{}).(*retirementFence); ok {
-				if err := f.verify(ctx); err != nil {
-					return err
-				}
-				continue
-			}
-		}
-		if err := sandboxTimed(ctx, check.name, check.run); err != nil {
-			return err
-		}
-	}
-	metadataDone = sandboxMetadata(ctx)
-	current, err := root.Lstat(name)
-	metadataDone()
-	if err != nil || !os.SameFile(info, current) {
-		return ErrQualification
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if err := sandboxTimed(ctx, "remove", func() error { return root.Remove(name) }); err != nil {
-		return err
-	}
-	return sandboxTimed(ctx, "fsync", func() error { return syncSandboxParent(root, name, device) })
 }
 
 func syncSandboxParent(root *os.Root, name string, device uint64) error {

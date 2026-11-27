@@ -6,7 +6,6 @@ type Process struct {
 	Executable string `json:"executable"`
 }
 type Evidence struct {
-	Retirement *RetirementProof   `json:"retirement,omitempty"`
 	Sandboxes  []SandboxDirectory `json:"sandboxes,omitempty"`
 	Cgroup     *CgroupRecord      `json:"cgroup,omitempty"`
 	Block      *BlockRecord       `json:"block,omitempty"`

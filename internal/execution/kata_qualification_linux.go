@@ -19,7 +19,7 @@ import (
 // only in qualification builds. Neither ordinary builds nor Load accept it.
 func openConfiguredQualification(c config.Config, store *journal.SQLiteStore, policy *PolicyFile, drained func() bool) (*Controller, func(), error) {
 	x := c.Execution
-	if x == nil || x.Kata == nil || (x.BrokerSocket == "" && x.Kata.StickyCache == nil) || c.SourceFile == "" {
+	if x == nil || x.Kata == nil || x.Kata.StickyCache == nil || c.SourceFile == "" {
 		return nil, nil, ErrReconcile
 	}
 	raw, err := hostfs.ReadPrivate(x.Kata.QualificationBindingFile, 16384)
@@ -85,7 +85,7 @@ func OpenQualification(c config.Config, configFile string, store *journal.SQLite
 
 func loadLabStandalonePeerRecovery(c config.Config, original Credentials) (*katalinux.Profile, *kataCache, error) {
 	x := c.Execution
-	if x == nil || x.Kata == nil || x.Kata.StickyCache == nil || x.BrokerSocket != "" || x.Kata.ObserverSocket != "" {
+	if x == nil || x.Kata == nil || x.Kata.StickyCache == nil || x.Kata.ObserverSocket != "" {
 		return nil, nil, ErrReconcile
 	}
 	raw, err := hostfs.ReadPrivate(x.Kata.QualificationBindingFile, 16384)

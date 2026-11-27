@@ -16,12 +16,11 @@ packaged unit orders startup after them. Use a separate thin pool with adequate
 data and metadata capacity for cache generations.
 
 Keep the durable journal, enrollment identity, signing trust and execution
-evidence on persistent host storage outside guest-visible mounts. Use a fresh
-dedicated execution pool for a new journal. Existing owner markers and indexes
-remain bound to their original journal. A legacy marker without a durable
-journal ID supports its existing cleanup only. Complete a reviewed migration
-or provision new storage before admitting work. Treat a missing or corrupt
-index as a recovery condition.
+evidence on persistent host storage outside guest-visible mounts. Start the
+control plane on an empty PostgreSQL database, then provision a fresh
+enrollment, journal and dedicated execution pool. Keep the original journal
+and pool together for crash and reboot recovery. A missing or corrupt index
+blocks admission and resource reuse.
 
 ## Install and enroll
 
@@ -64,12 +63,6 @@ proposal and approval flow. Atomically deliver the signed input to
 `/var/lib/neticora-runnerd-kata/recovery/approval.json` with mode 0600. The
 running unit applies it without a manual recovery invocation. The host remains
 drained until a new signed launch qualification is installed and resumed.
-
-Drain legacy Standard Linux hosts using their original binary, keys, journal and
-storage before upgrading. Finish their existing cleanup and final ACKs. The new
-unit uses separate configuration and state paths and does not repurpose legacy
-directories or credentials. Archive previous packages and preserve historical
-database profile values and signed admission records.
 
 Drain and stop the service before any replacement or removal. The maintainer
 scripts refuse to replace a running service. Removing the package preserves

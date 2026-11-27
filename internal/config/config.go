@@ -28,7 +28,6 @@ type Config struct {
 // Execution is an explicit operator opt-in. Old foundation configurations remain
 // drained and never open Docker or contact the platform.
 type Execution struct {
-	BrokerSocket        string `json:"brokerSocket,omitempty"`
 	Kata                *Kata  `json:"kata,omitempty"`
 	Repository          string `json:"repository"`
 	CustomCAFile        string `json:"customCaFile,omitempty"`
@@ -95,16 +94,13 @@ func Parse(data []byte) (Config, error) {
 		return Config{}, errors.New("request timeout must be between 1 and 60 seconds")
 	}
 	if x := c.Execution; x != nil && x.Enabled {
-		if x.BrokerSocket != "" && (!filepath.IsAbs(x.BrokerSocket) || filepath.Clean(x.BrokerSocket) != x.BrokerSocket) {
-			return Config{}, errors.New("broker mode requires an absolute clean socket path")
-		}
 		if x.Kata != nil {
 			q := x.Kata
-			if q.StickyCache != nil && (!q.StickyCache.Valid() || x.BrokerSocket != "" || q.ObserverSocket != "") {
+			if q.StickyCache != nil && (!q.StickyCache.Valid() || q.ObserverSocket != "") {
 				return Config{}, errors.New("standalone Kata requires direct Docker and a valid thin pool")
 			}
 			if q.QualificationBindingFile != "" || q.QualificationAuthorityPin != "" {
-				if (x.BrokerSocket == "" && q.StickyCache == nil) || !filepath.IsAbs(q.QualificationBindingFile) || filepath.Clean(q.QualificationBindingFile) != q.QualificationBindingFile || len(q.QualificationAuthorityPin) != 64 || strings.ContainsAny(q.QualificationAuthorityPin, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
+				if q.StickyCache == nil || !filepath.IsAbs(q.QualificationBindingFile) || filepath.Clean(q.QualificationBindingFile) != q.QualificationBindingFile || len(q.QualificationAuthorityPin) != 64 || strings.ContainsAny(q.QualificationAuthorityPin, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
 					return Config{}, errors.New("lab qualification requires a protected binding and authority pin")
 				}
 				for _, c := range q.QualificationAuthorityPin {
@@ -113,14 +109,11 @@ func Parse(data []byte) (Config, error) {
 					}
 				}
 			}
-			if x.BrokerSocket != "" && x.Kata.ObserverSocket != "" {
-				return Config{}, errors.New("broker mode forbids the legacy Kata observer")
-			}
 			paths := []string{x.Kata.ProfileFile, x.Kata.PublicKeyFile, x.Kata.EvidenceDirectory}
 			if x.Kata.QualificationBindingFile != "" {
 				paths = append(paths, x.Kata.QualificationBindingFile)
 			}
-			if x.BrokerSocket == "" && q.StickyCache == nil {
+			if q.StickyCache == nil {
 				paths = append(paths, x.Kata.ObserverSocket)
 			}
 			for _, path := range paths {
@@ -182,10 +175,10 @@ func Parse(data []byte) (Config, error) {
 }
 
 // StandaloneExecution is the only workload path available to the service.
-// The parser also accepts historical profile configuration for recovery.
+// Legacy lab configuration alone cannot select the installed service.
 func (c Config) StandaloneExecution() bool {
 	x := c.Execution
-	return x != nil && x.Enabled && x.BrokerSocket == "" && x.Kata != nil &&
+	return x != nil && x.Enabled && x.Kata != nil &&
 		x.Kata.ObserverSocket == "" && x.Kata.StickyCache != nil && x.Kata.StickyCache.Valid() &&
 		c.RuntimeEndpoint == "unix:///run/docker.sock"
 }
